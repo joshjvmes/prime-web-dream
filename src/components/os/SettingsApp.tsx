@@ -1,9 +1,19 @@
 import { useState, useEffect } from 'react';
+import { NotificationEvent } from '@/hooks/useNotifications';
+import { Trash2, Plus, Bell, BellOff } from 'lucide-react';
 
 interface SettingsState {
   scanLines: boolean;
   gridBackground: boolean;
   accentTheme: 'cyan' | 'violet' | 'amber';
+}
+
+interface SettingsAppProps {
+  notifEvents?: NotificationEvent[];
+  onToggleEvent?: (id: string) => void;
+  onUpdateMessage?: (id: string, message: string) => void;
+  onAddEvent?: (title: string, message: string) => void;
+  onRemoveEvent?: (id: string) => void;
 }
 
 const THEMES = {
@@ -20,7 +30,7 @@ function applyTheme(theme: 'cyan' | 'violet' | 'amber') {
   root.style.setProperty('--border', t.border);
 }
 
-export default function SettingsApp() {
+export default function SettingsApp({ notifEvents = [], onToggleEvent, onUpdateMessage, onAddEvent, onRemoveEvent }: SettingsAppProps) {
   const [settings, setSettings] = useState<SettingsState>(() => {
     try {
       const saved = localStorage.getItem('prime-os-settings');
@@ -30,9 +40,13 @@ export default function SettingsApp() {
     }
   });
 
+  const [newTitle, setNewTitle] = useState('');
+  const [newMessage, setNewMessage] = useState('');
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editText, setEditText] = useState('');
+
   useEffect(() => {
     localStorage.setItem('prime-os-settings', JSON.stringify(settings));
-    // Apply effects
     const desktop = document.querySelector('.prime-grid');
     if (desktop) {
       desktop.classList.toggle('scan-lines', settings.scanLines);
@@ -57,13 +71,15 @@ export default function SettingsApp() {
     <div className="h-full bg-background p-4 font-mono text-xs overflow-y-auto">
       <h2 className="font-display text-sm tracking-wider uppercase text-primary mb-4">System Settings</h2>
 
+      {/* Visual Effects */}
       <div className="space-y-1 mb-6">
         <h3 className="font-display text-[10px] tracking-wider uppercase text-muted-foreground mb-2">Visual Effects</h3>
         <Toggle label="Scan Lines" value={settings.scanLines} onChange={v => setSettings(s => ({ ...s, scanLines: v }))} />
         <Toggle label="Grid Background" value={settings.gridBackground} onChange={v => setSettings(s => ({ ...s, gridBackground: v }))} />
       </div>
 
-      <div>
+      {/* Accent Color */}
+      <div className="mb-6">
         <h3 className="font-display text-[10px] tracking-wider uppercase text-muted-foreground mb-2">Accent Color</h3>
         <div className="flex gap-2">
           {(['cyan', 'violet', 'amber'] as const).map(theme => (
@@ -82,7 +98,81 @@ export default function SettingsApp() {
         </div>
       </div>
 
-      <div className="mt-6 pt-4 border-t border-border">
+      {/* Notification Events */}
+      <div className="mb-6">
+        <h3 className="font-display text-[10px] tracking-wider uppercase text-muted-foreground mb-2">Notification Events</h3>
+        <div className="space-y-1.5 max-h-48 overflow-y-auto mb-3">
+          {notifEvents.map(evt => (
+            <div key={evt.id} className="flex items-start gap-2 p-2 rounded border border-border bg-card/50">
+              <button
+                onClick={() => onToggleEvent?.(evt.id)}
+                className={`shrink-0 mt-0.5 ${evt.enabled ? 'text-primary' : 'text-muted-foreground/40'}`}
+                title={evt.enabled ? 'Disable' : 'Enable'}
+              >
+                {evt.enabled ? <Bell size={12} /> : <BellOff size={12} />}
+              </button>
+              <div className="min-w-0 flex-1">
+                <p className="font-display text-[9px] tracking-wider uppercase text-primary/80">{evt.title}</p>
+                {editingId === evt.id ? (
+                  <input
+                    className="w-full bg-background border border-border rounded px-1 py-0.5 text-[10px] text-foreground mt-0.5"
+                    value={editText}
+                    onChange={e => setEditText(e.target.value)}
+                    onBlur={() => { onUpdateMessage?.(evt.id, editText); setEditingId(null); }}
+                    onKeyDown={e => { if (e.key === 'Enter') { onUpdateMessage?.(evt.id, editText); setEditingId(null); } }}
+                    autoFocus
+                  />
+                ) : (
+                  <p
+                    className="text-[10px] text-muted-foreground mt-0.5 leading-tight cursor-pointer hover:text-foreground"
+                    onClick={() => { setEditingId(evt.id); setEditText(evt.message); }}
+                    title="Click to edit"
+                  >
+                    {evt.message}
+                  </p>
+                )}
+              </div>
+              <button
+                onClick={() => onRemoveEvent?.(evt.id)}
+                className="shrink-0 text-muted-foreground hover:text-destructive mt-0.5"
+              >
+                <Trash2 size={11} />
+              </button>
+            </div>
+          ))}
+        </div>
+
+        {/* Add new event */}
+        <div className="flex gap-1.5">
+          <input
+            placeholder="Source"
+            value={newTitle}
+            onChange={e => setNewTitle(e.target.value)}
+            className="w-20 bg-background border border-border rounded px-1.5 py-1 text-[10px] text-foreground placeholder:text-muted-foreground/50"
+          />
+          <input
+            placeholder="Message text..."
+            value={newMessage}
+            onChange={e => setNewMessage(e.target.value)}
+            className="flex-1 bg-background border border-border rounded px-1.5 py-1 text-[10px] text-foreground placeholder:text-muted-foreground/50"
+          />
+          <button
+            onClick={() => {
+              if (newTitle.trim() && newMessage.trim()) {
+                onAddEvent?.(newTitle.trim(), newMessage.trim());
+                setNewTitle('');
+                setNewMessage('');
+              }
+            }}
+            className="shrink-0 px-2 py-1 rounded border border-primary/30 text-primary hover:bg-primary/10 transition-colors"
+          >
+            <Plus size={12} />
+          </button>
+        </div>
+      </div>
+
+      {/* About */}
+      <div className="pt-4 border-t border-border">
         <h3 className="font-display text-[10px] tracking-wider uppercase text-muted-foreground mb-2">About</h3>
         <div className="space-y-1 text-muted-foreground">
           <p>PRIME OS v2.0</p>
