@@ -15,15 +15,15 @@ export interface OSNotification {
 }
 
 const DEFAULT_EVENTS: NotificationEvent[] = [
-  { id: 'evt-1', title: 'PrimeNet', message: 'New node joined lattice at ⟨71,73,79⟩', enabled: true },
-  { id: 'evt-2', title: 'Q3 Engine', message: 'Inference batch complete — 512 samples, 507μs avg', enabled: true },
-  { id: 'evt-3', title: 'Energy', message: 'COP spike detected at 3.8 — harvesting surplus', enabled: true },
-  { id: 'evt-4', title: 'FoldMem', message: 'Auto-compact triggered — 0% fragmentation restored', enabled: true },
-  { id: 'evt-5', title: 'GeomC', message: 'Background compilation: 23 folds optimized', enabled: true },
-  { id: 'evt-6', title: 'PFS', message: 'Semantic index updated — 1,247 regions mapped', enabled: true },
+  { id: 'evt-1', title: 'PrimeNet', message: 'New node joined lattice at ⟨71,73,79⟩', enabled: false },
+  { id: 'evt-2', title: 'Q3 Engine', message: 'Inference batch complete — 512 samples, 507μs avg', enabled: false },
+  { id: 'evt-3', title: 'Energy', message: 'COP spike detected at 3.8 — harvesting surplus', enabled: false },
+  { id: 'evt-4', title: 'FoldMem', message: 'Auto-compact triggered — 0% fragmentation restored', enabled: false },
+  { id: 'evt-5', title: 'GeomC', message: 'Background compilation: 23 folds optimized', enabled: false },
+  { id: 'evt-6', title: 'PFS', message: 'Semantic index updated — 1,247 regions mapped', enabled: false },
   { id: 'evt-7', title: 'Storage', message: 'Adinkra encoding complete — 75% compression achieved', enabled: false },
   { id: 'evt-8', title: 'QK Scheduler', message: 'Fibonacci Waltz cycle #4,096 — all qutrit states balanced', enabled: false },
-  { id: 'evt-9', title: 'PrimeNet', message: 'Geodesic route optimized — latency ↓ 12%', enabled: true },
+  { id: 'evt-9', title: 'PrimeNet', message: 'Geodesic route optimized — latency ↓ 12%', enabled: false },
   { id: 'evt-10', title: 'Energy', message: 'Satellite mode: 320W output from 100W input', enabled: false },
 ];
 
