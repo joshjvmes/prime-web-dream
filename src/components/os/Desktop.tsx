@@ -1,6 +1,7 @@
-import { useState, useCallback, lazy, Suspense } from 'react';
+import { useState, useCallback } from 'react';
 import { AnimatePresence } from 'framer-motion';
 import { useWindowManager } from '@/hooks/useWindowManager';
+import { useNotifications } from '@/hooks/useNotifications';
 import BootSequence from '@/components/os/BootSequence';
 import Taskbar from '@/components/os/Taskbar';
 import OSWindow from '@/components/os/OSWindow';
@@ -14,11 +15,16 @@ import GeomCApp from '@/components/os/GeomCApp';
 import FoldMemApp from '@/components/os/FoldMemApp';
 import PrimeStorageApp from '@/components/os/PrimeStorageApp';
 import EnergyMonitorApp from '@/components/os/EnergyMonitorApp';
+import SettingsApp from '@/components/os/SettingsApp';
+import DesktopIcons from '@/components/os/DesktopIcons';
+import DesktopContextMenu from '@/components/os/DesktopContextMenu';
+import NotificationSystem from '@/components/os/NotificationSystem';
 import { AppType } from '@/types/os';
 
 export default function Desktop() {
   const [booted, setBooted] = useState(false);
-  const { windows, openWindow, closeWindow, minimizeWindow, focusWindow, moveWindow } = useWindowManager();
+  const { windows, openWindow, closeWindow, minimizeWindow, focusWindow, moveWindow, resizeWindow, maximizeWindow, snapWindow, tileAllWindows, cascadeWindows } = useWindowManager();
+  const { notifications, dismissNotification } = useNotifications();
 
   const handleBootComplete = useCallback(() => {
     setBooted(true);
@@ -37,6 +43,7 @@ export default function Desktop() {
       case 'foldmem': return <FoldMemApp />;
       case 'storage': return <PrimeStorageApp />;
       case 'energy': return <EnergyMonitorApp />;
+      case 'settings': return <SettingsApp />;
       default: return <div className="p-4 text-muted-foreground font-mono text-xs">App not found</div>;
     }
   };
@@ -47,39 +54,47 @@ export default function Desktop() {
 
       {booted && (
         <>
-          <div className="absolute inset-0 pb-10">
-            <div className="absolute top-4 left-4 select-none">
-              <h1 className="font-display text-sm tracking-[0.3em] text-primary/30">PRIME OS</h1>
-              <p className="font-mono text-[9px] text-muted-foreground/40 mt-0.5">
-                Geometric Computing • T3-649
-              </p>
+          <DesktopContextMenu onOpenApp={openWindow} onTileAll={tileAllWindows} onCascade={cascadeWindows}>
+            <div className="absolute inset-0 pb-10">
+              <div className="absolute top-4 left-[90px] select-none">
+                <h1 className="font-display text-sm tracking-[0.3em] text-primary/30">PRIME OS</h1>
+                <p className="font-mono text-[9px] text-muted-foreground/40 mt-0.5">
+                  Geometric Computing • T3-649
+                </p>
+              </div>
+
+              <div className="absolute top-4 right-4 text-right select-none">
+                <p className="font-mono text-[9px] text-muted-foreground/30">
+                  lattice: P¹¹
+                </p>
+                <p className="font-mono text-[9px] text-muted-foreground/30">
+                  fold: 11D → 4D
+                </p>
+              </div>
+
+              <DesktopIcons onOpenApp={openWindow} />
+
+              <AnimatePresence>
+                {windows.map(win => (
+                  <OSWindow
+                    key={win.id}
+                    window={win}
+                    onClose={closeWindow}
+                    onMinimize={minimizeWindow}
+                    onMaximize={maximizeWindow}
+                    onFocus={focusWindow}
+                    onMove={moveWindow}
+                    onResize={resizeWindow}
+                    onSnap={snapWindow}
+                  >
+                    {renderApp(win.app)}
+                  </OSWindow>
+                ))}
+              </AnimatePresence>
             </div>
+          </DesktopContextMenu>
 
-            <div className="absolute top-4 right-4 text-right select-none">
-              <p className="font-mono text-[9px] text-muted-foreground/30">
-                lattice: P¹¹
-              </p>
-              <p className="font-mono text-[9px] text-muted-foreground/30">
-                fold: 11D → 4D
-              </p>
-            </div>
-
-            <AnimatePresence>
-              {windows.map(win => (
-                <OSWindow
-                  key={win.id}
-                  window={win}
-                  onClose={closeWindow}
-                  onMinimize={minimizeWindow}
-                  onFocus={focusWindow}
-                  onMove={moveWindow}
-                >
-                  {renderApp(win.app)}
-                </OSWindow>
-              ))}
-            </AnimatePresence>
-          </div>
-
+          <NotificationSystem notifications={notifications} onDismiss={dismissNotification} />
           <Taskbar windows={windows} onOpenApp={openWindow} onFocusWindow={focusWindow} />
         </>
       )}

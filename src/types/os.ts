@@ -7,8 +7,10 @@ export interface WindowState {
   width: number;
   height: number;
   isMinimized: boolean;
+  isMaximized: boolean;
   isFocused: boolean;
   zIndex: number;
+  prevBounds?: { x: number; y: number; width: number; height: number };
 }
 
 export type AppType = 'terminal' | 'files' | 'processes' | 'sysinfo' | 'settings' | 'q3inference' | 'primenet' | 'geomc' | 'foldmem' | 'storage' | 'energy';
