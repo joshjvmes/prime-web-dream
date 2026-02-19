@@ -1,5 +1,12 @@
 import { useState, useEffect, useCallback } from 'react';
 
+export interface NotificationEvent {
+  id: string;
+  title: string;
+  message: string;
+  enabled: boolean;
+}
+
 export interface OSNotification {
   id: string;
   title: string;
@@ -7,27 +14,46 @@ export interface OSNotification {
   timestamp: number;
 }
 
-const EVENTS = [
-  { title: 'PrimeNet', message: 'New node joined lattice at ⟨71,73,79⟩' },
-  { title: 'Q3 Engine', message: 'Inference batch complete — 512 samples, 507μs avg' },
-  { title: 'Energy', message: 'COP spike detected at 3.8 — harvesting surplus' },
-  { title: 'FoldMem', message: 'Auto-compact triggered — 0% fragmentation restored' },
-  { title: 'GeomC', message: 'Background compilation: 23 folds optimized' },
-  { title: 'PFS', message: 'Semantic index updated — 1,247 regions mapped' },
-  { title: 'Storage', message: 'Adinkra encoding complete — 75% compression achieved' },
-  { title: 'QK Scheduler', message: 'Fibonacci Waltz cycle #4,096 — all qutrit states balanced' },
-  { title: 'PrimeNet', message: 'Geodesic route optimized — latency ↓ 12%' },
-  { title: 'Energy', message: 'Satellite mode: 320W output from 100W input' },
+const DEFAULT_EVENTS: NotificationEvent[] = [
+  { id: 'evt-1', title: 'PrimeNet', message: 'New node joined lattice at ⟨71,73,79⟩', enabled: true },
+  { id: 'evt-2', title: 'Q3 Engine', message: 'Inference batch complete — 512 samples, 507μs avg', enabled: true },
+  { id: 'evt-3', title: 'Energy', message: 'COP spike detected at 3.8 — harvesting surplus', enabled: true },
+  { id: 'evt-4', title: 'FoldMem', message: 'Auto-compact triggered — 0% fragmentation restored', enabled: true },
+  { id: 'evt-5', title: 'GeomC', message: 'Background compilation: 23 folds optimized', enabled: true },
+  { id: 'evt-6', title: 'PFS', message: 'Semantic index updated — 1,247 regions mapped', enabled: true },
+  { id: 'evt-7', title: 'Storage', message: 'Adinkra encoding complete — 75% compression achieved', enabled: false },
+  { id: 'evt-8', title: 'QK Scheduler', message: 'Fibonacci Waltz cycle #4,096 — all qutrit states balanced', enabled: false },
+  { id: 'evt-9', title: 'PrimeNet', message: 'Geodesic route optimized — latency ↓ 12%', enabled: true },
+  { id: 'evt-10', title: 'Energy', message: 'Satellite mode: 320W output from 100W input', enabled: false },
 ];
 
+function loadEvents(): NotificationEvent[] {
+  try {
+    const saved = localStorage.getItem('prime-os-notif-events');
+    return saved ? JSON.parse(saved) : DEFAULT_EVENTS;
+  } catch {
+    return DEFAULT_EVENTS;
+  }
+}
+
 export function useNotifications() {
+  const [events, setEvents] = useState<NotificationEvent[]>(loadEvents);
   const [notifications, setNotifications] = useState<OSNotification[]>([]);
 
   useEffect(() => {
+    localStorage.setItem('prime-os-notif-events', JSON.stringify(events));
+  }, [events]);
+
+  useEffect(() => {
+    const enabledEvents = events.filter(e => e.enabled);
+    if (enabledEvents.length === 0) return;
+
     const scheduleNext = () => {
-      const delay = 8000 + Math.random() * 15000; // 8-23 seconds
+      const delay = 8000 + Math.random() * 15000;
       return setTimeout(() => {
-        const event = EVENTS[Math.floor(Math.random() * EVENTS.length)];
+        const current = events.filter(e => e.enabled);
+        if (current.length === 0) return;
+        const event = current[Math.floor(Math.random() * current.length)];
         const notif: OSNotification = {
           id: `notif-${Date.now()}`,
           title: event.title,
@@ -40,11 +66,27 @@ export function useNotifications() {
     };
     let timerId = scheduleNext();
     return () => clearTimeout(timerId);
-  }, []);
+  }, [events]);
 
   const dismissNotification = useCallback((id: string) => {
     setNotifications(prev => prev.filter(n => n.id !== id));
   }, []);
 
-  return { notifications, dismissNotification };
+  const toggleEvent = useCallback((id: string) => {
+    setEvents(prev => prev.map(e => e.id === id ? { ...e, enabled: !e.enabled } : e));
+  }, []);
+
+  const updateEventMessage = useCallback((id: string, message: string) => {
+    setEvents(prev => prev.map(e => e.id === id ? { ...e, message } : e));
+  }, []);
+
+  const addEvent = useCallback((title: string, message: string) => {
+    setEvents(prev => [...prev, { id: `evt-${Date.now()}`, title, message, enabled: true }]);
+  }, []);
+
+  const removeEvent = useCallback((id: string) => {
+    setEvents(prev => prev.filter(e => e.id !== id));
+  }, []);
+
+  return { notifications, dismissNotification, events, toggleEvent, updateEventMessage, addEvent, removeEvent };
 }

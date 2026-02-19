@@ -16,7 +16,7 @@ import FoldMemApp from '@/components/os/FoldMemApp';
 import PrimeStorageApp from '@/components/os/PrimeStorageApp';
 import EnergyMonitorApp from '@/components/os/EnergyMonitorApp';
 import SettingsApp from '@/components/os/SettingsApp';
-import DesktopIcons from '@/components/os/DesktopIcons';
+// DesktopIcons removed — apps now accessible via PRIME menu in taskbar
 import DesktopContextMenu from '@/components/os/DesktopContextMenu';
 import NotificationSystem from '@/components/os/NotificationSystem';
 import { AppType } from '@/types/os';
@@ -24,7 +24,7 @@ import { AppType } from '@/types/os';
 export default function Desktop() {
   const [booted, setBooted] = useState(false);
   const { windows, openWindow, closeWindow, minimizeWindow, focusWindow, moveWindow, resizeWindow, maximizeWindow, snapWindow, tileAllWindows, cascadeWindows } = useWindowManager();
-  const { notifications, dismissNotification } = useNotifications();
+  const { notifications, dismissNotification, events, toggleEvent, updateEventMessage, addEvent, removeEvent } = useNotifications();
 
   const handleBootComplete = useCallback(() => {
     setBooted(true);
@@ -43,7 +43,7 @@ export default function Desktop() {
       case 'foldmem': return <FoldMemApp />;
       case 'storage': return <PrimeStorageApp />;
       case 'energy': return <EnergyMonitorApp />;
-      case 'settings': return <SettingsApp />;
+      case 'settings': return <SettingsApp notifEvents={events} onToggleEvent={toggleEvent} onUpdateMessage={updateEventMessage} onAddEvent={addEvent} onRemoveEvent={removeEvent} />;
       default: return <div className="p-4 text-muted-foreground font-mono text-xs">App not found</div>;
     }
   };
@@ -71,8 +71,6 @@ export default function Desktop() {
                   fold: 11D → 4D
                 </p>
               </div>
-
-              <DesktopIcons onOpenApp={openWindow} />
 
               <AnimatePresence>
                 {windows.map(win => (
