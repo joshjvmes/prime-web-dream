@@ -11,13 +11,13 @@ export interface WindowState {
   zIndex: number;
 }
 
-export type AppType = 'terminal' | 'files' | 'processes' | 'sysinfo' | 'settings';
+export type AppType = 'terminal' | 'files' | 'processes' | 'sysinfo' | 'settings' | 'q3inference' | 'primenet' | 'geomc' | 'foldmem' | 'storage' | 'energy';
 
 export interface QutritProcess {
   id: string;
   name: string;
   coord: string;
-  state: 0 | 1 | 2; // |0⟩ Past, |1⟩ Present, |2⟩ Future
+  state: 0 | 1 | 2;
   potential: number;
   cpu: number;
   memory: number;
@@ -32,4 +32,39 @@ export interface PrimeFile {
   curvature: number;
   torsion: number;
   children?: PrimeFile[];
+}
+
+export interface NetworkNode {
+  id: string;
+  label: string;
+  x: number;
+  y: number;
+  coord: string;
+  load: number;
+}
+
+export interface MemoryBlock {
+  id: string;
+  coord: string;
+  size: number;
+  allocated: boolean;
+  label?: string;
+}
+
+export interface StorageRegion {
+  id: string;
+  name: string;
+  coord: string;
+  compressed: boolean;
+  sizeOriginal: string;
+  sizeCompressed: string;
+  adinkraEncoded: boolean;
+}
+
+export interface EnergyMode {
+  name: string;
+  cop: number;
+  input: number;
+  output: number;
+  efficiency: number;
 }

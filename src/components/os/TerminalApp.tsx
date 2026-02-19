@@ -1,8 +1,8 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 
 const WELCOME = [
-  'PRIME Shell (psh) v1.0.0',
-  'Geometric Computing Interface',
+  'PRIME Shell (psh) v2.0.0',
+  'Geometric Computing Interface — Full Ecosystem',
   'Type "help" for available commands.',
   '',
 ];
@@ -16,6 +16,12 @@ const HELP_TEXT = [
   '  sysinfo           — Display system information',
   '  prime_dist <a> <b>— Compute prime distance',
   '  waltz <state>     — Apply Fibonacci Waltz',
+  '  q3 infer <data>   — Run Q3 inference engine',
+  '  netstat           — Show PrimeNet routing stats',
+  '  geomc <code>      — Compile with GeomC',
+  '  foldmem stats     — Show memory stats',
+  '  energy status     — Show energy harvesting status',
+  '  storage info      — Show Prime Storage capacity',
   '  clear             — Clear terminal',
   '  echo <text>       — Echo text',
   '',
@@ -23,12 +29,16 @@ const HELP_TEXT = [
 
 const SYSINFO = [
   '┌─ PRIME OS System Information ─────────────┐',
-  '│ Kernel:    Qutrit Kernel (QK) v1.0         │',
+  '│ Kernel:    Qutrit Kernel (QK) v2.0         │',
   '│ Arch:      T3-649 (649 qutrit cores)       │',
-  '│ Memory:    11D → 4D Folded (Adinkra)       │',
+  '│ Memory:    FoldMem 11D → 4D (Adinkra)      │',
   '│ Scheduler: Fibonacci Waltz (FWS)           │',
-  '│ FileSystem: PFS (Prime File System)         │',
+  '│ FileSystem: AFS (Semantic Prime FS)         │',
   '│ Network:   PrimeNet Geometric Routing       │',
+  '│ Compiler:  GeomC (Geometric Folding)        │',
+  '│ ML Engine: Q3-Inference (Qutrit)            │',
+  '│ Storage:   Infinite Database (Folded)       │',
+  '│ Energy:    Over-Unity Harvesting (COP>1)    │',
   '│ Logic:     Ternary (|0⟩, |1⟩, |2⟩)         │',
   '│ Compress:  75% Adinkra folding ratio        │',
   '└─────────────────────────────────────────────┘',
@@ -52,6 +62,9 @@ export default function TerminalApp() {
     const command = parts[0]?.toLowerCase();
     const args = parts.slice(1).join(' ');
 
+    // Handle two-word commands
+    const twoWord = `${parts[0]?.toLowerCase()} ${parts[1]?.toLowerCase()}`;
+
     switch (command) {
       case 'help':
         return HELP_TEXT;
@@ -72,6 +85,8 @@ export default function TerminalApp() {
           '⟨17,19,23,...⟩ |2⟩ ◇    net-flow        0%',
           '⟨29,31,37,...⟩ |0⟩ ◆    gc-evaporator   1%',
           '⟨41,43,47,...⟩ |1⟩ ◈    gfo-handler     8%',
+          '⟨53,59,61,...⟩ |1⟩ ◈    q3-engine       6%',
+          '⟨67,71,73,...⟩ |2⟩ ◇    energy-harv     3%',
           '',
           'States: |0⟩=Past ◆  |1⟩=Present ◈  |2⟩=Future ◇',
           '',
@@ -109,6 +124,93 @@ export default function TerminalApp() {
           '',
         ];
       }
+      case 'q3':
+        if (parts[1] === 'infer') {
+          const data = parts.slice(2).join(' ') || '42,17,89';
+          return [
+            `▸ Q3 Inference Engine v1.0`,
+            `▸ Input: [${data}]`,
+            `▸ Encoding to qutrits: ${data.split(',').map(v => `|${parseInt(v)%3}⟩`).join(' ')}`,
+            `▸ Mapping to 11D prime coordinates...`,
+            `▸ Flowing to attractor...`,
+            `▸ Classification: Geometric (confidence: ${(94 + Math.random()*5).toFixed(1)}%)`,
+            `▸ Time: ${(480 + Math.random()*50).toFixed(0)}μs | Ops: 3 (vs 9,664 FLOPs)`,
+            `▸ Energy reduction: 3,221×`,
+            '',
+          ];
+        }
+        return ['Usage: q3 infer <data>'];
+      case 'netstat':
+        return [
+          '┌─ PrimeNet Status ─────────────────────────┐',
+          '│ Routing:    O(1) Geodesic                  │',
+          '│ Nodes:      6 active                       │',
+          `│ Throughput: ${Math.floor(100 + Math.random()*200)} packets/s           │`,
+          '│ Decision↓:  99% vs Dijkstra                │',
+          '│ Speedup:    3.4× routing, 2.1× throughput  │',
+          '│ Latency:    0.3ms avg geodesic              │',
+          '└─────────────────────────────────────────────┘',
+          '',
+        ];
+      case 'geomc': {
+        const src = args || 'a = 2 + 3';
+        return [
+          `▸ GeomC Compiler v1.0`,
+          `▸ Source: ${src}`,
+          `▸ Phase: Parse → 11D Map → Fold → Emit`,
+          `▸ Output: ${src.includes('+') ? src.replace(/(\d+)\s*\+\s*(\d+)/, (_, a, b) => String(Number(a)+Number(b))) : 'geometric_fold(...)'}`,
+          `▸ Compile time: ${(3 + Math.random()*7).toFixed(1)}ms`,
+          `▸ Energy saved: 67%`,
+          '',
+        ];
+      }
+      case 'foldmem':
+        if (parts[1] === 'stats') {
+          return [
+            '┌─ FoldMem Statistics ───────────────────────┐',
+            '│ Alloc time:     388μs                      │',
+            '│ Free time:      22μs                       │',
+            '│ Fragmentation:  0% (after compact)         │',
+            '│ vs malloc:      12× faster                 │',
+            '│ vs jemalloc:    8× faster                  │',
+            '│ Mapping:        11D folded space            │',
+            '└─────────────────────────────────────────────┘',
+            '',
+          ];
+        }
+        return ['Usage: foldmem stats'];
+      case 'energy':
+        if (parts[1] === 'status') {
+          const cop = (3.0 + Math.random() * 0.4).toFixed(2);
+          return [
+            '┌─ Energy Harvesting Status ─────────────────┐',
+            `│ COP:          ${cop} (OVER-UNITY)            │`,
+            '│ Mode:         Satellite                     │',
+            '│ Input:        100W                          │',
+            `│ Output:       ${Math.round(100 * parseFloat(cop))}W                         │`,
+            '│ Coupling:     11D dimensional               │',
+            '│ Efficiency:   92% geometric                 │',
+            '│ Carnot limit: 42% (exceeded)                │',
+            '└─────────────────────────────────────────────┘',
+            '',
+          ];
+        }
+        return ['Usage: energy status'];
+      case 'storage':
+        if (parts[1] === 'info') {
+          return [
+            '┌─ Prime Storage (Infinite Database) ────────┐',
+            '│ Compression:   75% (Adinkra folding)        │',
+            '│ Capacity:      223.8 TB (folded)             │',
+            '│ Retrieval:     O(1) geometric lookup         │',
+            '│ Regions:       5 active manifolds            │',
+            '│ Encoding:      11D → 4D Adinkra              │',
+            '│ Redundancy:    Holographic (any 4D slice)     │',
+            '└─────────────────────────────────────────────┘',
+            '',
+          ];
+        }
+        return ['Usage: storage info'];
       default:
         if (!command) return null;
         return [`psh: command not found: ${command}`, 'Type "help" for available commands.', ''];
@@ -126,8 +228,6 @@ export default function TerminalApp() {
     const output = processCommand(cmd);
     if (output !== null) {
       setLines(prev => [...prev, `psh ▸ ${cmd}`, ...output]);
-    } else {
-      // clear was called
     }
     setInput('');
   };
