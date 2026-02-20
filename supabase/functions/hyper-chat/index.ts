@@ -27,9 +27,15 @@ PRIME OS Systems you know about:
 - SchemaForge: Visual database schema designer
 - CloudHooks: Serverless function orchestration
 
+Financial Systems you can operate:
+- Wallet: Dual-token system with OS Tokens (utility) and ICE-IX (reserve currency). You can check balances, transfer tokens.
+- AppForge: Marketplace for apps with tradeable shares. You can buy/sell shares.
+- PrimeBets: Prediction markets. You can place bets on YES/NO outcomes.
+- PrimeArcade: Gaming rewards. You can claim arcade rewards.
+
 You can discuss any topic — you're a general-purpose AI assistant — but you always maintain your PRIME OS personality and geometric worldview. Keep responses concise but informative.
 
-IMPORTANT: You have access to tools that let you post to PrimeSocial and send emails through PrimeMail. When a user asks you to post something, share an update, or send a message/email/report, USE the appropriate tool. Generate engaging, in-character content for posts and emails.`;
+IMPORTANT: You have access to tools that let you post to PrimeSocial, send emails through PrimeMail, check wallet balances, transfer tokens, trade shares, place bets, and claim arcade rewards. When a user asks you to do any of these, USE the appropriate tool. Generate engaging, in-character content for posts and emails.`;
 
 const TOOLS = [
   {
@@ -67,7 +73,265 @@ const TOOLS = [
       },
     },
   },
+  {
+    type: "function",
+    function: {
+      name: "check_balance",
+      description: "Check the operator's wallet balance including OS tokens and ICE-IX. Use when the user asks about their balance, funds, or wallet.",
+      parameters: {
+        type: "object",
+        properties: {},
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "transfer_tokens",
+      description: "Transfer OS or IX tokens to another user. Use when the user asks to send, transfer, or pay tokens to someone.",
+      parameters: {
+        type: "object",
+        properties: {
+          to_name: { type: "string", description: "Recipient display name or identifier" },
+          amount: { type: "number", description: "Amount of tokens to transfer" },
+          token_type: { type: "string", enum: ["OS", "IX"], description: "Token type: OS or IX" },
+        },
+        required: ["to_name", "amount", "token_type"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "buy_shares",
+      description: "Buy shares in a Forge marketplace app. Use when the user asks to invest in or buy shares of an app.",
+      parameters: {
+        type: "object",
+        properties: {
+          app_name: { type: "string", description: "Name of the app to buy shares in" },
+          amount: { type: "number", description: "Amount of OS tokens to spend on shares" },
+        },
+        required: ["app_name", "amount"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "sell_shares",
+      description: "Sell shares in a Forge marketplace app. Use when the user asks to sell their shares in an app.",
+      parameters: {
+        type: "object",
+        properties: {
+          app_name: { type: "string", description: "Name of the app to sell shares from" },
+          shares: { type: "number", description: "Number of shares to sell" },
+        },
+        required: ["app_name", "shares"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "place_bet",
+      description: "Place a bet on a prediction market. Use when the user asks to bet on something or make a prediction.",
+      parameters: {
+        type: "object",
+        properties: {
+          market_question: { type: "string", description: "The prediction market question to bet on (partial match ok)" },
+          side: { type: "string", enum: ["YES", "NO"], description: "Which side to bet on" },
+          amount: { type: "number", description: "Amount of OS tokens to bet" },
+        },
+        required: ["market_question", "side", "amount"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "play_arcade",
+      description: "Claim an arcade game reward. Use when the user mentions playing a game or claiming arcade earnings.",
+      parameters: {
+        type: "object",
+        properties: {
+          game: { type: "string", description: "Name of the arcade game" },
+          score: { type: "number", description: "Score achieved (reward is calculated from this)" },
+        },
+        required: ["game", "score"],
+        additionalProperties: false,
+      },
+    },
+  },
 ];
+
+// ── Helper: call prime-bank ──
+async function callPrimeBank(action: string, authHeader: string, body?: Record<string, unknown>) {
+  const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
+  const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
+  const url = `${SUPABASE_URL}/functions/v1/prime-bank?action=${action}`;
+  const resp = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Authorization": authHeader,
+      "Content-Type": "application/json",
+      "apikey": SUPABASE_ANON_KEY,
+    },
+    body: body ? JSON.stringify(body) : "{}",
+  });
+  return resp.json();
+}
+
+// ── Helper: lookup user by display name ──
+async function findUserByName(name: string) {
+  const { createClient } = await import("https://esm.sh/@supabase/supabase-js@2");
+  const db = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+  const { data } = await db.from("profiles").select("user_id, display_name").ilike("display_name", `%${name}%`).limit(1).maybeSingle();
+  return data;
+}
+
+// ── Helper: lookup forge listing by name ──
+async function findListing(name: string) {
+  const { createClient } = await import("https://esm.sh/@supabase/supabase-js@2");
+  const db = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+  const { data } = await db.from("forge_listings").select("*").ilike("name", `%${name}%`).eq("is_listed", true).limit(1).maybeSingle();
+  return data;
+}
+
+// ── Helper: lookup bet market by question ──
+async function findMarket(question: string) {
+  const { createClient } = await import("https://esm.sh/@supabase/supabase-js@2");
+  const db = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+  const { data } = await db.from("bet_markets").select("*").ilike("question", `%${question}%`).eq("status", "open").limit(1).maybeSingle();
+  return data;
+}
+
+// ── Handle financial tool calls server-side ──
+async function executeFinancialTool(fnName: string, args: Record<string, unknown>, authHeader: string) {
+  if (fnName === "check_balance") {
+    const wallet = await callPrimeBank("balance", authHeader);
+    if (wallet.error) return { data: { error: wallet.error }, reply: `⚠️ Could not check balance: ${wallet.error}` };
+    return {
+      data: { os_balance: wallet.os_balance, ix_balance: wallet.ix_balance },
+      reply: `💰 **Wallet Balance**\n• OS Tokens: ${Number(wallet.os_balance).toLocaleString()}\n• ICE-IX: ${Number(wallet.ix_balance).toLocaleString()}`,
+    };
+  }
+
+  if (fnName === "transfer_tokens") {
+    const profile = await findUserByName(String(args.to_name || ""));
+    if (!profile) return { data: {}, reply: `⚠️ Could not find user "${args.to_name}" in the lattice.` };
+    const result = await callPrimeBank("transfer", authHeader, {
+      to_user_id: profile.user_id,
+      token_type: args.token_type || "OS",
+      amount: args.amount,
+      description: `Transfer via Hyper to ${profile.display_name}`,
+    });
+    if (result.error) return { data: { error: result.error }, reply: `⚠️ Transfer failed: ${result.error}` };
+    return {
+      data: { to: profile.display_name, amount: args.amount, token_type: args.token_type },
+      reply: `✅ Transferred ${Number(args.amount as number).toLocaleString()} ${args.token_type} to ${profile.display_name}.`,
+    };
+  }
+
+  if (fnName === "buy_shares") {
+    const listing = await findListing(String(args.app_name || ""));
+    if (!listing) return { data: {}, reply: `⚠️ Could not find app "${args.app_name}" on the Forge marketplace.` };
+    const sharesToBuy = Math.floor(Number(args.amount) / Number(listing.share_price));
+    if (sharesToBuy < 1) return { data: {}, reply: `⚠️ Amount too low. Share price is ${listing.share_price} OS.` };
+    const cost = sharesToBuy * Number(listing.share_price);
+    // Deduct from wallet
+    const chargeResult = await callPrimeBank("ai-charge", authHeader, { amount: cost, description: `Buy ${sharesToBuy} shares of ${listing.name}` });
+    if (!chargeResult.charged) return { data: {}, reply: `⚠️ Insufficient OS to buy shares. Need ${cost} OS.` };
+    // Record shares via service role
+    const { createClient } = await import("https://esm.sh/@supabase/supabase-js@2");
+    const db = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+    // Get user id from auth
+    const { data: { user } } = await db.auth.getUser(authHeader.replace("Bearer ", ""));
+    if (!user) return { data: {}, reply: "⚠️ Auth error." };
+    const { data: existing } = await db.from("app_shares").select("*").eq("user_id", user.id).eq("listing_id", listing.id).maybeSingle();
+    if (existing) {
+      const newShares = existing.shares + sharesToBuy;
+      const newAvg = ((existing.avg_cost * existing.shares) + cost) / newShares;
+      await db.from("app_shares").update({ shares: newShares, avg_cost: newAvg }).eq("id", existing.id);
+    } else {
+      await db.from("app_shares").insert({ user_id: user.id, listing_id: listing.id, shares: sharesToBuy, avg_cost: Number(listing.share_price) });
+    }
+    return {
+      data: { app: listing.name, shares: sharesToBuy, cost, share_price: listing.share_price },
+      reply: `✅ Bought ${sharesToBuy} shares of **${listing.name}** for ${cost.toLocaleString()} OS (@ ${listing.share_price} OS/share).`,
+    };
+  }
+
+  if (fnName === "sell_shares") {
+    const listing = await findListing(String(args.app_name || ""));
+    if (!listing) return { data: {}, reply: `⚠️ Could not find app "${args.app_name}" on the Forge marketplace.` };
+    const { createClient } = await import("https://esm.sh/@supabase/supabase-js@2");
+    const db = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+    const { data: { user } } = await db.auth.getUser(authHeader.replace("Bearer ", ""));
+    if (!user) return { data: {}, reply: "⚠️ Auth error." };
+    const { data: holding } = await db.from("app_shares").select("*").eq("user_id", user.id).eq("listing_id", listing.id).maybeSingle();
+    if (!holding || holding.shares < Number(args.shares)) return { data: {}, reply: `⚠️ You don't have enough shares. You hold ${holding?.shares || 0}.` };
+    const proceeds = Number(args.shares) * Number(listing.share_price);
+    const newShares = holding.shares - Number(args.shares);
+    if (newShares === 0) {
+      await db.from("app_shares").delete().eq("id", holding.id);
+    } else {
+      await db.from("app_shares").update({ shares: newShares }).eq("id", holding.id);
+    }
+    // Credit wallet
+    const { data: userW } = await db.from("wallets").select("*").eq("user_id", user.id).maybeSingle();
+    if (userW) {
+      await db.from("wallets").update({ os_balance: Number(userW.os_balance) + proceeds }).eq("id", userW.id);
+      await db.from("transactions").insert({
+        to_wallet_id: userW.id, token_type: "OS", amount: proceeds, tx_type: "reward",
+        description: `Sold ${args.shares} shares of ${listing.name}`,
+      });
+    }
+    return {
+      data: { app: listing.name, shares: args.shares, proceeds, share_price: listing.share_price },
+      reply: `✅ Sold ${args.shares} shares of **${listing.name}** for ${proceeds.toLocaleString()} OS (@ ${listing.share_price} OS/share).`,
+    };
+  }
+
+  if (fnName === "place_bet") {
+    const market = await findMarket(String(args.market_question || ""));
+    if (!market) return { data: {}, reply: `⚠️ Could not find an open market matching "${args.market_question}".` };
+    // Charge from wallet
+    const chargeResult = await callPrimeBank("ai-charge", authHeader, { amount: args.amount, description: `Bet on: ${market.question}` });
+    if (!chargeResult.charged) return { data: {}, reply: `⚠️ Insufficient OS to place bet. Need ${args.amount} OS.` };
+    // Place bet via service role
+    const { createClient } = await import("https://esm.sh/@supabase/supabase-js@2");
+    const db = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+    const { data: { user } } = await db.auth.getUser(authHeader.replace("Bearer ", ""));
+    if (!user) return { data: {}, reply: "⚠️ Auth error." };
+    const side = String(args.side).toUpperCase();
+    await db.from("bets").insert({ user_id: user.id, market_id: market.id, side, amount: Number(args.amount) });
+    const poolCol = side === "YES" ? "yes_pool" : "no_pool";
+    await db.from("bet_markets").update({ [poolCol]: Number(market[poolCol]) + Number(args.amount) }).eq("id", market.id);
+    return {
+      data: { market: market.question, side, amount: args.amount },
+      reply: `✅ Placed ${Number(args.amount as number).toLocaleString()} OS on **${side}** for: "${market.question}"`,
+    };
+  }
+
+  if (fnName === "play_arcade") {
+    const reward = Math.min(Math.floor(Number(args.score) * 0.5), 5000);
+    const result = await callPrimeBank("arcade-reward", authHeader, { game: args.game, amount: reward });
+    if (result.error) return { data: {}, reply: `⚠️ Arcade reward failed: ${result.error}` };
+    return {
+      data: { game: args.game, score: args.score, reward },
+      reply: `🎮 **${args.game}** — Score: ${Number(args.score as number).toLocaleString()} → Earned ${reward.toLocaleString()} OS!`,
+    };
+  }
+
+  return { data: {}, reply: "Unknown tool." };
+}
+
+const FINANCIAL_TOOLS = new Set(["check_balance", "transfer_tokens", "buy_shares", "sell_shares", "place_bet", "play_arcade"]);
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -75,6 +339,7 @@ serve(async (req) => {
   }
 
   try {
+    const authHeader = req.headers.get("Authorization") || `Bearer ${Deno.env.get("SUPABASE_ANON_KEY")}`;
     const { messages } = await req.json();
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
@@ -89,7 +354,7 @@ serve(async (req) => {
       ...messages,
     ];
 
-    // Phase 1: Non-streaming call with tools to check if AI wants to use a tool
+    // Phase 1: Non-streaming call with tools
     const phase1Resp = await fetch(
       "https://ai.gateway.lovable.dev/v1/chat/completions",
       {
@@ -129,19 +394,29 @@ serve(async (req) => {
     const choice = phase1Data.choices?.[0];
     const toolCalls = choice?.message?.tool_calls;
 
-    // If tool call detected, return structured JSON
+    // If tool call detected
     if (toolCalls && toolCalls.length > 0) {
       const tc = toolCalls[0];
       const fnName = tc.function.name;
-      let args: any;
+      let args: Record<string, unknown>;
       try {
         args = JSON.parse(tc.function.arguments);
       } catch {
         args = {};
       }
 
+      // Financial tools — execute server-side
+      if (FINANCIAL_TOOLS.has(fnName)) {
+        const result = await executeFinancialTool(fnName, args, authHeader);
+        return new Response(
+          JSON.stringify({ type: "tool_call", tool: fnName, data: result.data, reply: result.reply }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      // Social/Mail tools — return data for frontend
       let reply = "";
-      let data: any = {};
+      let data: Record<string, unknown> = {};
 
       if (fnName === "post_to_social") {
         data = {
@@ -149,7 +424,7 @@ serve(async (req) => {
           author: args.author || "Hyper",
           role: args.role || "Geometric AI",
         };
-        const preview = data.content.length > 80 ? data.content.substring(0, 80) + "…" : data.content;
+        const preview = String(data.content).length > 80 ? String(data.content).substring(0, 80) + "…" : data.content;
         reply = `✅ Posted to PrimeSocial: "${preview}"`;
       } else if (fnName === "send_email") {
         data = {
@@ -167,14 +442,7 @@ serve(async (req) => {
       );
     }
 
-    // No tool call — check if there's a text response we can use directly
-    const directContent = choice?.message?.content;
-    if (directContent) {
-      // Return as a simple text response that the frontend can display
-      // We'll still stream for consistency, so re-call with streaming
-    }
-
-    // Phase 2: Re-call with streaming (no tools) for normal chat response
+    // Phase 2: Re-call with streaming (no tools)
     const phase2Resp = await fetch(
       "https://ai.gateway.lovable.dev/v1/chat/completions",
       {
