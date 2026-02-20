@@ -31,6 +31,14 @@ export function useWindowManager() {
           case 'cloudhooks': return [800, 520];
           case 'hypersphere': return [500, 550];
           case 'calendar': return [700, 520];
+          case 'docs': return [750, 500];
+          case 'spreadsheet': return [850, 520];
+          case 'schemaforge': return [800, 550];
+          case 'canvas': return [780, 520];
+          case 'comm': return [380, 600];
+          case 'maps': return [800, 550];
+          case 'pkg': return [700, 480];
+          case 'audio': return [650, 400];
           default: return [600, 420];
         }
       };

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { AppType, WindowState } from '@/types/os';
 import { OSNotification } from '@/hooks/useNotifications';
-import { Terminal, FolderTree, Activity, Cpu, Brain, Network, Code, HardDrive, Database, Zap, Settings, ChevronUp, Bell, X, Monitor, FileText, MessageSquare, Shield, Globe, Server, LayoutList, Image, Search, Link2, Orbit, CalendarDays, Moon } from 'lucide-react';
+import { Terminal, FolderTree, Activity, Cpu, Brain, Network, Code, HardDrive, Database, Zap, Settings, ChevronUp, Bell, X, Monitor, FileText, MessageSquare, Shield, Globe, Server, LayoutList, Image, Search, Link2, Orbit, CalendarDays, Moon, BookOpen, Table, Workflow, Paintbrush, Smartphone, Map, Package, Music } from 'lucide-react';
 import { startOfMonth, endOfMonth, eachDayOfInterval, getDay, isToday, isSameMonth, format } from 'date-fns';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 
@@ -36,6 +36,14 @@ const allApps: { app: AppType; title: string; icon: React.ReactNode; label: stri
   { app: 'cloudhooks', title: 'Cloud Hooks', icon: <Link2 size={18} />, label: 'Cloud Hooks' },
   { app: 'hypersphere', title: 'Hyper AI', icon: <Orbit size={18} />, label: 'Hyper AI' },
   { app: 'calendar', title: 'Prime Calendar', icon: <CalendarDays size={18} />, label: 'Calendar' },
+  { app: 'docs', title: 'PrimeDocs', icon: <BookOpen size={18} />, label: 'Docs' },
+  { app: 'spreadsheet', title: 'PrimeGrid', icon: <Table size={18} />, label: 'Spreadsheet' },
+  { app: 'schemaforge', title: 'SchemaForge', icon: <Workflow size={18} />, label: 'SchemaForge' },
+  { app: 'canvas', title: 'PrimeCanvas', icon: <Paintbrush size={18} />, label: 'Canvas' },
+  { app: 'comm', title: 'PrimeComm', icon: <Smartphone size={18} />, label: 'PrimeComm' },
+  { app: 'maps', title: 'PrimeMaps', icon: <Map size={18} />, label: 'Maps' },
+  { app: 'pkg', title: 'PrimePkg', icon: <Package size={18} />, label: 'Packages' },
+  { app: 'audio', title: 'PrimeAudio', icon: <Music size={18} />, label: 'Audio' },
   { app: 'settings', title: 'Settings', icon: <Settings size={18} />, label: 'Settings' },
 ];
 

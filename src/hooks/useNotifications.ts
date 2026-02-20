@@ -27,6 +27,10 @@ const DEFAULT_EVENTS: NotificationEvent[] = [
   { id: 'evt-8', title: 'QK Scheduler', message: 'Fibonacci Waltz cycle #4,096 — all qutrit states balanced', enabled: false, triggerApps: ['processes', 'terminal'] },
   { id: 'evt-9', title: 'PrimeNet', message: 'Geodesic route optimized — latency ↓ 12%', enabled: false, triggerApps: ['primenet', 'browser'] },
   { id: 'evt-10', title: 'Energy', message: 'Satellite mode: 320W output from 100W input', enabled: false, triggerApps: ['energy', 'monitor'] },
+  { id: 'evt-11', title: 'PrimeDocs', message: 'New manifold report available — Σ-Delta sector analysis', enabled: false, triggerApps: ['docs'] },
+  { id: 'evt-12', title: 'PrimeGrid', message: 'Lattice metrics auto-refreshed — 6 regions updated', enabled: false, triggerApps: ['spreadsheet'] },
+  { id: 'evt-13', title: 'SchemaForge', message: 'Schema validation complete — 5 entities, 0 errors', enabled: false, triggerApps: ['schemaforge'] },
+  { id: 'evt-14', title: 'PrimeAudio', message: 'Now playing: Harmonic Fold — Lattice Core', enabled: false, triggerApps: ['audio'] },
 ];
 
 function loadEvents(): NotificationEvent[] {
