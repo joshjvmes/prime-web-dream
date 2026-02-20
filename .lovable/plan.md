@@ -1,24 +1,27 @@
 
 
-# Landing Page Viewport & Spacing Fix
+# Tighten Spacing on Stats, Features & Architecture Sections
 
 ## Problem
-The hero section has excessive padding and margins, causing the terminal preview and even the CTA buttons to get cut off below the viewport fold. The page correctly scrolls for all the other sections, but the first impression (hero) should fit within the initial viewport.
-
-## Solution
-Tighten the hero section spacing so the headline, tagline, CTA buttons, and terminal preview all fit within the initial viewport on desktop. Keep the page scrollable for the remaining sections (stats, features, architecture, CTA, footer).
+Same issue as the hero -- the Stats, Features, and Architecture sections have generous padding that causes content to be cut off at the bottom of the viewport when scrolling to each section.
 
 ## Changes
 
 ### `src/pages/LandingPage.tsx`
 
-**Hero section spacing adjustments:**
-- Reduce top padding from `pt-32 md:pt-44` to `pt-24 md:pt-32` (less dead space above the hero)
-- Reduce bottom padding from `pb-20 md:pb-32` to `pb-12 md:pb-20`
-- Reduce the version badge bottom margin from `mb-8` to `mb-6`
-- Reduce the subtitle bottom margin from `mb-10` to `mb-6`
-- Reduce the terminal preview top margin from `mt-16 md:mt-20` to `mt-10 md:mt-14`
+**Stats section (line 256):**
+- Reduce padding from `py-16 md:py-24` to `py-12 md:py-16`
 
-These are small tweaks that bring everything up so the hero content -- including the terminal preview -- is visible on first load without scrolling on standard desktop screens (1080p+). On smaller screens it will still scroll naturally, which is expected.
+**Features section (line 279):**
+- Reduce padding from `py-20 md:py-32` to `py-14 md:py-20`
 
-No other files are affected. The rest of the page sections remain unchanged.
+**Architecture section (line 295):**
+- Reduce padding from `py-20 md:py-32` to `py-14 md:py-20`
+
+**SectionHeader component (line 93):**
+- Reduce bottom margin from `mb-16` to `mb-10` (affects both Features and Architecture headers)
+
+These are the same kind of small tweaks applied to the hero -- just pulling in the vertical breathing room so each section's content fits more comfortably within a single viewport height on standard desktop screens.
+
+No other files affected.
+
