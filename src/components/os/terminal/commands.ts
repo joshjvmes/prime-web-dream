@@ -126,6 +126,13 @@ const APP_MAP: Record<string, { app: string; title: string }> = {
   videocall: { app: 'videocall', title: 'PrimeLink' },
   video: { app: 'videocall', title: 'PrimeLink' },
   link: { app: 'videocall', title: 'PrimeLink' },
+  agent: { app: 'agent', title: 'PrimeAgent' },
+  robotics: { app: 'robotics', title: 'PrimeRobotics' },
+  robots: { app: 'robotics', title: 'PrimeRobotics' },
+  booking: { app: 'booking', title: 'PrimeBooking' },
+  book: { app: 'booking', title: 'PrimeBooking' },
+  iot: { app: 'iot', title: 'PrimeIoT' },
+  devices: { app: 'iot', title: 'PrimeIoT' },
 };
 
 // Boot timestamp for uptime

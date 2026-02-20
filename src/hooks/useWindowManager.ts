@@ -46,6 +46,10 @@ export function useWindowManager() {
           case 'videocall': return [750, 550];
           case 'mail': return [780, 520];
           case 'social': return [700, 550];
+          case 'agent': return [820, 520];
+          case 'robotics': return [780, 520];
+          case 'booking': return [850, 550];
+          case 'iot': return [800, 520];
           default: return [600, 420];
         }
       };
