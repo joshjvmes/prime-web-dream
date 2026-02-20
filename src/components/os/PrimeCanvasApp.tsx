@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
-import { Pencil, Minus, Square, Circle, Eraser, Undo, Redo, Grid3x3 } from 'lucide-react';
+import { Pencil, Minus, Square, Circle, Eraser, Undo, Redo, Grid3x3, Download, Trash2 } from 'lucide-react';
 import { Slider } from '@/components/ui/slider';
 
 type Tool = 'pencil' | 'line' | 'rect' | 'circle' | 'eraser';
@@ -16,6 +16,15 @@ const COLORS = [
 ];
 
 const LAYERS = ['Background', 'Layer 1', 'Layer 2'];
+
+function downloadFile(dataUrl: string, filename: string) {
+  const a = document.createElement('a');
+  a.href = dataUrl;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+}
 
 export default function PrimeCanvasApp() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -167,6 +176,35 @@ export default function PrimeCanvasApp() {
     saveState();
   };
 
+  const clearCanvas = () => {
+    if (!confirm('Clear entire canvas?')) return;
+    const canvas = canvasRef.current;
+    const ctx = canvas?.getContext('2d');
+    if (!ctx || !canvas) return;
+    ctx.fillStyle = 'hsl(0, 0%, 8%)';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    saveState();
+  };
+
+  const exportPng = () => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ts = Date.now();
+    downloadFile(canvas.toDataURL('image/png'), `prime-canvas-${ts}.png`);
+  };
+
+  const exportSvg = () => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ts = Date.now();
+    const dataUrl = canvas.toDataURL('image/png');
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${canvas.width}" height="${canvas.height}">
+  <image href="${dataUrl}" width="${canvas.width}" height="${canvas.height}" />
+</svg>`;
+    const blob = new Blob([svg], { type: 'image/svg+xml' });
+    downloadFile(URL.createObjectURL(blob), `prime-canvas-${ts}.svg`);
+  };
+
   const tools: { id: Tool; icon: React.ReactNode; label: string }[] = [
     { id: 'pencil', icon: <Pencil size={14} />, label: 'Pencil' },
     { id: 'line', icon: <Minus size={14} />, label: 'Line' },
@@ -192,6 +230,8 @@ export default function PrimeCanvasApp() {
         <div className="border-t border-border my-1 w-6" />
         <button onClick={undo} title="Undo" className="p-1.5 rounded text-muted-foreground hover:bg-muted"><Undo size={14} /></button>
         <button onClick={redo} title="Redo" className="p-1.5 rounded text-muted-foreground hover:bg-muted"><Redo size={14} /></button>
+        <div className="border-t border-border my-1 w-6" />
+        <button onClick={clearCanvas} title="Clear Canvas" className="p-1.5 rounded text-muted-foreground hover:bg-muted hover:text-destructive"><Trash2 size={14} /></button>
       </div>
 
       {/* Canvas area */}
@@ -219,6 +259,13 @@ export default function PrimeCanvasApp() {
             </button>
             <button onClick={drawPrimeSpiral} className="text-[9px] px-1.5 py-0.5 rounded border border-border text-muted-foreground hover:text-primary hover:border-primary/30 transition-colors">
               Spiral
+            </button>
+            <div className="w-px h-4 bg-border mx-1" />
+            <button onClick={exportPng} className="text-[9px] px-1.5 py-0.5 rounded border border-border text-muted-foreground hover:text-primary hover:border-primary/30 transition-colors flex items-center gap-0.5">
+              <Download size={9} />PNG
+            </button>
+            <button onClick={exportSvg} className="text-[9px] px-1.5 py-0.5 rounded border border-border text-muted-foreground hover:text-primary hover:border-primary/30 transition-colors flex items-center gap-0.5">
+              <Download size={9} />SVG
             </button>
           </div>
         </div>
