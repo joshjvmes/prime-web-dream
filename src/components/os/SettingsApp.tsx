@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { NotificationEvent } from '@/hooks/useNotifications';
-import { Trash2, Plus, Bell, BellOff, Monitor, Keyboard, Mouse, Volume2, Info, User } from 'lucide-react';
+import { Trash2, Plus, Bell, BellOff, Monitor, Keyboard, Mouse, Volume2, Info, User, Lock, LayoutGrid } from 'lucide-react';
 
 interface SettingsState {
   scanLines: boolean;
@@ -25,12 +25,26 @@ interface SettingsState {
   soundTheme: string;
 }
 
+interface LockSettings {
+  pinEnabled: boolean;
+  pin: string;
+  wallpaper: string;
+}
+
+interface WidgetToggles {
+  clock: boolean;
+  stats: boolean;
+  notes: boolean;
+  network: boolean;
+}
+
 interface SettingsAppProps {
   notifEvents?: NotificationEvent[];
   onToggleEvent?: (id: string) => void;
   onUpdateMessage?: (id: string, message: string) => void;
   onAddEvent?: (title: string, message: string) => void;
   onRemoveEvent?: (id: string) => void;
+  onLock?: () => void;
 }
 
 const DEFAULTS: SettingsState = {
@@ -55,11 +69,13 @@ function applyTheme(theme: 'cyan' | 'violet' | 'amber') {
   root.style.setProperty('--border', t.border);
 }
 
-type Panel = 'profile' | 'display' | 'keyboard' | 'mouse' | 'audio' | 'notifications' | 'about';
+type Panel = 'profile' | 'display' | 'keyboard' | 'mouse' | 'audio' | 'notifications' | 'lock' | 'widgets' | 'about';
 
 const PANELS: { id: Panel; label: string; icon: React.ReactNode }[] = [
   { id: 'profile', label: 'Profile', icon: <User size={14} /> },
   { id: 'display', label: 'Display', icon: <Monitor size={14} /> },
+  { id: 'lock', label: 'Lock & Security', icon: <Lock size={14} /> },
+  { id: 'widgets', label: 'Widgets', icon: <LayoutGrid size={14} /> },
   { id: 'keyboard', label: 'Keyboard', icon: <Keyboard size={14} /> },
   { id: 'mouse', label: 'Mouse', icon: <Mouse size={14} /> },
   { id: 'audio', label: 'Audio', icon: <Volume2 size={14} /> },
@@ -67,7 +83,7 @@ const PANELS: { id: Panel; label: string; icon: React.ReactNode }[] = [
   { id: 'about', label: 'About', icon: <Info size={14} /> },
 ];
 
-export default function SettingsApp({ notifEvents = [], onToggleEvent, onUpdateMessage, onAddEvent, onRemoveEvent }: SettingsAppProps) {
+export default function SettingsApp({ notifEvents = [], onToggleEvent, onUpdateMessage, onAddEvent, onRemoveEvent, onLock }: SettingsAppProps) {
   const [activePanel, setActivePanel] = useState<Panel>('profile');
   const [profileName, setProfileName] = useState(() => {
     try { const p = localStorage.getItem('prime-os-profile'); return p ? JSON.parse(p).name || '' : ''; } catch { return ''; }
@@ -76,10 +92,13 @@ export default function SettingsApp({ notifEvents = [], onToggleEvent, onUpdateM
     try { const p = localStorage.getItem('prime-os-profile'); return p ? JSON.parse(p).title || '' : ''; } catch { return ''; }
   });
   const [settings, setSettings] = useState<SettingsState>(() => {
-    try {
-      const saved = localStorage.getItem('prime-os-settings');
-      return saved ? { ...DEFAULTS, ...JSON.parse(saved) } : DEFAULTS;
-    } catch { return DEFAULTS; }
+    try { const saved = localStorage.getItem('prime-os-settings'); return saved ? { ...DEFAULTS, ...JSON.parse(saved) } : DEFAULTS; } catch { return DEFAULTS; }
+  });
+  const [lockSettings, setLockSettings] = useState<LockSettings>(() => {
+    try { const s = localStorage.getItem('prime-os-lock-settings'); return s ? JSON.parse(s) : { pinEnabled: false, pin: '', wallpaper: 'lattice' }; } catch { return { pinEnabled: false, pin: '', wallpaper: 'lattice' }; }
+  });
+  const [widgetToggles, setWidgetToggles] = useState<WidgetToggles>(() => {
+    try { const s = localStorage.getItem('prime-os-widgets'); return s ? JSON.parse(s) : { clock: true, stats: true, notes: false, network: false }; } catch { return { clock: true, stats: true, notes: false, network: false }; }
   });
 
   const [newTitle, setNewTitle] = useState('');
@@ -96,6 +115,13 @@ export default function SettingsApp({ notifEvents = [], onToggleEvent, onUpdateM
     }
     applyTheme(settings.accentTheme);
   }, [settings]);
+
+  useEffect(() => { localStorage.setItem('prime-os-lock-settings', JSON.stringify(lockSettings)); }, [lockSettings]);
+
+  useEffect(() => {
+    const current = JSON.parse(localStorage.getItem('prime-os-widgets') || '{}');
+    localStorage.setItem('prime-os-widgets', JSON.stringify({ ...current, ...widgetToggles }));
+  }, [widgetToggles]);
 
   const update = <K extends keyof SettingsState>(key: K, value: SettingsState[K]) =>
     setSettings(s => ({ ...s, [key]: value }));
@@ -171,7 +197,6 @@ export default function SettingsApp({ notifEvents = [], onToggleEvent, onUpdateM
             <SectionTitle>Visual Effects</SectionTitle>
             <Toggle label="Scan Lines" value={settings.scanLines} onChange={v => update('scanLines', v)} />
             <Toggle label="Grid Background" value={settings.gridBackground} onChange={v => update('gridBackground', v)} />
-
             <SectionTitle>Accent Color</SectionTitle>
             <div className="flex gap-2 py-1">
               {(['cyan', 'violet', 'amber'] as const).map(theme => (
@@ -181,10 +206,8 @@ export default function SettingsApp({ notifEvents = [], onToggleEvent, onUpdateM
                   }`}>{theme}</button>
               ))}
             </div>
-
             <SectionTitle>Window</SectionTitle>
             <SliderRow label="Window Opacity" value={Math.round(settings.windowOpacity * 100)} onChange={v => update('windowOpacity', v / 100)} min={70} max={100} suffix="%" />
-
             <SectionTitle>Animation Speed</SectionTitle>
             <div className="flex gap-2 py-1">
               {(['slow', 'normal', 'fast'] as const).map(speed => (
@@ -194,7 +217,6 @@ export default function SettingsApp({ notifEvents = [], onToggleEvent, onUpdateM
                   }`}>{speed}</button>
               ))}
             </div>
-
             <SectionTitle>Font Size</SectionTitle>
             <div className="flex gap-2 py-1">
               {(['compact', 'default', 'large'] as const).map(size => (
@@ -204,6 +226,54 @@ export default function SettingsApp({ notifEvents = [], onToggleEvent, onUpdateM
                   }`}>{size}</button>
               ))}
             </div>
+          </div>
+        );
+
+      case 'lock':
+        return (
+          <div className="space-y-1">
+            <SectionTitle>Lock Screen PIN</SectionTitle>
+            <Toggle label="Enable PIN Lock" value={lockSettings.pinEnabled} onChange={v => setLockSettings(s => ({ ...s, pinEnabled: v }))} />
+            {lockSettings.pinEnabled && (
+              <div className="mt-2">
+                <label className="font-body text-xs text-card-foreground block mb-1">Set PIN (4-6 digits)</label>
+                <input type="password" maxLength={6} value={lockSettings.pin}
+                  onChange={e => setLockSettings(s => ({ ...s, pin: e.target.value.replace(/\D/g, '') }))}
+                  placeholder="••••" className="w-32 bg-background border border-border rounded px-2 py-1.5 text-xs text-foreground font-mono tracking-widest" />
+              </div>
+            )}
+            <SectionTitle>Wallpaper</SectionTitle>
+            <div className="flex gap-2 py-1">
+              {['lattice', 'nebula', 'void'].map(wp => (
+                <button key={wp} onClick={() => setLockSettings(s => ({ ...s, wallpaper: wp }))}
+                  className={`px-3 py-1.5 rounded border text-[10px] font-display tracking-wider uppercase transition-all ${
+                    lockSettings.wallpaper === wp ? 'border-primary bg-primary/10 text-primary' : 'border-border text-muted-foreground hover:text-foreground'
+                  }`}>{wp}</button>
+              ))}
+            </div>
+            <SectionTitle>Quick Actions</SectionTitle>
+            <button onClick={onLock} className="px-3 py-1.5 rounded border border-primary/30 text-primary text-[10px] font-display tracking-wider hover:bg-primary/10 transition-colors">
+              Lock Now (Ctrl+L)
+            </button>
+            <SectionTitle>Shortcuts</SectionTitle>
+            <div className="border border-border rounded overflow-hidden">
+              <div className="flex items-center justify-between px-2 py-1.5">
+                <span className="text-[10px] text-muted-foreground">Lock Screen</span>
+                <kbd className="px-1.5 py-0.5 rounded bg-muted text-[9px] text-foreground font-mono">Ctrl+L</kbd>
+              </div>
+            </div>
+          </div>
+        );
+
+      case 'widgets':
+        return (
+          <div className="space-y-1">
+            <SectionTitle>Desktop Widgets</SectionTitle>
+            <p className="text-[10px] text-muted-foreground mb-3">Toggle widgets visible on the desktop. Drag them to reposition.</p>
+            <Toggle label="Clock Widget" value={widgetToggles.clock} onChange={v => setWidgetToggles(s => ({ ...s, clock: v }))} />
+            <Toggle label="System Stats Widget" value={widgetToggles.stats} onChange={v => setWidgetToggles(s => ({ ...s, stats: v }))} />
+            <Toggle label="Quick Notes Widget" value={widgetToggles.notes} onChange={v => setWidgetToggles(s => ({ ...s, notes: v }))} />
+            <Toggle label="Network Status Widget" value={widgetToggles.network} onChange={v => setWidgetToggles(s => ({ ...s, network: v }))} />
           </div>
         );
 
@@ -217,6 +287,8 @@ export default function SettingsApp({ notifEvents = [], onToggleEvent, onUpdateM
                 ['Ctrl+W', 'Close Window'],
                 ['Ctrl+M', 'Minimize Window'],
                 ['Ctrl+Shift+M', 'Maximize / Restore'],
+                ['Ctrl+L', 'Lock Screen'],
+                ['Ctrl+1-4', 'Switch Workspace'],
                 ['Alt+Tab', 'Cycle Windows'],
                 ['Escape', 'Close focused dialog'],
               ].map(([key, desc]) => (
@@ -226,11 +298,9 @@ export default function SettingsApp({ notifEvents = [], onToggleEvent, onUpdateM
                 </div>
               ))}
             </div>
-
             <SectionTitle>Repeat Settings</SectionTitle>
             <SliderRow label="Key Repeat Rate" value={settings.keyRepeatRate} onChange={v => update('keyRepeatRate', v)} min={10} max={100} />
             <SliderRow label="Key Repeat Delay" value={settings.keyRepeatDelay} onChange={v => update('keyRepeatDelay', v)} min={100} max={1000} suffix="ms" />
-
             <SectionTitle>Layout</SectionTitle>
             <SelectRow label="Keyboard Layout" value={settings.keyboardLayout} options={['QWERTY', 'Dvorak', 'Colemak']} onChange={v => update('keyboardLayout', v)} />
             <SelectRow label="Input Method" value={settings.inputMethod} options={['Standard', 'Geometric', 'Qutrit']} onChange={v => update('inputMethod', v)} />
@@ -244,7 +314,6 @@ export default function SettingsApp({ notifEvents = [], onToggleEvent, onUpdateM
             <SliderRow label="Cursor Speed" value={settings.cursorSpeed} onChange={v => update('cursorSpeed', v)} min={1} max={100} />
             <SliderRow label="Double-click Speed" value={settings.doubleClickSpeed} onChange={v => update('doubleClickSpeed', v)} min={1} max={100} />
             <Toggle label="Pointer Precision" value={settings.pointerPrecision} onChange={v => update('pointerPrecision', v)} />
-
             <SectionTitle>Scrolling</SectionTitle>
             <div className="flex items-center justify-between py-1.5">
               <span className="font-body text-xs text-card-foreground">Scroll Direction</span>
@@ -257,7 +326,6 @@ export default function SettingsApp({ notifEvents = [], onToggleEvent, onUpdateM
                 ))}
               </div>
             </div>
-
             <SectionTitle>Cursor Theme</SectionTitle>
             <div className="flex gap-2 py-1">
               {['Default', 'Crosshair', 'Lattice'].map(theme => (
@@ -276,11 +344,9 @@ export default function SettingsApp({ notifEvents = [], onToggleEvent, onUpdateM
             <SectionTitle>Volume</SectionTitle>
             <SliderRow label="Master Volume" value={settings.masterVolume} onChange={v => update('masterVolume', v)} min={0} max={100} suffix="%" />
             <SliderRow label="Alert Volume" value={settings.alertVolume} onChange={v => update('alertVolume', v)} min={0} max={100} suffix="%" />
-
             <SectionTitle>Sound</SectionTitle>
             <Toggle label="System Sounds" value={settings.systemSounds} onChange={v => update('systemSounds', v)} />
             <Toggle label="Notification Sound" value={settings.notificationSound} onChange={v => update('notificationSound', v)} />
-
             <SectionTitle>Theme</SectionTitle>
             <SelectRow label="Sound Theme" value={settings.soundTheme} options={['Geometric', 'Minimal', 'Silent']} onChange={v => update('soundTheme', v)} />
           </div>
@@ -341,8 +407,7 @@ export default function SettingsApp({ notifEvents = [], onToggleEvent, onUpdateM
 
   return (
     <div className="h-full bg-background flex font-mono text-xs">
-      {/* Sidebar */}
-      <div className="w-36 border-r border-border flex flex-col bg-card/30">
+      <div className="w-40 border-r border-border flex flex-col bg-card/30">
         <div className="px-3 py-2 border-b border-border">
           <h2 className="font-display text-[10px] tracking-wider uppercase text-primary">Settings</h2>
         </div>
@@ -358,8 +423,6 @@ export default function SettingsApp({ notifEvents = [], onToggleEvent, onUpdateM
           ))}
         </div>
       </div>
-
-      {/* Content */}
       <div className="flex-1 p-4 overflow-y-auto">
         {renderPanel()}
       </div>

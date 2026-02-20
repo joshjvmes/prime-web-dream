@@ -1,13 +1,15 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useMemo } from 'react';
 import { AnimatePresence } from 'framer-motion';
 import { useWindowManager } from '@/hooks/useWindowManager';
 import { useNotifications } from '@/hooks/useNotifications';
+import LockScreen from '@/components/os/LockScreen';
 import BootSequence from '@/components/os/BootSequence';
 import Taskbar from '@/components/os/Taskbar';
 import OSWindow from '@/components/os/OSWindow';
 import GlobalSearch from '@/components/os/GlobalSearch';
 import QuickTour from '@/components/os/QuickTour';
 import AboutModal from '@/components/os/AboutModal';
+import DesktopWidgets from '@/components/os/DesktopWidgets';
 import TerminalApp from '@/components/os/TerminalApp';
 import FilesApp from '@/components/os/FilesApp';
 import ProcessesApp from '@/components/os/ProcessesApp';
@@ -52,16 +54,24 @@ import PrimeIoTApp from '@/components/os/PrimeIoTApp';
 import DesktopContextMenu from '@/components/os/DesktopContextMenu';
 import NotificationSystem from '@/components/os/NotificationSystem';
 import { AppType } from '@/types/os';
-import { useMemo } from 'react';
 
 export default function Desktop() {
+  const [locked, setLocked] = useState(true);
   const [booted, setBooted] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [showTour, setShowTour] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
-  const { windows, openWindow, closeWindow, minimizeWindow, focusWindow, moveWindow, resizeWindow, maximizeWindow, snapWindow, tileAllWindows, cascadeWindows } = useWindowManager();
-  const activeApps = useMemo(() => windows.filter(w => !w.isMinimized).map(w => w.app), [windows]);
+  const {
+    windows, openWindow, closeWindow, minimizeWindow, focusWindow, moveWindow, resizeWindow,
+    maximizeWindow, snapWindow, tileAllWindows, cascadeWindows,
+    activeWorkspace, switchWorkspace, moveWindowToWorkspace, getWindowCountsByWorkspace,
+  } = useWindowManager();
+
+  const visibleWindows = useMemo(() => windows.filter(w => w.workspace === activeWorkspace), [windows, activeWorkspace]);
+  const activeApps = useMemo(() => visibleWindows.filter(w => !w.isMinimized).map(w => w.app), [visibleWindows]);
   const { notifications, dismissNotification, events, toggleEvent, updateEventMessage, addEvent, removeEvent } = useNotifications(activeApps);
+
+  const handleUnlock = useCallback(() => setLocked(false), []);
 
   const handleBootComplete = useCallback(() => {
     setBooted(true);
@@ -73,53 +83,62 @@ export default function Desktop() {
     }
   }, [openWindow]);
 
-  const handleTourComplete = useCallback(() => {
-    setShowTour(false);
-  }, []);
-
+  const handleTourComplete = useCallback(() => setShowTour(false), []);
   const handleTourOpenTerminal = useCallback(() => {
     setTimeout(() => openWindow('terminal', 'Prime Shell (psh)'), 200);
   }, [openWindow]);
+
+  const handleLock = useCallback(() => setLocked(true), []);
 
   // Global keyboard shortcuts
   useEffect(() => {
     if (!booted) return;
     const handler = (e: KeyboardEvent) => {
-      // Ctrl+K / Cmd+K — global search
+      // Ctrl+K — global search
       if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
         e.preventDefault();
         setSearchOpen(prev => !prev);
         return;
       }
-      // Ctrl+C / Ctrl+V / Ctrl+A — allow native clipboard & select
-      if ((e.ctrlKey || e.metaKey) && ['c', 'v', 'a', 'x'].includes(e.key)) {
-        return; // let browser handle natively
+      // Ctrl+L — lock screen
+      if ((e.ctrlKey || e.metaKey) && e.key === 'l') {
+        e.preventDefault();
+        handleLock();
+        return;
       }
+      // Ctrl+1-4 — switch workspaces
+      if ((e.ctrlKey || e.metaKey) && ['1', '2', '3', '4'].includes(e.key)) {
+        e.preventDefault();
+        switchWorkspace(parseInt(e.key));
+        return;
+      }
+      // Clipboard shortcuts — let browser handle
+      if ((e.ctrlKey || e.metaKey) && ['c', 'v', 'a', 'x'].includes(e.key)) return;
       // Ctrl+W — close focused window
       if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key === 'w') {
         e.preventDefault();
-        const focused = windows.find(w => w.isFocused);
+        const focused = visibleWindows.find(w => w.isFocused);
         if (focused) closeWindow(focused.id);
         return;
       }
       // Ctrl+M — minimize focused window
       if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key === 'm') {
         e.preventDefault();
-        const focused = windows.find(w => w.isFocused);
+        const focused = visibleWindows.find(w => w.isFocused);
         if (focused) minimizeWindow(focused.id);
         return;
       }
-      // Ctrl+Shift+M — maximize/restore focused window
+      // Ctrl+Shift+M — maximize/restore
       if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'M') {
         e.preventDefault();
-        const focused = windows.find(w => w.isFocused);
+        const focused = visibleWindows.find(w => w.isFocused);
         if (focused) maximizeWindow(focused.id);
         return;
       }
       // Alt+Tab — cycle windows
       if (e.altKey && e.key === 'Tab') {
         e.preventDefault();
-        const nonMin = windows.filter(w => !w.isMinimized);
+        const nonMin = visibleWindows.filter(w => !w.isMinimized);
         if (nonMin.length < 2) return;
         const focusedIdx = nonMin.findIndex(w => w.isFocused);
         const next = nonMin[(focusedIdx + 1) % nonMin.length];
@@ -128,7 +147,7 @@ export default function Desktop() {
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [booted, windows, closeWindow, focusWindow, minimizeWindow, maximizeWindow]);
+  }, [booted, visibleWindows, closeWindow, focusWindow, minimizeWindow, maximizeWindow, handleLock, switchWorkspace]);
 
   const closeWindowByApp = useCallback((app: string) => {
     const win = windows.find(w => w.app === app);
@@ -147,7 +166,7 @@ export default function Desktop() {
       case 'foldmem': return <FoldMemApp />;
       case 'storage': return <PrimeStorageApp />;
       case 'energy': return <EnergyMonitorApp />;
-      case 'settings': return <SettingsApp notifEvents={events} onToggleEvent={toggleEvent} onUpdateMessage={updateEventMessage} onAddEvent={addEvent} onRemoveEvent={removeEvent} />;
+      case 'settings': return <SettingsApp notifEvents={events} onToggleEvent={toggleEvent} onUpdateMessage={updateEventMessage} onAddEvent={addEvent} onRemoveEvent={removeEvent} onLock={handleLock} />;
       case 'monitor': return <SystemMonitorApp />;
       case 'editor': return <TextEditorApp />;
       case 'chat': return <PrimeChatApp />;
@@ -184,30 +203,33 @@ export default function Desktop() {
 
   return (
     <div className="h-screen w-screen overflow-hidden bg-background prime-grid scan-lines relative">
-      <BootSequence onComplete={handleBootComplete} />
+      {/* Lock Screen */}
+      {locked && <LockScreen onUnlock={handleUnlock} />}
 
-      {booted && (
+      {/* Boot Sequence */}
+      {!locked && <BootSequence onComplete={handleBootComplete} />}
+
+      {booted && !locked && (
         <>
           <DesktopContextMenu onOpenApp={openWindow} onTileAll={tileAllWindows} onCascade={cascadeWindows} onSearch={() => setSearchOpen(true)}>
             <div className="absolute inset-0 pb-10">
               <div className="absolute top-4 left-[90px] select-none">
                 <h1 className="font-display text-sm tracking-[0.3em] text-primary/30">PRIME OS</h1>
                 <p className="font-mono text-[9px] text-muted-foreground/40 mt-0.5">
-                  Geometric Computing • T3-649
+                  Geometric Computing • T3-649 • WS {activeWorkspace}
                 </p>
               </div>
 
               <div className="absolute top-4 right-4 text-right select-none">
-                <p className="font-mono text-[9px] text-muted-foreground/30">
-                  lattice: P¹¹
-                </p>
-                <p className="font-mono text-[9px] text-muted-foreground/30">
-                  fold: 11D → 4D
-                </p>
+                <p className="font-mono text-[9px] text-muted-foreground/30">lattice: P¹¹</p>
+                <p className="font-mono text-[9px] text-muted-foreground/30">fold: 11D → 4D</p>
               </div>
 
+              {/* Desktop Widgets */}
+              <DesktopWidgets />
+
               <AnimatePresence>
-                {windows.map(win => (
+                {visibleWindows.map(win => (
                   <OSWindow
                     key={win.id}
                     window={win}
@@ -235,6 +257,10 @@ export default function Desktop() {
             onDismissNotification={dismissNotification}
             onSearch={() => setSearchOpen(true)}
             onOpenAbout={() => setAboutOpen(true)}
+            onLock={handleLock}
+            activeWorkspace={activeWorkspace}
+            onSwitchWorkspace={switchWorkspace}
+            windowCountsByWorkspace={getWindowCountsByWorkspace()}
           />
 
           <GlobalSearch

@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
 import { AppType, WindowState } from '@/types/os';
 import { OSNotification } from '@/hooks/useNotifications';
-import { Terminal, FolderTree, Activity, Cpu, Brain, Network, Code, HardDrive, Database, Zap, Settings, ChevronUp, Bell, X, Monitor, FileText, MessageSquare, Shield, Globe, Server, LayoutList, Image, Search, Link2, Orbit, CalendarDays, Moon, BookOpen, Table, Workflow, Paintbrush, Smartphone, Map, Package, Music, Dices, TrendingUp, Radio, Vault, Video, Mail, Users, Info, Bot, Cog, CalendarCheck, Wifi } from 'lucide-react';
-import { startOfMonth, endOfMonth, eachDayOfInterval, getDay, isToday, isSameMonth, format } from 'date-fns';
+import { Terminal, FolderTree, Activity, Cpu, Brain, Network, Code, HardDrive, Database, Zap, Settings, ChevronUp, Bell, X, Monitor, FileText, MessageSquare, Shield, Globe, Server, LayoutList, Image, Search, Link2, Orbit, CalendarDays, Moon, BookOpen, Table, Workflow, Paintbrush, Smartphone, Map, Package, Music, Dices, TrendingUp, Radio, Vault, Video, Mail, Users, Info, Bot, Cog, CalendarCheck, Wifi, Lock } from 'lucide-react';
+import { startOfMonth, endOfMonth, eachDayOfInterval, getDay, isToday, format } from 'date-fns';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import WorkspaceSwitcher from '@/components/os/WorkspaceSwitcher';
 
 interface TaskbarProps {
   windows: WindowState[];
@@ -13,6 +14,10 @@ interface TaskbarProps {
   onDismissNotification?: (id: string) => void;
   onSearch?: () => void;
   onOpenAbout?: () => void;
+  onLock?: () => void;
+  activeWorkspace: number;
+  onSwitchWorkspace: (ws: number) => void;
+  windowCountsByWorkspace: number[];
 }
 
 const allApps: { app: AppType; title: string; icon: React.ReactNode; label: string }[] = [
@@ -59,7 +64,7 @@ const allApps: { app: AppType; title: string; icon: React.ReactNode; label: stri
   { app: 'settings', title: 'Settings', icon: <Settings size={18} />, label: 'Settings' },
 ];
 
-export default function Taskbar({ windows, onOpenApp, onFocusWindow, notifications = [], onDismissNotification, onSearch, onOpenAbout }: TaskbarProps) {
+export default function Taskbar({ windows, onOpenApp, onFocusWindow, notifications = [], onDismissNotification, onSearch, onOpenAbout, onLock, activeWorkspace, onSwitchWorkspace, windowCountsByWorkspace }: TaskbarProps) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
 
@@ -70,6 +75,9 @@ export default function Taskbar({ windows, onOpenApp, onFocusWindow, notificatio
     } catch {}
     return '';
   })();
+
+  // Filter taskbar window buttons to current workspace
+  const wsWindows = windows.filter(w => w.workspace === activeWorkspace);
 
   return (
     <div className="fixed bottom-0 left-0 right-0 z-[100] flex items-center h-10 px-3 bg-card/90 backdrop-blur-md border-t border-border">
@@ -104,7 +112,6 @@ export default function Taskbar({ windows, onOpenApp, onFocusWindow, notificatio
                 {a.label}
               </button>
             ))}
-            {/* About button at bottom */}
             <div className="border-t border-border mt-1 pt-1">
               <button
                 onClick={() => { onOpenAbout?.(); setMenuOpen(false); }}
@@ -120,19 +127,17 @@ export default function Taskbar({ windows, onOpenApp, onFocusWindow, notificatio
 
       {/* Search button */}
       {onSearch && (
-        <button
-          onClick={onSearch}
-          aria-label="Global search (Ctrl+K)"
-          className="mr-3 p-1 rounded hover:bg-primary/10 text-muted-foreground hover:text-primary transition-colors"
-          title="Search (Ctrl+K)"
-        >
+        <button onClick={onSearch} aria-label="Global search (Ctrl+K)" className="mr-3 p-1 rounded hover:bg-primary/10 text-muted-foreground hover:text-primary transition-colors" title="Search (Ctrl+K)">
           <Search size={14} />
         </button>
       )}
 
-      {/* Open windows */}
+      {/* Workspace Switcher */}
+      <WorkspaceSwitcher activeWorkspace={activeWorkspace} windowCounts={windowCountsByWorkspace} onSwitch={onSwitchWorkspace} />
+
+      {/* Open windows (current workspace only) */}
       <div className="flex items-center gap-1 overflow-x-auto scrollbar-none">
-        {windows.map(w => {
+        {wsWindows.map(w => {
           const appDef = allApps.find(a => a.app === w.app);
           return (
             <button
@@ -152,6 +157,13 @@ export default function Taskbar({ windows, onOpenApp, onFocusWindow, notificatio
       </div>
 
       <div className="ml-auto flex items-center gap-3 shrink-0">
+        {/* Lock button */}
+        {onLock && (
+          <button onClick={onLock} aria-label="Lock (Ctrl+L)" className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors" title="Lock (Ctrl+L)">
+            <Lock size={13} />
+          </button>
+        )}
+
         {/* Notification Center */}
         <Popover open={notifOpen} onOpenChange={setNotifOpen}>
           <PopoverTrigger asChild>
@@ -257,13 +269,10 @@ function ClockPopover({ onOpenApp }: { onOpenApp: (app: AppType, title: string) 
       <PopoverContent side="top" align="end" sideOffset={8} className="w-52 p-3 bg-card/95 backdrop-blur-md border-border z-[200]">
         <p className="text-[10px] text-muted-foreground">{format(now, 'EEEE, MMMM d, yyyy')}</p>
         <p className="font-mono text-lg text-foreground mt-0.5">{time}</p>
-
         <div className="flex items-center gap-1.5 mt-2 text-[10px] text-muted-foreground">
           <span>{MOON_ICONS_CHAR[moonIdx]}</span>
           <span>{MOON_NAMES[moonIdx]}</span>
         </div>
-
-        {/* Mini calendar */}
         <div className="mt-2 border-t border-border pt-2">
           <div className="grid grid-cols-7 gap-px mb-0.5">
             {MINI_WEEKDAYS.map((d, i) => (
@@ -279,7 +288,6 @@ function ClockPopover({ onOpenApp }: { onOpenApp: (app: AppType, title: string) 
             ))}
           </div>
         </div>
-
         <button
           onClick={() => { onOpenApp('calendar', 'Prime Calendar'); setClockOpen(false); }}
           className="mt-2 w-full text-[9px] py-1 rounded border border-primary/30 text-primary hover:bg-primary/10 transition-colors font-display tracking-wider uppercase"

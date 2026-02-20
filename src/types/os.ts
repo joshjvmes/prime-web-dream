@@ -10,6 +10,7 @@ export interface WindowState {
   isMaximized: boolean;
   isFocused: boolean;
   zIndex: number;
+  workspace: number;
   prevBounds?: { x: number; y: number; width: number; height: number };
 }
 
