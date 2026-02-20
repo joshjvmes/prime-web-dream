@@ -1,127 +1,160 @@
 
-# Prime Calendar, Clock Popover, and Smart Notifications
+# New App Suite for PRIME OS
 
 ## Overview
 
-Three additions: a new PrimeCalendar app that fuses solar and lunar cycles into a geometric calendar system, a date/time popover triggered by clicking the taskbar clock, and a rework of the notification system so notifications are contextual (tied to app usage) rather than randomly timed.
+Adding 8 new applications to the PRIME OS ecosystem, following the established patterns (self-contained components, simulated data, SVG visuals, consistent styling).
 
 ---
 
-## Feature 1: PrimeCalendar App
+## New Apps
 
-**New File:** `src/components/os/PrimeCalendarApp.tsx`
+### 1. PrimeDocs -- Document Viewer
+**File:** `src/components/os/PrimeDocsApp.tsx`
 
-A dual-calendar system weaving solar and lunar cycles onto the prime lattice:
+A viewer for `.fold` documents and lattice reports:
+- Left sidebar listing sample documents (manifold reports, lattice specs, fold documentation)
+- Main viewer area with markdown-like rendering (headers, paragraphs, code blocks, tables)
+- Toolbar with zoom controls and a page navigation indicator
+- Documents stored as structured data with title, content sections, and metadata
+- Syntax-highlighted code blocks for `.fold` snippets
+- Print/export button (simulated) and search-within-document
 
-- **Month view** -- a grid calendar showing the current month with day cells. Each cell shows:
-  - Standard date number
-  - Moon phase icon (new, waxing crescent, first quarter, waxing gibbous, full, waning gibbous, last quarter, waning crescent) computed from a simple lunar cycle formula (29.53-day synodic period)
-  - Subtle background tint based on solar season (cool blues for winter, warm ambers for summer)
-- **Lunar ribbon** -- a horizontal strip above the grid showing the current 29-day lunar cycle with the current phase highlighted and a marker showing where today falls
-- **Solar tracker** -- a small arc/progress bar showing days since last solstice and days until next, with equinox markers
-- **Prime day markers** -- days that are prime numbers (2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31) get a special diamond glyph and glow border
-- **Navigation** -- left/right arrows to move between months, "Today" button to snap back
-- **Day detail panel** -- click any day to see: full date, moon phase name and illumination %, solar elevation category, prime factorization of the day number, and "lattice coordinate" (a computed prime tuple)
-- **Upcoming events sidebar** -- right panel listing simulated system events: "Q3 batch scheduled", "Energy harvest peak", "Lattice maintenance window" with dates
+### 2. PrimeGrid -- Spreadsheet
+**File:** `src/components/os/PrimeGridApp.tsx`
 
-Default window size: 700x520.
+A lightweight spreadsheet with prime-flavored features:
+- Grid of cells (columns A-H, rows 1-20) rendered as a table
+- Click to select a cell, type to edit, Enter to commit
+- Formula bar at the top showing the selected cell reference and content
+- Support basic formulas: `=SUM(A1:A5)`, `=AVG(B1:B3)`, `=PRIME(n)` (nth prime), `=FACTOR(n)` (prime factorization)
+- Pre-populated with sample data (lattice metrics, energy readings, node stats)
+- Column/row headers with resize handles (visual only)
+- Status bar showing cell count, sum of selection
+- Tab bar for multiple sheets ("Lattice Data", "Energy Log", "Node Stats")
 
-Uses `date-fns` (already installed) for date math. Moon phase computed with a simple algorithm based on known new moon reference date.
+### 3. SchemaForge -- Database Designer
+**File:** `src/components/os/SchemaForgeApp.tsx`
+
+A visual entity-relationship diagram tool:
+- Canvas area with draggable entity boxes (SVG-based)
+- Each entity shows table name, columns with types and key indicators
+- Pre-populated with 4-5 entities: `QutritNode`, `LatticeRegion`, `FoldOperation`, `EnergyReading`, `PrimeCoord`
+- Lines connecting related entities (rendered as SVG paths)
+- Side panel for editing selected entity: add/remove columns, set types
+- Toolbar with "Add Entity", "Add Relation", "Auto-layout" buttons
+- Export schema as text (simulated)
+
+### 4. PrimeCanvas -- Image Editor
+**File:** `src/components/os/PrimeCanvasApp.tsx`
+
+A geometric image editor built on canvas:
+- HTML Canvas element as the drawing surface
+- Toolbar with tools: pencil, line, rectangle, circle, eraser, fill color picker
+- Color palette with PRIME OS theme colors (primary, violet, amber, green)
+- Layer panel on the right (simulated -- "Background", "Layer 1", "Layer 2")
+- Geometric filter buttons: "Lattice Overlay", "Prime Spiral", "Adinkra Grid"
+- Brush size slider
+- Undo/redo with simple state history
+- Canvas dimensions shown in status bar
+
+### 5. PrimeComm -- Phone Simulator
+**File:** `src/components/os/PrimeCommApp.tsx`
+
+A mobile device UI simulator:
+- Phone frame (rounded rectangle with notch) rendered inside the window
+- Three tabs at the bottom: Calls, Messages, Contacts
+- Contacts list with simulated lattice-themed names ("Node Alpha", "Sector 7 Admin")
+- Message thread view with chat bubbles
+- Dial pad with number display and call/hangup buttons
+- Incoming call animation (simulated, triggered randomly)
+- Status bar inside the phone showing signal, battery, time
+
+### 6. PrimeMaps -- Topological Map
+**File:** `src/components/os/PrimeMapsApp.tsx`
+
+A map viewer showing the lattice topology:
+- SVG-based map with nodes as circles and edges as curves
+- Nodes represent lattice regions with labels and coordinates
+- Pan by dragging, zoom with scroll wheel (transform-based)
+- Click a node to see details in a side panel (name, coord, load, connections)
+- Search box to filter/highlight nodes
+- Layer toggles: "Nodes", "Edges", "Labels", "Heat Map"
+- Heat map overlay coloring nodes by load (green to red gradient)
+- Legend in the corner
+
+### 7. PrimePkg -- Package Manager
+**File:** `src/components/os/PrimePkgApp.tsx`
+
+A visual package/module manager:
+- List of installed "packages" with name, version, size, status
+- Categories: "Core", "Network", "Compute", "Storage", "Security"
+- Search/filter bar at top
+- Each package row shows: name, version, installed size, status (installed/update available/not installed)
+- "Install", "Update", "Remove" action buttons per package
+- Activity log at the bottom showing recent operations
+- Summary bar: total packages, disk usage, last sync time
+
+### 8. PrimeAudio -- Audio Player
+**File:** `src/components/os/PrimeAudioApp.tsx`
+
+A media player with waveform visualization:
+- Playlist on the left with track names (geometric/lattice-themed: "Harmonic Fold", "Qutrit Resonance")
+- Main area with an animated SVG waveform visualization
+- Transport controls: play/pause, prev, next, shuffle, repeat
+- Progress bar with time display (simulated, auto-advancing when playing)
+- Volume slider
+- Track info display: title, "artist" (lattice subsystem), duration
+- Equalizer bars animation (CSS-based)
 
 ---
 
-## Feature 2: Clock Popover (Taskbar)
-
-**Modified File:** `src/components/os/Taskbar.tsx`
-
-Make the clock in the taskbar clickable to show a date/time popover:
-
-- Wrap `ClockDisplay` in a `Popover` component
-- **Popover content:**
-  - Current date in full format (e.g., "Thursday, February 20, 2026")
-  - Current time in large display
-  - Current moon phase with icon and name
-  - Mini calendar for the current month (compact 7-column grid, ~180px wide)
-  - "Open Calendar" button that launches the PrimeCalendar app
-- Styled consistently with the existing taskbar popovers (bg-card/95, backdrop-blur, border-border)
-
----
-
-## Feature 3: Context-Aware Notifications
-
-**Modified File:** `src/hooks/useNotifications.ts`
-
-Rework notifications so they fire based on app activity rather than random timers:
-
-### Current problem
-Notifications fire on a random 8-23 second timer regardless of what the user is doing. This feels spammy and disconnected.
-
-### New approach
-- Remove the always-running random timer
-- Add a `triggerNotification` function that Desktop/apps can call to fire a notification tied to a specific action
-- Add an `activeApps` parameter to `useNotifications` -- the list of currently open app types
-- Notifications fire contextually:
-  - **On app open:** When opening an app for the first time in a session, there is a 40% chance of a relevant notification appearing after 3-5 seconds. E.g., opening PrimeNet triggers "New node joined lattice" or "Geodesic route optimized."
-  - **On sustained use:** After an app has been open for 30+ seconds, there is a chance of a follow-up notification (once, not repeating). E.g., after using Q3 Inference: "Inference batch complete."
-  - **Idle notifications:** If no windows are open for 20+ seconds, a single ambient notification may appear (e.g., "QK Scheduler: cycle balanced"). Maximum one idle notification per 60 seconds.
-- Each notification event gets a new `triggerApp` field mapping it to which app(s) trigger it
-- The enabled/disabled toggle in Settings still controls whether each event type can fire at all
-- Auto-dismiss: toast notifications in the top-right auto-dismiss after 8 seconds (add a timeout in NotificationSystem)
-
-### Updated event structure
-```
-interface NotificationEvent {
-  id: string;
-  title: string;
-  message: string;
-  enabled: boolean;
-  triggerApps: AppType[];  // which apps can trigger this
-}
-```
-
-### Default event-to-app mappings
-- PrimeNet events -> `primenet`, `browser`
-- Q3 Engine events -> `q3inference`
-- Energy events -> `energy`, `monitor`
-- FoldMem events -> `foldmem`
-- GeomC events -> `geomc`
-- PFS events -> `files`
-- Storage events -> `storage`
-- QK Scheduler -> `processes`, `terminal`
-
-**Modified File:** `src/components/os/NotificationSystem.tsx`
-- Add auto-dismiss timer: each visible notification disappears after 8 seconds
-- Add a subtle progress bar at the bottom of each toast showing time remaining
-
-**Modified File:** `src/components/os/Desktop.tsx`
-- Pass open window app types to `useNotifications`
-- Track which apps have been opened this session to trigger "first open" notifications
-- Track app open duration for "sustained use" notifications
-
----
-
-## System Registration
+## System Registration (all 8 apps)
 
 ### `src/types/os.ts`
-Add `'calendar'` to `AppType` union.
-
-### `src/components/os/Desktop.tsx`
-- Import `PrimeCalendarApp`
-- Add `case 'calendar'` to `renderApp`
-- Pass `openWindow` callback to Taskbar for the clock popover's "Open Calendar" button
-
-### `src/components/os/Taskbar.tsx`
-- Add calendar to `allApps`: `CalendarDays` icon, label "Calendar"
-- Accept `onOpenApp` prop usage from clock popover
-
-### `src/components/os/DesktopIcons.tsx`
-- Add calendar icon entry
-
-### `src/components/os/terminal/commands.ts`
-- Add `calendar` to `APP_MAP`
+Add to AppType union: `'docs' | 'spreadsheet' | 'schemaforge' | 'canvas' | 'comm' | 'maps' | 'pkg' | 'audio'`
 
 ### `src/hooks/useWindowManager.ts`
-- Add default size for calendar: 700x520
+Add default sizes:
+- docs: 750x500
+- spreadsheet: 850x520
+- schemaforge: 800x550
+- canvas: 780x520
+- comm: 380x600
+- maps: 800x550
+- pkg: 700x480
+- audio: 650x400
+
+### `src/components/os/Desktop.tsx`
+- Import all 8 new app components
+- Add cases to `renderApp` switch
+
+### `src/components/os/Taskbar.tsx`
+- Add 8 entries to `allApps` array with icons from lucide-react
+
+### `src/components/os/DesktopIcons.tsx`
+- Add 8 entries to the icons array
+
+### `src/components/os/terminal/commands.ts`
+- Add entries to `APP_MAP` and update `HELP_TEXT` with `open` app names
+
+### `src/hooks/useNotifications.ts`
+- Add notification events for new apps where relevant (docs, spreadsheet, schemaforge, audio)
+
+---
+
+## Icon Mapping (lucide-react)
+
+| App | Icon |
+|-----|------|
+| PrimeDocs | `BookOpen` |
+| PrimeGrid | `Table` |
+| SchemaForge | `Workflow` |
+| PrimeCanvas | `Paintbrush` |
+| PrimeComm | `Smartphone` |
+| PrimeMaps | `Map` |
+| PrimePkg | `Package` |
+| PrimeAudio | `Music` |
 
 ---
 
@@ -129,20 +162,29 @@ Add `'calendar'` to `AppType` union.
 
 | File | Action |
 |------|--------|
-| `src/components/os/PrimeCalendarApp.tsx` | Create -- dual solar/lunar calendar app |
-| `src/components/os/Taskbar.tsx` | Edit -- clock popover with mini calendar |
-| `src/hooks/useNotifications.ts` | Edit -- context-aware notification triggers |
-| `src/components/os/NotificationSystem.tsx` | Edit -- auto-dismiss with progress bar |
-| `src/components/os/Desktop.tsx` | Edit -- wire calendar app, pass app context to notifications |
-| `src/types/os.ts` | Edit -- add 'calendar' to AppType |
-| `src/components/os/DesktopIcons.tsx` | Edit -- add calendar icon |
-| `src/components/os/terminal/commands.ts` | Edit -- add calendar to APP_MAP |
-| `src/hooks/useWindowManager.ts` | Edit -- add calendar default size |
+| `src/components/os/PrimeDocsApp.tsx` | Create |
+| `src/components/os/PrimeGridApp.tsx` | Create |
+| `src/components/os/SchemaForgeApp.tsx` | Create |
+| `src/components/os/PrimeCanvasApp.tsx` | Create |
+| `src/components/os/PrimeCommApp.tsx` | Create |
+| `src/components/os/PrimeMapsApp.tsx` | Create |
+| `src/components/os/PrimePkgApp.tsx` | Create |
+| `src/components/os/PrimeAudioApp.tsx` | Create |
+| `src/types/os.ts` | Edit -- extend AppType |
+| `src/hooks/useWindowManager.ts` | Edit -- add window sizes |
+| `src/components/os/Desktop.tsx` | Edit -- imports + renderApp cases |
+| `src/components/os/Taskbar.tsx` | Edit -- add to allApps |
+| `src/components/os/DesktopIcons.tsx` | Edit -- add icons |
+| `src/components/os/terminal/commands.ts` | Edit -- add to APP_MAP |
+| `src/hooks/useNotifications.ts` | Edit -- add notification events for new apps |
 
 ## Technical Notes
 
-- Moon phase uses the synodic period algorithm: `daysSinceKnownNewMoon % 29.53` to determine the current phase (0-7 index).
-- `date-fns` handles month navigation (`addMonths`, `startOfMonth`, `eachDayOfInterval`, `format`).
-- No new dependencies needed.
-- The notification rework is backward-compatible with Settings -- the events list and toggle UI stays the same, just the trigger mechanism changes.
-- Auto-dismiss uses `setTimeout` per notification in `NotificationSystem`, cleaned up on unmount or manual dismiss.
+- All apps are self-contained with no external API calls -- all data is simulated/generated
+- Each app follows the existing pattern: full-height flex layout, `bg-background`, `font-mono text-xs`, border/card styling
+- Canvas app uses HTML5 Canvas API with React refs for drawing
+- SchemaForge uses SVG for the ER diagram with drag via mouse events
+- PrimeMaps uses SVG transforms for pan/zoom
+- PrimeAudio waveform uses animated SVG paths with `requestAnimationFrame`
+- PrimeComm phone frame is pure CSS with a fixed aspect ratio container
+- No new dependencies required -- all built with React, lucide-react, and existing UI primitives
