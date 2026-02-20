@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { NotificationEvent } from '@/hooks/useNotifications';
 import { type PulseSettings, loadPulseSettings, savePulseSettings } from '@/hooks/useSystemPulse';
-import { Trash2, Plus, Bell, BellOff, Monitor, Keyboard, Mouse, Volume2, Info, User, Lock, LayoutGrid, Mic, LogOut, Sparkles } from 'lucide-react';
+import { Trash2, Plus, Bell, BellOff, Monitor, Keyboard, Mouse, Volume2, Info, User, Lock, LayoutGrid, Mic, LogOut, Sparkles, Camera } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import type { User as SupabaseUser } from '@supabase/supabase-js';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
@@ -118,6 +118,8 @@ export default function SettingsApp({ notifEvents = [], onToggleEvent, onUpdateM
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editText, setEditText] = useState('');
   const [pulseSettings, setPulseSettings] = useState<PulseSettings>(loadPulseSettings);
+  const [customAvatar, setCustomAvatar] = useState('');
+  const [avatarUploading, setAvatarUploading] = useState(false);
 
   const updatePulse = <K extends keyof PulseSettings>(key: K, value: PulseSettings[K]) => {
     setPulseSettings(prev => {
@@ -194,12 +196,13 @@ export default function SettingsApp({ notifEvents = [], onToggleEvent, onUpdateM
   // Load profile from database when user is signed in
   useEffect(() => {
     if (!user || profileLoaded) return;
-    supabase.from('profiles').select('display_name, title, bio').eq('user_id', user.id).maybeSingle()
+    supabase.from('profiles').select('display_name, title, bio, avatar_url').eq('user_id', user.id).maybeSingle()
       .then(({ data }) => {
         if (data) {
           if (data.display_name) setProfileName(data.display_name);
           if (data.title) setProfileTitle(data.title);
           if (data.bio) setProfileBio(data.bio);
+          if (data.avatar_url) setCustomAvatar(data.avatar_url);
         }
         setProfileLoaded(true);
       });
@@ -219,22 +222,59 @@ export default function SettingsApp({ notifEvents = [], onToggleEvent, onUpdateM
           <div className="space-y-1">
             <SectionTitle>User Profile</SectionTitle>
             <div className="flex items-center gap-3 mb-4">
-              {user && googleAvatar ? (
-                <Avatar className="w-12 h-12 border border-primary/40">
-                  <AvatarImage src={googleAvatar} alt={googleName} />
-                  <AvatarFallback className="bg-primary/20 text-primary font-display text-lg">
-                    {(googleName || 'U').charAt(0).toUpperCase()}
-                  </AvatarFallback>
-                </Avatar>
-              ) : (
-                <div className="w-12 h-12 rounded-full bg-primary/20 border border-primary/40 flex items-center justify-center">
-                  <span className="font-display text-lg text-primary">{(profileName || 'O').charAt(0).toUpperCase()}</span>
-                </div>
-              )}
+              <div className="relative group">
+                {user && (customAvatar || googleAvatar) ? (
+                  <Avatar className="w-14 h-14 border border-primary/40">
+                    <AvatarImage src={customAvatar || googleAvatar} alt={googleName} />
+                    <AvatarFallback className="bg-primary/20 text-primary font-display text-lg">
+                      {(googleName || 'U').charAt(0).toUpperCase()}
+                    </AvatarFallback>
+                  </Avatar>
+                ) : (
+                  <div className="w-14 h-14 rounded-full bg-primary/20 border border-primary/40 flex items-center justify-center">
+                    <span className="font-display text-lg text-primary">{(profileName || 'O').charAt(0).toUpperCase()}</span>
+                  </div>
+                )}
+                {user && (
+                  <>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      id="avatar-upload"
+                      onChange={async (e) => {
+                        const file = e.target.files?.[0];
+                        if (!file || !user) return;
+                        setAvatarUploading(true);
+                        try {
+                          const ext = file.name.split('.').pop() || 'png';
+                          const path = `${user.id}/avatar.${ext}`;
+                          await supabase.storage.from('user-files').upload(path, file, { upsert: true });
+                          const { data: { publicUrl } } = supabase.storage.from('user-files').getPublicUrl(path);
+                          // Use signed URL since bucket is private
+                          const { data: signedData } = await supabase.storage.from('user-files').createSignedUrl(path, 60 * 60 * 24 * 365);
+                          const url = signedData?.signedUrl || publicUrl;
+                          setCustomAvatar(url);
+                          await supabase.from('profiles').update({ avatar_url: url }).eq('user_id', user.id);
+                        } catch {} finally { setAvatarUploading(false); }
+                      }}
+                    />
+                    <label htmlFor="avatar-upload" className="absolute inset-0 rounded-full bg-background/60 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer">
+                      <Camera size={16} className="text-primary" />
+                    </label>
+                    {avatarUploading && (
+                      <div className="absolute inset-0 rounded-full bg-background/80 flex items-center justify-center">
+                        <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
               <div>
                 <p className="text-foreground text-xs">{googleName || profileName || 'Operator'}</p>
                 <p className="text-muted-foreground/60 text-[10px]">{profileTitle || 'PRIME Operator'}</p>
                 {googleEmail && <p className="text-muted-foreground/40 text-[9px]">{googleEmail}</p>}
+                {user && <p className="text-[8px] text-muted-foreground/30 mt-0.5">Hover avatar to change</p>}
               </div>
             </div>
             {user && (

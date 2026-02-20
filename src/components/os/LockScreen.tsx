@@ -220,17 +220,26 @@ export default function LockScreen({ onUnlock, user }: LockScreenProps) {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ delay: 1, duration: 0.4 }}
-            className="mt-8 flex flex-col items-center gap-2"
+            className="mt-8 flex flex-col items-center gap-3"
             onClick={e => e.stopPropagation()}
           >
             {user ? (
-              <button
-                onClick={handleSignOut}
-                className="flex items-center gap-2 px-4 py-2 rounded border border-border/50 text-muted-foreground/60 text-[10px] font-mono tracking-wider hover:text-foreground hover:border-border transition-colors"
-              >
-                <LogOut size={12} />
-                Sign Out
-              </button>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={handleSignOut}
+                  className="flex items-center gap-2 px-4 py-2 rounded border border-border/50 text-muted-foreground/60 text-[10px] font-mono tracking-wider hover:text-foreground hover:border-border transition-colors"
+                >
+                  <LogOut size={12} />
+                  Sign Out
+                </button>
+                <button
+                  onClick={() => { handleSignOut(); }}
+                  className="flex items-center gap-2 px-4 py-2 rounded border border-destructive/30 text-destructive/60 text-[10px] font-mono tracking-wider hover:text-destructive hover:border-destructive transition-colors"
+                >
+                  <LogIn size={12} />
+                  Switch Account
+                </button>
+              </div>
             ) : (
               <button
                 onClick={handleGoogleSignIn}
