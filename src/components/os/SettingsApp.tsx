@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { NotificationEvent } from '@/hooks/useNotifications';
-import { Trash2, Plus, Bell, BellOff, Monitor, Keyboard, Mouse, Volume2, Info, User, Lock, LayoutGrid, Mic, LogOut } from 'lucide-react';
+import { type PulseSettings, loadPulseSettings, savePulseSettings } from '@/hooks/useSystemPulse';
+import { Trash2, Plus, Bell, BellOff, Monitor, Keyboard, Mouse, Volume2, Info, User, Lock, LayoutGrid, Mic, LogOut, Sparkles } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import type { User as SupabaseUser } from '@supabase/supabase-js';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
@@ -75,11 +76,12 @@ function applyTheme(theme: 'cyan' | 'violet' | 'amber') {
   root.style.setProperty('--border', t.border);
 }
 
-type Panel = 'profile' | 'display' | 'keyboard' | 'mouse' | 'audio' | 'notifications' | 'lock' | 'widgets' | 'voice' | 'about';
+type Panel = 'profile' | 'display' | 'keyboard' | 'mouse' | 'audio' | 'notifications' | 'lock' | 'widgets' | 'voice' | 'ambience' | 'about';
 
 const PANELS: { id: Panel; label: string; icon: React.ReactNode }[] = [
   { id: 'profile', label: 'Profile', icon: <User size={14} /> },
   { id: 'display', label: 'Display', icon: <Monitor size={14} /> },
+  { id: 'ambience', label: 'Ambience', icon: <Sparkles size={14} /> },
   { id: 'lock', label: 'Lock & Security', icon: <Lock size={14} /> },
   { id: 'widgets', label: 'Widgets', icon: <LayoutGrid size={14} /> },
   { id: 'voice', label: 'Voice Control', icon: <Mic size={14} /> },
@@ -112,6 +114,15 @@ export default function SettingsApp({ notifEvents = [], onToggleEvent, onUpdateM
   const [newMessage, setNewMessage] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editText, setEditText] = useState('');
+  const [pulseSettings, setPulseSettings] = useState<PulseSettings>(loadPulseSettings);
+
+  const updatePulse = <K extends keyof PulseSettings>(key: K, value: PulseSettings[K]) => {
+    setPulseSettings(prev => {
+      const next = { ...prev, [key]: value };
+      savePulseSettings(next);
+      return next;
+    });
+  };
 
   useEffect(() => {
     localStorage.setItem('prime-os-settings', JSON.stringify(settings));
@@ -351,6 +362,31 @@ export default function SettingsApp({ notifEvents = [], onToggleEvent, onUpdateM
                 </div>
               ))}
             </div>
+          </div>
+        );
+
+      case 'ambience':
+        return (
+          <div className="space-y-1">
+            <SectionTitle>System Pulse</SectionTitle>
+            <p className="text-[10px] text-muted-foreground mb-3">
+              The system generates ambient life signs — subtle notifications that make PRIME OS feel alive and breathing.
+            </p>
+            <Toggle label="Enable System Pulse" value={pulseSettings.enabled} onChange={v => updatePulse('enabled', v)} />
+            <SectionTitle>Pulse Frequency</SectionTitle>
+            <div className="flex gap-2 py-1">
+              {(['calm', 'normal', 'active'] as const).map(freq => (
+                <button key={freq} onClick={() => updatePulse('frequency', freq)}
+                  className={`px-3 py-1 rounded border text-[10px] font-display tracking-wider uppercase transition-all ${
+                    pulseSettings.frequency === freq ? 'border-primary bg-primary/10 text-primary' : 'border-border text-muted-foreground hover:text-foreground'
+                  }`}>{freq}</button>
+              ))}
+            </div>
+            <SectionTitle>Hyper AI Tips</SectionTitle>
+            <p className="text-[10px] text-muted-foreground mb-2">
+              Hyper periodically sends contextual tips and suggestions based on what you're doing.
+            </p>
+            <Toggle label="Enable AI Tips" value={pulseSettings.aiTips} onChange={v => updatePulse('aiTips', v)} />
           </div>
         );
 

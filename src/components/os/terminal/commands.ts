@@ -3,7 +3,7 @@
 export const WELCOME = [
   'PRIME Shell (psh) v2.0.0',
   'Geometric Computing Interface — Full Ecosystem',
-  'Type "help" for available commands.',
+  'Type "help" for commands or "ask <question>" to talk to Hyper.',
   '',
 ];
 
@@ -12,6 +12,7 @@ export const HELP_TEXT = [
   '  help              — Show this help',
   '  clear             — Clear terminal',
   '  echo <text>       — Echo text',
+  '  ask <question>    — Ask Hyper AI anything',
   '  sysinfo           — Display system information',
   '  qstat             — Show qutrit process states',
   '  netstat           — Show PrimeNet routing stats',
@@ -64,7 +65,7 @@ const SYSINFO = [
 ];
 
 export const ALL_COMMANDS = [
-  'help', 'clear', 'echo', 'sysinfo', 'qstat', 'netstat',
+  'help', 'clear', 'echo', 'ask', 'sysinfo', 'qstat', 'netstat',
   'flow_to', 'fold_read', 'fold_write', 'prime_dist', 'waltz',
   'q3 infer', 'q3 train', 'geomc', 'geomc repl',
   'foldmem stats', 'energy status', 'storage info',
@@ -141,7 +142,7 @@ const APP_MAP: Record<string, { app: string; title: string }> = {
 const BOOT_TIME = Date.now();
 
 /** Process a single command (no pipes/chains). Returns lines or null (for clear). */
-export function processCommand(cmd: string, ctx: CommandContext): string[] | null | 'mode' {
+export function processCommand(cmd: string, ctx: CommandContext): string[] | null | 'mode' | 'ai-ask' {
   const parts = cmd.trim().split(/\s+/);
   const command = parts[0]?.toLowerCase();
   const args = parts.slice(1).join(' ');
@@ -353,6 +354,9 @@ export function processCommand(cmd: string, ctx: CommandContext): string[] | nul
         ];
       }
       return ['Usage: storage info'];
+    case 'ask':
+      if (!args) return ['Usage: ask <question>', '▸ Chat with Hyper AI directly from the shell.', ''];
+      return 'ai-ask';
     default:
       if (!command) return null;
       return [`psh: command not found: ${command}`, 'Type "help" for available commands.', ''];
