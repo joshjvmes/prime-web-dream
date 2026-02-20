@@ -1,18 +1,29 @@
-import { useState, useCallback, useEffect } from 'react';
-import { ArrowLeft, ArrowRight, RotateCw, Star, Code2, Plus, X } from 'lucide-react';
+import { useState, useCallback, useEffect, useRef } from 'react';
+import { ArrowLeft, ArrowRight, RotateCw, Star, Code2, Plus, X, Globe, Shield, Loader2 } from 'lucide-react';
 import { Progress } from '@/components/ui/progress';
-import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@/components/ui/collapsible';
+import { supabase } from '@/integrations/supabase/client';
+import { HomePage, DocsPage, NetStatusPage, Q3LabPage, EnergyGridPage, NotFoundPage } from './browser/PrimePages';
+import { WikiPage, ResearchPage, HandbookPage, ChangelogPage, StatusPage } from './browser/IntranetPages';
 
 interface Tab {
   id: string;
   url: string;
   history: string[];
   historyIndex: number;
+  externalHtml?: string;
+  externalTitle?: string;
+  externalError?: string;
+  externalLoading?: boolean;
 }
 
 const BOOKMARKS = [
   { label: 'Home', url: 'prime://home' },
   { label: 'Docs', url: 'prime://docs' },
+  { label: 'Wiki', url: 'httpsp://wiki' },
+  { label: 'Research', url: 'httpsp://research' },
+  { label: 'Handbook', url: 'httpsp://handbook' },
+  { label: 'Changelog', url: 'httpsp://changelog' },
+  { label: 'Status', url: 'httpsp://status' },
   { label: 'Net Status', url: 'prime://net-status' },
   { label: 'Q3 Lab', url: 'prime://q3-lab' },
   { label: 'Energy Grid', url: 'prime://energy-grid' },
@@ -22,186 +33,40 @@ function createTab(url = 'prime://home'): Tab {
   return { id: `tab-${Date.now()}-${Math.random().toString(36).slice(2,6)}`, url, history: [url], historyIndex: 0 };
 }
 
-// ─── Page Components ───
-
-function HomePage() {
-  return (
-    <div className="p-4 space-y-4">
-      <div className="border border-primary/20 rounded p-4 bg-primary/5">
-        <h1 className="font-display text-lg tracking-wider text-primary mb-1">Welcome to PRIME OS Intranet</h1>
-        <p className="font-mono text-[10px] text-muted-foreground">Lattice P¹¹ • 649 qutrit cores online • COP 3.2</p>
-      </div>
-      <div className="grid grid-cols-2 gap-2">
-        {[
-          { label: 'Active Nodes', value: '649', sub: 'all online' },
-          { label: 'Network Throughput', value: '247 pkt/s', sub: 'geodesic routing' },
-          { label: 'Memory', value: '11D→4D', sub: 'Adinkra folded' },
-          { label: 'Energy COP', value: '3.21', sub: 'over-unity' },
-        ].map(s => (
-          <div key={s.label} className="border border-border rounded p-2 bg-card/50">
-            <p className="font-mono text-[9px] text-muted-foreground">{s.label}</p>
-            <p className="font-display text-sm text-primary">{s.value}</p>
-            <p className="font-mono text-[8px] text-muted-foreground/60">{s.sub}</p>
-          </div>
-        ))}
-      </div>
-      <div className="text-[9px] font-mono text-muted-foreground/50 pt-2 border-t border-border/30">
-        prime://home — PRIME OS Intranet Portal v2.0
-      </div>
-    </div>
-  );
+function isExternalUrl(url: string) {
+  return url.startsWith('http://') || url.startsWith('https://');
 }
 
-function DocsPage() {
-  const sections = [
-    { title: 'Qutrit Computing', content: 'PRIME OS uses ternary (qutrit) logic with three states: |0⟩ (Past), |1⟩ (Present), |2⟩ (Future). Each qutrit core processes information using the Fibonacci Waltz scheduling algorithm, enabling 3× information density per unit compared to binary systems.' },
-    { title: 'Geometric Routing', content: 'PrimeNet uses O(1) geodesic routing through prime coordinate space. Each node is mapped to a unique prime tuple, and data flows along the shortest geometric path in 11-dimensional folded space, achieving 3.4× speedup over Dijkstra\'s algorithm.' },
-    { title: 'FoldMem Architecture', content: 'Memory is organized as an 11-dimensional manifold folded into 4D via Adinkra encoding. This eliminates fragmentation (0% after compaction) and provides 12× faster allocation than malloc through geometric coordinate lookup.' },
-    { title: 'Energy Harvesting', content: 'The over-unity energy system achieves COP > 3.0 by coupling to higher-dimensional energy gradients. Satellite mode harvests 320W output from 100W input through 11D dimensional coupling at 92% geometric efficiency.' },
-    { title: 'Prime File System', content: 'AFS (Adinkra File System) uses semantic prime coordinates instead of hierarchical paths. Files are addressed by meaning, enabling O(1) content-addressable retrieval with automatic 75% Adinkra compression.' },
-  ];
-  return (
-    <div className="p-4 space-y-2">
-      <h1 className="font-display text-sm tracking-wider text-primary mb-3">PRIME OS Documentation</h1>
-      {sections.map(s => (
-        <Collapsible key={s.title}>
-          <CollapsibleTrigger className="w-full text-left px-3 py-2 border border-border rounded hover:bg-primary/5 transition-colors font-mono text-xs text-foreground flex items-center gap-2">
-            <span className="text-primary">▸</span> {s.title}
-          </CollapsibleTrigger>
-          <CollapsibleContent className="px-3 py-2 ml-4 border-l border-primary/20 mt-1">
-            <p className="font-mono text-[10px] text-muted-foreground leading-relaxed">{s.content}</p>
-          </CollapsibleContent>
-        </Collapsible>
-      ))}
-    </div>
-  );
+function pageSource(url: string) {
+  const map: Record<string, string> = {
+    'prime://home': `<prime-page lattice="P¹¹">\n  <header class="portal">\n    <title>PRIME OS Intranet</title>\n    <status cores="649" cop="3.2" />\n  </header>\n  <grid cols="2">\n    <metric label="Active Nodes" value="649" />\n    <metric label="Throughput" value="247 pkt/s" />\n    <metric label="Memory" value="11D→4D" />\n    <metric label="COP" value="3.21" />\n  </grid>\n</prime-page>`,
+    'prime://docs': `<prime-docs version="2.0">\n  <section title="Qutrit Computing" />\n  <section title="Geometric Routing" />\n  <!-- ... -->\n</prime-docs>`,
+    'prime://net-status': `<primenet-status>\n  <live-metrics interval="2000ms" />\n  <route-table protocol="geodesic" />\n</primenet-status>`,
+    'prime://q3-lab': `<q3-lab interactive="true">\n  <qutrit-array size="5" onclick="cycle" />\n</q3-lab>`,
+    'prime://energy-grid': `<energy-grid mode="satellite">\n  <cop-display precision="2" live="true" />\n</energy-grid>`,
+    'httpsp://wiki': `<prime-wiki articles="5">\n  <article title="Qutrit Fundamentals" />\n  <article title="Adinkra Encoding" />\n  <!-- ... -->\n</prime-wiki>`,
+    'httpsp://research': `<prime-research papers="4">\n  <paper id="PRM-2024-001" />\n  <!-- ... -->\n</prime-research>`,
+    'httpsp://handbook': `<prime-handbook sections="4">\n  <section title="Boot Procedure" />\n  <!-- ... -->\n</prime-handbook>`,
+    'httpsp://changelog': `<prime-changelog>\n  <release version="2.0.0" date="2025-02-15" />\n  <!-- ... -->\n</prime-changelog>`,
+    'httpsp://status': `<prime-status refresh="3s">\n  <service name="Qutrit Core Array" status="operational" />\n  <!-- ... -->\n</prime-status>`,
+  };
+  return map[url] || `<!-- No source for ${url} -->`;
 }
 
-function NetStatusPage() {
-  const [stats, setStats] = useState({ packets: 247, latency: 0.3, nodes: 6 });
-  useEffect(() => {
-    const id = setInterval(() => setStats({
-      packets: 200 + Math.floor(Math.random() * 100),
-      latency: +(0.2 + Math.random() * 0.2).toFixed(1),
-      nodes: 6,
-    }), 2000);
-    return () => clearInterval(id);
-  }, []);
-  return (
-    <div className="p-4 space-y-3">
-      <h1 className="font-display text-sm tracking-wider text-primary">PrimeNet Status</h1>
-      <div className="grid grid-cols-3 gap-2">
-        {[
-          { l: 'Packets/s', v: stats.packets },
-          { l: 'Latency', v: `${stats.latency}ms` },
-          { l: 'Nodes', v: stats.nodes },
-        ].map(s => (
-          <div key={s.l} className="border border-border rounded p-2 text-center">
-            <p className="font-mono text-[9px] text-muted-foreground">{s.l}</p>
-            <p className="font-display text-lg text-primary">{s.v}</p>
-          </div>
-        ))}
-      </div>
-      <div className="border border-border rounded p-2">
-        <p className="font-mono text-[9px] text-muted-foreground mb-1">Route Table</p>
-        {['⟨2,3,5⟩ → ⟨7,11,13⟩ : 1 hop', '⟨17,19,23⟩ → ⟨29,31,37⟩ : 2 hops', '⟨41,43,47⟩ → ⟨53,59,61⟩ : 1 hop'].map(r => (
-          <p key={r} className="font-mono text-[10px] text-foreground/70">{r}</p>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function Q3LabPage() {
-  const [qutrits, setQutrits] = useState([0, 1, 2, 1, 0]);
-  const toggle = (i: number) => setQutrits(prev => prev.map((v, j) => j === i ? (v + 1) % 3 : v));
-  const stateSymbol = (s: number) => s === 0 ? '◆' : s === 1 ? '◈' : '◇';
-  const stateLabel = (s: number) => s === 0 ? 'Past' : s === 1 ? 'Present' : 'Future';
-  return (
-    <div className="p-4 space-y-3">
-      <h1 className="font-display text-sm tracking-wider text-primary">Q3 Qutrit Laboratory</h1>
-      <p className="font-mono text-[10px] text-muted-foreground">Click qutrits to cycle through states |0⟩→|1⟩→|2⟩</p>
-      <div className="flex gap-3 justify-center py-4">
-        {qutrits.map((q, i) => (
-          <button key={i} onClick={() => toggle(i)} className="flex flex-col items-center gap-1 p-3 border border-border rounded hover:border-primary/40 transition-colors bg-card/50">
-            <span className={`text-2xl ${q === 0 ? 'text-muted-foreground' : q === 1 ? 'text-primary' : 'text-prime-amber'}`}>{stateSymbol(q)}</span>
-            <span className="font-mono text-[9px] text-muted-foreground">|{q}⟩</span>
-            <span className="font-mono text-[8px] text-muted-foreground/60">{stateLabel(q)}</span>
-          </button>
-        ))}
-      </div>
-      <div className="border border-border rounded p-2">
-        <p className="font-mono text-[9px] text-muted-foreground">Superposition: |ψ⟩ = {qutrits.map(q => `|${q}⟩`).join(' ⊗ ')}</p>
-        <p className="font-mono text-[9px] text-muted-foreground">Coordinate: ⟨{qutrits.map((_, i) => [2,3,5,7,11][i]).join(',')}⟩</p>
-      </div>
-    </div>
-  );
-}
-
-function EnergyGridPage() {
-  const [cop, setCop] = useState(3.21);
-  useEffect(() => {
-    const id = setInterval(() => setCop(3.0 + Math.random() * 0.4), 3000);
-    return () => clearInterval(id);
-  }, []);
-  const modes = [
-    { name: 'Satellite', eff: 92 },
-    { name: 'Crystalline', eff: 78 },
-    { name: 'Vacuum', eff: 85 },
-  ];
-  return (
-    <div className="p-4 space-y-3">
-      <h1 className="font-display text-sm tracking-wider text-primary">Energy Grid</h1>
-      <div className="text-center py-3 border border-primary/20 rounded bg-primary/5">
-        <p className="font-mono text-[9px] text-muted-foreground">Current COP</p>
-        <p className="font-display text-3xl text-primary">{cop.toFixed(2)}</p>
-        <p className="font-mono text-[9px] text-prime-green">OVER-UNITY ACTIVE</p>
-      </div>
-      <div className="space-y-1">
-        {modes.map(m => (
-          <div key={m.name} className="flex items-center gap-2">
-            <span className="font-mono text-[10px] text-muted-foreground w-20">{m.name}</span>
-            <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
-              <div className="h-full bg-primary/60 rounded-full" style={{ width: `${m.eff}%` }} />
-            </div>
-            <span className="font-mono text-[9px] text-muted-foreground w-8">{m.eff}%</span>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function NotFoundPage({ url }: { url: string }) {
-  return (
-    <div className="flex flex-col items-center justify-center h-full py-16 text-center">
-      <p className="font-display text-4xl text-primary/30 mb-2">404</p>
-      <p className="font-display text-xs tracking-wider text-muted-foreground mb-1">Coordinate not found in lattice</p>
-      <p className="font-mono text-[10px] text-muted-foreground/50">No manifold mapped for: {url}</p>
-    </div>
-  );
-}
-
-function renderPage(url: string) {
+function renderInternalPage(url: string) {
   switch (url) {
     case 'prime://home': return <HomePage />;
     case 'prime://docs': return <DocsPage />;
     case 'prime://net-status': return <NetStatusPage />;
     case 'prime://q3-lab': return <Q3LabPage />;
     case 'prime://energy-grid': return <EnergyGridPage />;
+    case 'httpsp://wiki': return <WikiPage />;
+    case 'httpsp://research': return <ResearchPage />;
+    case 'httpsp://handbook': return <HandbookPage />;
+    case 'httpsp://changelog': return <ChangelogPage />;
+    case 'httpsp://status': return <StatusPage />;
     default: return <NotFoundPage url={url} />;
   }
-}
-
-function pageSource(url: string) {
-  const map: Record<string, string> = {
-    'prime://home': `<prime-page lattice="P¹¹">\n  <header class="portal">\n    <title>PRIME OS Intranet</title>\n    <status cores="649" cop="3.2" />\n  </header>\n  <grid cols="2">\n    <metric label="Active Nodes" value="649" />\n    <metric label="Throughput" value="247 pkt/s" />\n    <metric label="Memory" value="11D→4D" />\n    <metric label="COP" value="3.21" />\n  </grid>\n</prime-page>`,
-    'prime://docs': `<prime-docs version="2.0">\n  <section title="Qutrit Computing">\n    <fold:content encoding="adinkra" />\n  </section>\n  <section title="Geometric Routing">\n    <fold:content encoding="adinkra" />\n  </section>\n  <!-- 3 more sections -->\n</prime-docs>`,
-    'prime://net-status': `<primenet-status>\n  <live-metrics interval="2000ms">\n    <packets per-second="dynamic" />\n    <latency unit="ms" />\n    <nodes count="6" />\n  </live-metrics>\n  <route-table protocol="geodesic" />\n</primenet-status>`,
-    'prime://q3-lab': `<q3-lab interactive="true">\n  <qutrit-array size="5">\n    <qutrit state="|0⟩" onclick="cycle" />\n    <qutrit state="|1⟩" onclick="cycle" />\n    <!-- ... -->\n  </qutrit-array>\n  <superposition display="tensor-product" />\n</q3-lab>`,
-    'prime://energy-grid': `<energy-grid mode="satellite">\n  <cop-display precision="2" live="true" />\n  <mode-list>\n    <mode name="Satellite" efficiency="92%" />\n    <mode name="Crystalline" efficiency="78%" />\n    <mode name="Vacuum" efficiency="85%" />\n  </mode-list>\n</energy-grid>`,
-  };
-  return map[url] || `<!-- 404: No source for ${url} -->`;
 }
 
 // ─── Main Browser Component ───
@@ -213,41 +78,90 @@ export default function PrimeBrowserApp() {
   const [loadProgress, setLoadProgress] = useState(0);
   const [showSource, setShowSource] = useState(false);
   const [urlInput, setUrlInput] = useState('prime://home');
+  const abortRef = useRef<AbortController | null>(null);
 
   const activeTab = tabs.find(t => t.id === activeTabId) ?? tabs[0];
 
+  const fetchExternal = useCallback(async (url: string, tabId: string) => {
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+
+    setTabs(prev => prev.map(t => t.id === tabId ? { ...t, externalLoading: true, externalError: undefined, externalHtml: undefined } : t));
+
+    try {
+      const { data, error } = await supabase.functions.invoke('web-proxy', {
+        body: { url },
+      });
+
+      if (controller.signal.aborted) return;
+
+      if (error) throw new Error(error.message || 'Proxy error');
+      if (data?.error) throw new Error(data.error);
+
+      setTabs(prev => prev.map(t => t.id === tabId ? {
+        ...t,
+        externalHtml: data.html,
+        externalTitle: data.title || url,
+        externalLoading: false,
+        externalError: undefined,
+      } : t));
+    } catch (err) {
+      if (controller.signal.aborted) return;
+      setTabs(prev => prev.map(t => t.id === tabId ? {
+        ...t,
+        externalLoading: false,
+        externalError: err instanceof Error ? err.message : 'Failed to load page',
+      } : t));
+    }
+  }, []);
+
   const navigate = useCallback((url: string) => {
-    setLoading(true);
-    setLoadProgress(0);
+    // Normalize: if user types a domain without protocol, add https://
+    let normalizedUrl = url.trim();
+    if (!normalizedUrl.startsWith('prime://') && !normalizedUrl.startsWith('httpsp://') && !normalizedUrl.startsWith('http://') && !normalizedUrl.startsWith('https://')) {
+      if (normalizedUrl.includes('.') && !normalizedUrl.includes(' ')) {
+        normalizedUrl = 'https://' + normalizedUrl;
+      }
+    }
+
     setShowSource(false);
-    const steps = [20, 50, 80, 100];
-    steps.forEach((p, i) => setTimeout(() => setLoadProgress(p), (i + 1) * 150));
-    setTimeout(() => {
+
+    if (isExternalUrl(normalizedUrl)) {
+      // External: update history immediately, then fetch
       setTabs(prev => prev.map(t => {
         if (t.id !== activeTabId) return t;
-        const newHistory = [...t.history.slice(0, t.historyIndex + 1), url];
-        return { ...t, url, history: newHistory, historyIndex: newHistory.length - 1 };
+        const newHistory = [...t.history.slice(0, t.historyIndex + 1), normalizedUrl];
+        return { ...t, url: normalizedUrl, history: newHistory, historyIndex: newHistory.length - 1, externalHtml: undefined, externalError: undefined, externalLoading: true };
       }));
-      setUrlInput(url);
-      setLoading(false);
-    }, 700);
-  }, [activeTabId]);
+      setUrlInput(normalizedUrl);
+      fetchExternal(normalizedUrl, activeTabId);
+    } else {
+      // Internal: animate loading
+      setLoading(true);
+      setLoadProgress(0);
+      const steps = [20, 50, 80, 100];
+      steps.forEach((p, i) => setTimeout(() => setLoadProgress(p), (i + 1) * 150));
+      setTimeout(() => {
+        setTabs(prev => prev.map(t => {
+          if (t.id !== activeTabId) return t;
+          const newHistory = [...t.history.slice(0, t.historyIndex + 1), normalizedUrl];
+          return { ...t, url: normalizedUrl, history: newHistory, historyIndex: newHistory.length - 1, externalHtml: undefined, externalError: undefined, externalLoading: false };
+        }));
+        setUrlInput(normalizedUrl);
+        setLoading(false);
+      }, 700);
+    }
+  }, [activeTabId, fetchExternal]);
 
-  const goBack = useCallback(() => {
-    if (activeTab.historyIndex <= 0) return;
-    const newIdx = activeTab.historyIndex - 1;
+  const historyNav = useCallback((dir: -1 | 1) => {
+    const newIdx = activeTab.historyIndex + dir;
+    if (newIdx < 0 || newIdx >= activeTab.history.length) return;
     const url = activeTab.history[newIdx];
-    setTabs(prev => prev.map(t => t.id === activeTabId ? { ...t, url, historyIndex: newIdx } : t));
+    setTabs(prev => prev.map(t => t.id === activeTabId ? { ...t, url, historyIndex: newIdx, externalHtml: undefined, externalError: undefined, externalLoading: false } : t));
     setUrlInput(url);
-  }, [activeTab, activeTabId]);
-
-  const goForward = useCallback(() => {
-    if (activeTab.historyIndex >= activeTab.history.length - 1) return;
-    const newIdx = activeTab.historyIndex + 1;
-    const url = activeTab.history[newIdx];
-    setTabs(prev => prev.map(t => t.id === activeTabId ? { ...t, url, historyIndex: newIdx } : t));
-    setUrlInput(url);
-  }, [activeTab, activeTabId]);
+    if (isExternalUrl(url)) fetchExternal(url, activeTabId);
+  }, [activeTab, activeTabId, fetchExternal]);
 
   const addTab = () => {
     const t = createTab();
@@ -279,8 +193,74 @@ export default function PrimeBrowserApp() {
     const map: Record<string, string> = {
       'prime://home': 'Home', 'prime://docs': 'Docs', 'prime://net-status': 'Net Status',
       'prime://q3-lab': 'Q3 Lab', 'prime://energy-grid': 'Energy Grid',
+      'httpsp://wiki': 'Wiki', 'httpsp://research': 'Research', 'httpsp://handbook': 'Handbook',
+      'httpsp://changelog': 'Changelog', 'httpsp://status': 'Status',
     };
-    return map[url] || url.replace('prime://', '');
+    if (map[url]) return map[url];
+    // For external URLs, find tab with matching URL and use externalTitle
+    const tab = tabs.find(t => t.url === url);
+    if (tab?.externalTitle) return tab.externalTitle;
+    try { return new URL(url).hostname; } catch { return url.slice(0, 20); }
+  };
+
+  const protocolIcon = (url: string) => {
+    if (url.startsWith('prime://')) return <span className="text-primary text-[9px]">⬡</span>;
+    if (url.startsWith('httpsp://')) return <Shield size={10} className="text-prime-green" />;
+    return <Globe size={10} className="text-muted-foreground" />;
+  };
+
+  // Render content area
+  const renderContent = () => {
+    if (showSource) {
+      if (isExternalUrl(activeTab.url)) {
+        return (
+          <pre className="p-4 font-mono text-[10px] text-muted-foreground whitespace-pre-wrap leading-relaxed overflow-auto">
+            {activeTab.externalHtml ? activeTab.externalHtml.slice(0, 5000) + (activeTab.externalHtml.length > 5000 ? '\n\n<!-- truncated -->' : '') : '<!-- loading... -->'}
+          </pre>
+        );
+      }
+      return (
+        <pre className="p-4 font-mono text-[10px] text-muted-foreground whitespace-pre-wrap leading-relaxed">
+          {pageSource(activeTab.url)}
+        </pre>
+      );
+    }
+
+    if (isExternalUrl(activeTab.url)) {
+      if (activeTab.externalLoading) {
+        return (
+          <div className="flex flex-col items-center justify-center h-full gap-3 py-16">
+            <Loader2 size={24} className="text-primary animate-spin" />
+            <p className="font-mono text-[10px] text-muted-foreground">Fetching via secure proxy...</p>
+            <p className="font-mono text-[9px] text-muted-foreground/50">{activeTab.url}</p>
+          </div>
+        );
+      }
+      if (activeTab.externalError) {
+        return (
+          <div className="flex flex-col items-center justify-center h-full py-16 text-center px-4">
+            <p className="font-display text-2xl text-destructive/50 mb-2">⚠</p>
+            <p className="font-display text-xs tracking-wider text-muted-foreground mb-1">Unable to load page</p>
+            <p className="font-mono text-[10px] text-destructive/70 mb-3">{activeTab.externalError}</p>
+            <button onClick={() => fetchExternal(activeTab.url, activeTabId)} className="font-mono text-[10px] text-primary hover:underline">
+              Try again
+            </button>
+          </div>
+        );
+      }
+      if (activeTab.externalHtml) {
+        return (
+          <div
+            className="prime-browser-external p-2 overflow-auto h-full"
+            style={{ all: 'initial', fontFamily: 'sans-serif', fontSize: '14px', color: '#222', background: '#fff', display: 'block', overflow: 'auto', height: '100%', padding: '8px' }}
+            dangerouslySetInnerHTML={{ __html: activeTab.externalHtml }}
+          />
+        );
+      }
+      return null;
+    }
+
+    return renderInternalPage(activeTab.url);
   };
 
   return (
@@ -293,6 +273,7 @@ export default function PrimeBrowserApp() {
             onClick={() => switchTab(t.id)}
             className={`flex items-center gap-1 px-2 py-1 rounded-t text-[10px] cursor-pointer max-w-32 group ${t.id === activeTabId ? 'bg-background border border-b-0 border-border text-foreground' : 'text-muted-foreground hover:bg-muted/30'}`}
           >
+            {protocolIcon(t.url)}
             <span className="truncate">{titleForUrl(t.url)}</span>
             {tabs.length > 1 && (
               <button onClick={e => { e.stopPropagation(); closeTab(t.id); }} className="opacity-0 group-hover:opacity-100 hover:text-destructive">
@@ -306,13 +287,14 @@ export default function PrimeBrowserApp() {
 
       {/* Address bar */}
       <div className="flex items-center gap-1 px-2 py-1 border-b border-border bg-card/30">
-        <button onClick={goBack} disabled={activeTab.historyIndex <= 0} className="p-1 text-muted-foreground hover:text-foreground disabled:opacity-30"><ArrowLeft size={14} /></button>
-        <button onClick={goForward} disabled={activeTab.historyIndex >= activeTab.history.length - 1} className="p-1 text-muted-foreground hover:text-foreground disabled:opacity-30"><ArrowRight size={14} /></button>
-        <button onClick={() => navigate(activeTab.url)} className="p-1 text-muted-foreground hover:text-foreground"><RotateCw size={14} /></button>
+        <button onClick={() => historyNav(-1)} disabled={activeTab.historyIndex <= 0} className="p-1 text-muted-foreground hover:text-foreground disabled:opacity-30"><ArrowLeft size={14} /></button>
+        <button onClick={() => historyNav(1)} disabled={activeTab.historyIndex >= activeTab.history.length - 1} className="p-1 text-muted-foreground hover:text-foreground disabled:opacity-30"><ArrowRight size={14} /></button>
+        <button onClick={() => isExternalUrl(activeTab.url) ? fetchExternal(activeTab.url, activeTabId) : navigate(activeTab.url)} className="p-1 text-muted-foreground hover:text-foreground"><RotateCw size={14} /></button>
         <form onSubmit={e => { e.preventDefault(); navigate(urlInput); }} className="flex-1 flex">
           <input
             value={urlInput}
             onChange={e => setUrlInput(e.target.value)}
+            placeholder="Enter URL or prime:// address..."
             className="flex-1 bg-muted/30 border border-border rounded px-2 py-0.5 text-[11px] font-mono text-foreground focus:outline-none focus:border-primary/40"
           />
         </form>
@@ -323,13 +305,14 @@ export default function PrimeBrowserApp() {
       <div className="flex items-center gap-1 px-2 py-0.5 border-b border-border/50 bg-card/20 overflow-x-auto scrollbar-none">
         <Star size={10} className="text-muted-foreground/40 shrink-0" />
         {BOOKMARKS.map(b => (
-          <button key={b.url} onClick={() => navigate(b.url)} className="text-[9px] text-muted-foreground hover:text-primary px-1.5 py-0.5 rounded hover:bg-primary/5 whitespace-nowrap transition-colors">
+          <button key={b.url} onClick={() => navigate(b.url)} className="text-[9px] text-muted-foreground hover:text-primary px-1.5 py-0.5 rounded hover:bg-primary/5 whitespace-nowrap transition-colors flex items-center gap-1">
+            {b.url.startsWith('httpsp://') && <Shield size={8} className="text-prime-green/60" />}
             {b.label}
           </button>
         ))}
       </div>
 
-      {/* Loading bar */}
+      {/* Loading bar (internal pages only) */}
       {loading && (
         <div className="px-2 py-1 bg-card/20">
           <Progress value={loadProgress} className="h-1" />
@@ -339,13 +322,7 @@ export default function PrimeBrowserApp() {
 
       {/* Content */}
       <div className="flex-1 overflow-auto">
-        {showSource ? (
-          <pre className="p-4 font-mono text-[10px] text-muted-foreground whitespace-pre-wrap leading-relaxed">
-            {pageSource(activeTab.url)}
-          </pre>
-        ) : (
-          renderPage(activeTab.url)
-        )}
+        {renderContent()}
       </div>
     </div>
   );
