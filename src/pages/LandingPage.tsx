@@ -358,7 +358,7 @@ export default function LandingPage() {
       </section>
 
       {/* ─── Stats ─── */}
-      <section id="stats" className="relative py-12 md:py-16 px-4 border-y border-border/30">
+      <section id="stats" className="scroll-mt-20 relative py-12 md:py-16 px-4 border-y border-border/30">
         <div className="max-w-5xl mx-auto">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-8 md:gap-12">
             {stats.map((s, i) => (
@@ -381,7 +381,7 @@ export default function LandingPage() {
       </section>
 
       {/* ─── Features ─── */}
-      <section id="features" className="relative py-14 md:py-20 px-4">
+      <section id="features" className="scroll-mt-20 relative py-14 md:py-20 px-4">
         <div className="max-w-7xl mx-auto">
           <SectionHeader
             tag="Ecosystem"
@@ -397,7 +397,7 @@ export default function LandingPage() {
       </section>
 
       {/* ─── Architecture ─── */}
-      <section id="architecture" className="relative py-14 md:py-20 px-4 border-t border-border/30">
+      <section id="architecture" className="scroll-mt-20 relative py-14 md:py-20 px-4 border-t border-border/30">
         <div className="max-w-5xl mx-auto">
           <SectionHeader
             tag="Architecture"
