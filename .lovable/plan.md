@@ -1,92 +1,70 @@
 
-# Hyper AI Agent: Autonomous Social and Mail Integration
+
+# AI Agent Monitoring, Controls, and Cross-Agent Collaboration
 
 ## Overview
 
-Give Hyper (the user's AI companion) the ability to autonomously post to PrimeSocial and send emails through PrimeMail. When the user asks Hyper to "post about the system status" or "send an email to Q3-Inference", Hyper will use AI tool calling to generate and inject real content into those apps in real time.
-
-## How It Works
-
-The approach uses three layers:
-
-1. **Backend**: The `hyper-chat` edge function gets new "tools" -- `post_to_social` and `send_email`. When Hyper decides to use one, the AI returns structured data describing the post or email.
-
-2. **Frontend Bridge**: HypersphereApp detects tool calls in the AI response, extracts the content, and broadcasts it over the EventBus so other apps can pick it up.
-
-3. **Receiving Apps**: PrimeSocial and PrimeMail listen on the EventBus for incoming content and add it to their feeds in real time.
-
-The result: you tell Hyper "post an update about the energy metrics" and seconds later a new post from "Hyper" appears in the PrimeSocial feed, visible while you're watching.
+Enhance the existing Hyper-to-Social/Mail pipeline with three new capabilities: (1) a visible Agent Activity Log that tracks every autonomous action, (2) user controls to enable/disable agent permissions, and (3) cross-agent collaboration where AI personas from PrimeSocial can trigger replies and email threads with Hyper, creating a living multi-agent ecosystem.
 
 ---
 
-## Part 1: Backend Tool Definitions
+## Part 1: Agent Activity Log
 
-### File: `supabase/functions/hyper-chat/index.ts`
+A new section in HypersphereApp that shows a scrollable log of all autonomous actions Hyper has taken (posts made, emails sent), so the user has full visibility.
 
-Add two tool definitions so the AI model can choose to post or email:
-
-**`post_to_social` tool:**
-- Parameters: `content` (post text), `author` (defaults to "Hyper"), `role` (defaults to "Geometric AI")
-
-**`send_email` tool:**
-- Parameters: `to` (recipient), `subject`, `body`, `from` (defaults to "hyper@prime.os")
-
-Switch the function to a two-phase approach:
-1. First call: non-streaming, with tools enabled. Check if the AI wants to use a tool.
-2. If tool call detected: extract the structured data, return it as a JSON response with `type: "tool_call"` so the frontend knows.
-3. If no tool call: re-call with streaming enabled (no tools) and stream the text response as before.
-
-This avoids the complexity of parsing tool calls from an SSE stream.
+### Changes to `src/components/os/HypersphereApp.tsx`
+- Add an `agentActions` state array tracking `{ type: 'post' | 'email', summary: string, timestamp: Date }`
+- When a tool call response is received, push an entry to `agentActions`
+- Add a collapsible "Agent Activity" panel above the input area showing the last 10 actions with timestamps and type icons
+- Include a count badge on the panel header showing total actions this session
 
 ---
 
-## Part 2: Frontend Tool Call Handling
+## Part 2: Agent Permission Controls
 
-### File: `src/components/os/HypersphereApp.tsx`
+Toggle switches letting the user enable/disable Hyper's ability to post to social and send emails.
 
-Update the `sendMessage` function:
-
-1. Make the initial fetch to `hyper-chat` and check the response content type.
-2. If the response is JSON (not SSE), it's a tool call result. Parse it and:
-   - Emit `social.post.created` or `mail.received` on the EventBus with the content
-   - Show a confirmation message in the chat like "Posted to PrimeSocial: [content preview]" or "Email sent to [recipient]: [subject]"
-3. If the response is SSE (text/event-stream), handle streaming as before.
-
-Add new quick action buttons:
-- "Post Update" -- prompts Hyper to post something to PrimeSocial
-- "Send Report" -- prompts Hyper to email a system report
+### Changes to `src/components/os/HypersphereApp.tsx`
+- Add `permissions` state: `{ canPost: boolean, canEmail: boolean }` (both default `true`)
+- Render two small toggle switches in the header area next to the Hypersphere visualization: "Social" and "Mail"
+- When a tool call response arrives, check permissions before emitting on the EventBus. If disabled, show a message like "Social posting is currently disabled by operator" instead of executing the action
+- Store permissions in localStorage so they persist across sessions
 
 ---
 
-## Part 3: PrimeSocial Event Listener
+## Part 3: Cross-Agent Collaboration
 
-### File: `src/components/os/PrimeSocialApp.tsx`
+Allow the AI-generated personas (from `ai-social`) to interact with Hyper's posts and vice versa by sharing context between the generation systems.
 
-- Import `eventBus` from `useEventBus`
-- Add a `useEffect` that subscribes to `social.post.created`
-- When received, prepend a new post to the feed with the payload data (author, content, role) and an "AI Agent" badge
-- Clean up subscription on unmount
+### Changes to `src/hooks/useEventBus.ts`
+- Add new event type: `agent.action.logged` for broadcasting action logs across the OS
+
+### Changes to `src/components/os/PrimeSocialApp.tsx`
+- When Hyper posts arrive via EventBus, auto-generate 1-2 AI persona replies after a short delay (2-3 seconds) by calling `ai-social` with a new action `generate-replies` that includes the original post content as context
+- This creates the illusion of other agents reacting to Hyper's posts in real time
+
+### Changes to `src/components/os/PrimeMailApp.tsx`
+- When Hyper sends an email via EventBus, auto-generate a reply email from the recipient persona after a delay (3-5 seconds) by calling `ai-social` with a new action `generate-reply-email` that includes the original email as context
+- The reply appears as a new unread email, creating back-and-forth agent conversations
+
+### Changes to `supabase/functions/ai-social/index.ts`
+- Add two new actions:
+  - `generate-replies`: Takes a `postContent` and `postAuthor` parameter, returns 1-2 reply comments from other personas reacting to that post
+  - `generate-reply-email`: Takes `originalEmail` (from, to, subject, body) parameter, returns a single reply email from the recipient persona
+- Add corresponding tool definitions for structured output
+- The reply generation uses the same persona roster and system prompt, with additional context about the content being replied to
 
 ---
 
-## Part 4: PrimeMail Event Listener
+## Part 4: Agent Activity Desktop Widget
 
-### File: `src/components/os/PrimeMailApp.tsx`
+A small desktop widget that shows real-time agent activity across the OS.
 
-- Import `eventBus` from `useEventBus`
-- Add a `useEffect` that subscribes to `mail.received`
-- When received, prepend a new unread email to the inbox with the payload data (from, to, subject, body)
-- Clean up subscription on unmount
-
----
-
-## Part 5: EventBus Updates
-
-### File: `src/hooks/useEventBus.ts`
-
-Add two new event types to the `EVENT_TYPES` array:
-- `social.post.created`
-- `mail.received`
+### Changes to `src/components/os/DesktopWidgets.tsx`
+- Add `agentLog: boolean` to `WidgetState` (default: false)
+- Create an `AgentLogWidget` that subscribes to `agent.action.logged` on the EventBus
+- Shows the last 5 agent actions (icon, summary, time) in a compact list
+- Includes a count of total actions this session
 
 ---
 
@@ -96,34 +74,25 @@ Add two new event types to the `EVENT_TYPES` array:
 
 | File | Change |
 |------|--------|
-| `supabase/functions/hyper-chat/index.ts` | Add tool definitions for post_to_social and send_email; implement two-phase response (tools check then stream) |
-| `src/components/os/HypersphereApp.tsx` | Detect JSON tool-call responses, emit EventBus events, add quick action buttons for social/mail |
-| `src/components/os/PrimeSocialApp.tsx` | Subscribe to `social.post.created` EventBus events and inject posts |
-| `src/components/os/PrimeMailApp.tsx` | Subscribe to `mail.received` EventBus events and inject emails |
-| `src/hooks/useEventBus.ts` | Add `social.post.created` and `mail.received` event types |
+| `src/components/os/HypersphereApp.tsx` | Add activity log panel, permission toggles, emit `agent.action.logged` events |
+| `src/components/os/PrimeSocialApp.tsx` | Auto-generate AI replies to Hyper posts after delay |
+| `src/components/os/PrimeMailApp.tsx` | Auto-generate email replies to Hyper emails after delay |
+| `src/hooks/useEventBus.ts` | Add `agent.action.logged` event type |
+| `src/components/os/DesktopWidgets.tsx` | Add `AgentLogWidget` |
+| `supabase/functions/ai-social/index.ts` | Add `generate-replies` and `generate-reply-email` actions |
 
 ### No Database Changes Required
 
-All content flows through ephemeral client-side state via the EventBus. No new tables or migrations needed.
+All state is ephemeral (React state + EventBus). Permissions persist via localStorage only.
 
-### Edge Function Response Format
+### Cross-Agent Flow
 
-For tool calls, the edge function returns:
-```text
-{
-  "type": "tool_call",
-  "tool": "post_to_social" | "send_email",
-  "data": { ... structured content ... },
-  "reply": "Done! I've posted to PrimeSocial about..."
-}
-```
+When a user tells Hyper "Post about energy metrics":
+1. Hyper calls `hyper-chat` which returns a tool call with post content
+2. HypersphereApp emits `social.post.created` (post appears in PrimeSocial) and `agent.action.logged`
+3. PrimeSocialApp detects it's a Hyper post, waits 2-3 seconds, then calls `ai-social?action=generate-replies` with the post content
+4. 1-2 AI persona comments appear on Hyper's post (e.g., "Q3-Inference: Fascinating metrics, Hyper. I'm seeing correlated patterns in fold 7.")
+5. The AgentLogWidget updates to show the activity
 
-For normal chat, it streams SSE as before (no change to existing behavior).
+Same pattern for emails: Hyper sends an email to "Dr. Kael Voss", and after a delay, a reply from Dr. Voss appears in the inbox.
 
-### User Experience
-
-- User says: "Post an update about today's energy metrics"
-- Hyper processes the request, generates a social post via tool calling
-- A confirmation appears in the Hyper chat: "Posted to PrimeSocial: [preview]"
-- If PrimeSocial is open, the post appears instantly in the feed
-- Same flow for emails: "Send Q3-Inference a report on fold compression" triggers a real email in PrimeMail
