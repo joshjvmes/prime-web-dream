@@ -1,47 +1,83 @@
 
 
-# PRIME WEB OS: Polish and Power Features
+# Deep Terminal Sessions and Enhanced Interactivity
 
-## 1. Window Resize Support
-Currently windows can only be dragged -- not resized. Add resize handles (edges and corners) so users can resize any window by dragging its borders, just like a real OS.
+## Overview
 
-## 2. Maximize Button (Functional)
-The Maximize button in the title bar is currently non-functional. Wire it up to toggle between full-screen and the previous size/position.
+Transform the terminal from a simple command-response system into a rich, stateful shell with interactive modes, piping, scripting, and cross-app integration. Add interactivity to existing apps as well.
 
-## 3. Right-Click Context Menu
-Add a desktop right-click context menu with options like "Open Terminal", "System Info", "Tile All Windows", "Cascade Windows", and "About PRIME OS".
+## 1. Interactive Terminal Modes (Deep Sessions)
 
-## 4. Desktop App Icons
-Add clickable shortcut icons on the desktop surface (like classic OS desktops) for the most-used apps -- Terminal, Files, Q3 Inference, PrimeNet, etc. Double-click to launch.
+Currently every command returns instant static output. This upgrade adds **modal sessions** -- commands that enter a persistent interactive sub-shell until the user exits.
 
-## 5. Window Snapping
-Allow windows to snap to half-screen (left/right) when dragged to screen edges, similar to modern OS window management.
+### `q3 train` -- Interactive Training Session
+Enter a loop where the terminal prompts for training samples one at a time, shows a running accuracy/loss counter, and updates in real-time. Type `done` to exit and see a summary.
 
-## 6. Notification System
-Add a small notification toast area (top-right) that periodically shows simulated system events: "PrimeNet: New node joined lattice", "Q3 Engine: Inference batch complete", "Energy: COP spike detected at 3.8", etc.
+### `psh debug <process>` -- Live Process Inspector
+Attaches to a simulated qutrit process. Shows a streaming log of state transitions (|0> -> |1> -> |2>) with timestamps. Type `detach` to return to normal shell.
 
-## 7. Settings App
-Build the "settings" app (currently in the AppType but not implemented) with toggleable options: boot animation on/off, scan-line effect toggle, grid background toggle, accent color switching (cyan/violet/amber themes).
+### `geomc repl` -- GeomC Read-Eval-Print Loop
+A persistent compiler session where each line is compiled and executed immediately, with results shown inline. Maintains variable state across inputs. Type `.exit` to leave.
 
-## 8. Sound Effects (Optional Toggle)
-Add subtle UI sounds for boot sequence, window open/close, and button clicks using the Web Audio API (no external files needed -- synthesized beeps/clicks).
+### `primenet trace <node>` -- Packet Trace Mode
+Enters a live packet trace showing simulated packets flowing through the network with source/destination coordinates. Scrolls like a real `tcpdump`. Type `Ctrl+C` (or `stop`) to end.
+
+## 2. Command Piping and Chaining
+
+Add basic pipe (`|`) and chain (`;`) support:
+- `qstat | grep engine` -- Filter process output
+- `sysinfo; netstat` -- Run multiple commands sequentially
+- `echo hello | fold_write test` -- Pipe data into file writes
+
+Implement a simple `grep <pattern>` filter command that works on piped input.
+
+## 3. Tab Autocomplete
+
+Press Tab to autocomplete command names and arguments. Shows a brief suggestions list if multiple matches exist.
+
+## 4. Terminal-to-App Integration
+
+Commands that open or interact with GUI apps:
+- `open <app>` -- Launch any app window from the terminal (e.g., `open primenet`)
+- `kill <app>` -- Close an app window
+- `launch settings` -- Open settings
+
+This requires the terminal to receive an `onOpenApp` and `onCloseApp` callback from Desktop.
+
+## 5. Animated Output
+
+Replace instant text dumps with typewriter-style streaming for certain commands (like `q3 infer`, `geomc`), simulating real computation with 20-50ms delays between lines.
+
+## 6. Persistent Environment Variables
+
+Add `export VAR=value`, `env` (list all), and `$VAR` substitution in commands. Stored in component state, persists across commands within the session.
 
 ## Technical Details
 
 ### Modified Files
-- `src/hooks/useWindowManager.ts` -- Add resizeWindow and maximizeWindow callbacks; track previous size for maximize toggle
-- `src/components/os/OSWindow.tsx` -- Add resize handles on edges/corners; wire up maximize button; add snap detection on drag end
-- `src/components/os/Desktop.tsx` -- Add right-click context menu; add desktop icons grid; register settings app; add notification system
-- `src/components/os/Taskbar.tsx` -- No changes needed (settings already absent from apps list, will need to add it)
-- `src/types/os.ts` -- Add `isMaximized` and `prevBounds` to WindowState
+- `src/components/os/TerminalApp.tsx` -- Major rewrite: add modal session state machine, pipe parser, tab completion, env vars, typewriter output queue, and `onOpenApp`/`onCloseApp` props
+- `src/components/os/Desktop.tsx` -- Pass `openWindow` and `closeWindow` callbacks to TerminalApp
 
-### New Files
-- `src/components/os/SettingsApp.tsx` -- Settings panel with toggles for visual effects and theme
-- `src/components/os/DesktopIcons.tsx` -- Grid of double-clickable app shortcuts
-- `src/components/os/ContextMenu.tsx` -- Right-click menu component
-- `src/components/os/NotificationSystem.tsx` -- Periodic toast notifications for simulated events
-- `src/hooks/useNotifications.ts` -- Hook managing timed notification queue
+### Architecture Changes in TerminalApp
 
-### Implementation Approach
-All features follow the existing architecture patterns -- using framer-motion for animations, the cyberpunk aesthetic (Orbitron/Rajdhani fonts, cyan/amber accents), and the same window management system. Settings will use React context to broadcast theme/effect preferences across the OS.
+The terminal gains a `mode` state:
+- `'normal'` -- Default command prompt (current behavior)
+- `'q3-train'` -- Training session sub-shell
+- `'debug'` -- Process inspector streaming
+- `'geomc-repl'` -- Compiler REPL with variable context
+- `'trace'` -- Network packet trace stream
+
+When in a non-normal mode, the prompt changes (e.g., `q3-train ▸`, `geomc ▸`) and input is routed to the mode-specific handler instead of the main command switch. An interval or timer drives streaming output for `debug` and `trace` modes.
+
+### Pipe Implementation
+Before dispatching, the input string is split on `|`. Each segment is executed in order, with the output of the previous command passed as filterable input to the next. `grep` simply filters lines containing the pattern.
+
+### Tab Completion
+On Tab keypress, find all commands starting with the current input. If exactly one match, complete it. If multiple, show them as a temporary line in the terminal.
+
+### Typewriter Output
+Instead of appending all output lines at once, push them into a queue and use `setTimeout` to append one line at a time with a short delay, creating a streaming effect.
+
+### No New Dependencies
+Everything uses existing React state, `setTimeout`/`setInterval`, and the current architecture patterns.
 
