@@ -55,6 +55,7 @@ import PrimeAgentApp from '@/components/os/PrimeAgentApp';
 import PrimeRoboticsApp from '@/components/os/PrimeRoboticsApp';
 import PrimeBookingApp from '@/components/os/PrimeBookingApp';
 import PrimeIoTApp from '@/components/os/PrimeIoTApp';
+import PrimeArcadeApp from '@/components/os/PrimeArcadeApp';
 import DesktopContextMenu from '@/components/os/DesktopContextMenu';
 import NotificationSystem from '@/components/os/NotificationSystem';
 import { AppType } from '@/types/os';
@@ -84,6 +85,8 @@ const APP_NAME_MAP: Record<string, { app: AppType; title: string }> = {
   'board': { app: 'board', title: 'PrimeBoard' },
   'canvas': { app: 'canvas', title: 'PrimeCanvas' },
   'vault': { app: 'vault', title: 'PrimeVault' },
+  'arcade': { app: 'arcade', title: 'PrimeArcade' },
+  'games': { app: 'arcade', title: 'PrimeArcade' },
 };
 
 export default function Desktop() {
@@ -286,6 +289,7 @@ export default function Desktop() {
       case 'robotics': return <PrimeRoboticsApp />;
       case 'booking': return <PrimeBookingApp />;
       case 'iot': return <PrimeIoTApp />;
+      case 'arcade': return <PrimeArcadeApp />;
       default: return <div className="p-4 text-muted-foreground font-mono text-xs">App not found</div>;
     }
   };

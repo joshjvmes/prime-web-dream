@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { AppType, WindowState } from '@/types/os';
 import { OSNotification } from '@/hooks/useNotifications';
-import { Terminal, FolderTree, Activity, Cpu, Brain, Network, Code, HardDrive, Database, Zap, Settings, ChevronUp, Bell, X, Monitor, FileText, MessageSquare, Shield, Globe, Server, LayoutList, Image, Search, Link2, Orbit, CalendarDays, Moon, BookOpen, Table, Workflow, Paintbrush, Smartphone, Map, Package, Music, Dices, TrendingUp, Radio, Vault, Video, Mail, Users, Info, Bot, Cog, CalendarCheck, Wifi, Lock } from 'lucide-react';
+import { Terminal, FolderTree, Activity, Cpu, Brain, Network, Code, HardDrive, Database, Zap, Settings, ChevronUp, Bell, X, Monitor, FileText, MessageSquare, Shield, Globe, Server, LayoutList, Image, Search, Link2, Orbit, CalendarDays, Moon, BookOpen, Table, Workflow, Paintbrush, Smartphone, Map, Package, Music, Dices, TrendingUp, Radio, Vault, Video, Mail, Users, Info, Bot, Cog, CalendarCheck, Wifi, Lock, Gamepad2 } from 'lucide-react';
 import { startOfMonth, endOfMonth, eachDayOfInterval, getDay, isToday, format } from 'date-fns';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import WorkspaceSwitcher from '@/components/os/WorkspaceSwitcher';
@@ -64,6 +64,7 @@ const allApps: { app: AppType; title: string; icon: React.ReactNode; label: stri
   { app: 'robotics', title: 'PrimeRobotics', icon: <Cog size={18} />, label: 'Robotics' },
   { app: 'booking', title: 'PrimeBooking', icon: <CalendarCheck size={18} />, label: 'Booking' },
   { app: 'iot', title: 'PrimeIoT', icon: <Wifi size={18} />, label: 'IoT' },
+  { app: 'arcade', title: 'PrimeArcade', icon: <Gamepad2 size={18} />, label: 'Arcade' },
   { app: 'settings', title: 'Settings', icon: <Settings size={18} />, label: 'Settings' },
 ];
 

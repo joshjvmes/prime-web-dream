@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Terminal, FolderTree, Activity, Cpu, Brain, Network, Code, HardDrive, Database, Zap, Settings, Globe, Server, LayoutList, Image, Link2, Orbit, CalendarDays, BookOpen, Table, Workflow, Paintbrush, Smartphone, Map, Package, Music, Dices, TrendingUp, Radio, Vault, Video, Bot, Cog, CalendarCheck, Wifi, Monitor, FileText, MessageSquare, Shield, Mail, Users, ChevronDown, ChevronRight } from 'lucide-react';
+import { Terminal, FolderTree, Activity, Cpu, Brain, Network, Code, HardDrive, Database, Zap, Settings, Globe, Server, LayoutList, Image, Link2, Orbit, CalendarDays, BookOpen, Table, Workflow, Paintbrush, Smartphone, Map, Package, Music, Dices, TrendingUp, Radio, Vault, Video, Bot, Cog, CalendarCheck, Wifi, Monitor, FileText, MessageSquare, Shield, Mail, Users, ChevronDown, ChevronRight, Gamepad2 } from 'lucide-react';
 import { AppType } from '@/types/os';
 
 interface DesktopIconsProps {
@@ -82,6 +82,7 @@ const categories: { name: string; apps: AppEntry[] }[] = [
       { app: 'stream', title: 'PrimeStream', icon: <Radio size={22} />, label: 'Stream' },
       { app: 'maps', title: 'PrimeMaps', icon: <Map size={22} />, label: 'Maps' },
       { app: 'bets', title: 'PrimeBets', icon: <Dices size={22} />, label: 'Bets' },
+      { app: 'arcade', title: 'PrimeArcade', icon: <Gamepad2 size={22} />, label: 'Arcade' },
       { app: 'pkg', title: 'PrimePkg', icon: <Package size={22} />, label: 'Packages' },
     ],
   },
