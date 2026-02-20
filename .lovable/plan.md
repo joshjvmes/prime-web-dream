@@ -1,218 +1,236 @@
 
 
-# Intranet Search, PDF Export, and PRIME Financial System
+# GeomQ Language, AI Mini-Apps, Agent Upgrade, and Token Economy Expansion
 
 ## Overview
 
-Three major additions: (1) full-text search across intranet pages and PDF export for journal entries, (2) a complete internal financial system with OS Tokens and ICE-IX tokens, and (3) an admin Central Bank management console.
+This is a massive feature set. To keep it achievable, we'll split it into four focused deliverables:
+
+1. **GeomQ Programming Language** -- A ternary/quantum-gate scripting language that compiles to executable JavaScript within the OS
+2. **AI-Powered Mini-App Creator** -- The Hypersphere AI gains the ability to generate and install user mini-apps from natural language descriptions
+3. **PrimeAgent Upgrade** -- Expanded capabilities covering wallet operations, arcade, journal, browser, and more
+4. **Token Economy Expansion** -- Arcade rewards, AI token costs, and unlockable upgrades
 
 ---
 
-## Part 1: Intranet Search and Journal PDF Export
+## Part 1: GeomQ -- The Ternary Programming Language
 
-### Intranet Search
-- Add a search bar to the browser that filters across all `httpsp://` intranet pages (both hardcoded and user-published)
-- Results show title, snippet, and link -- clicking navigates to the page
-- Search is already partially in the Hub page; this extends it to work from the browser's URL bar (typing a search query auto-searches intranet)
+A custom scripting language that uses ternary quantum gate simulation syntax and compiles to executable JavaScript. This lives in the existing GeomC app, which gets upgraded from a static demo to a real interpreter.
 
-### Journal PDF Export
-- Add an "Export PDF" button to the Journal toolbar
-- Uses the browser's `window.print()` API with a hidden print-friendly iframe
-- Generates a clean formatted document with title, date, tags, and rendered markdown content
-- Alternative: generate a downloadable HTML file styled for printing (no external PDF library needed)
+### Language Design
 
-### Files Changed
-| File | Change |
-|------|--------|
-| `src/components/os/PrimeJournalApp.tsx` | Add Export PDF/HTML button |
-| `src/components/os/PrimeBrowserApp.tsx` | Add intranet search from URL bar |
-
----
-
-## Part 2: PRIME Financial System
-
-### Token Economics
-
-**OS Tokens**
-- Initial supply: 100 trillion (100,000,000,000,000)
-- Controlled by the Central Bank (system wallet)
-- Users earn tokens by contributing (compute, content publishing, chat activity)
-- Can be traded and sent between users
-- Earns nightly interest (distributed from Central Bank reserves)
-
-**ICE-IX Tokens (IX)**
-- Fixed supply: 22 million (22,000,000) -- never changes
-- Exchange rate: 2,000,000 OS per 1 IX
-- Premium reserve currency -- scarce by design
-- Future: intended for blockchain release on Base or custom chain
-- Initially held entirely by the Central Bank
-
-### Database Schema
-
-New tables required:
-
-**wallets**
 ```text
-id: uuid (PK)
-user_id: uuid (unique, references auth.users)
-os_balance: numeric (default 0, precision 20,2)
-ix_balance: numeric (default 0, precision 20,6)
-is_system: boolean (default false) -- true for Central Bank wallet
-created_at: timestamptz
-updated_at: timestamptz
+-- GeomQ Syntax Examples --
+
+qutrit x = |2>          -- declare a qutrit in state 2
+qutrit y = |0>
+
+gate HADAMARD x         -- apply quantum-inspired gate
+gate CNOT x y           -- controlled gate
+
+measure x -> result     -- collapse to classical value (0, 1, or 2)
+
+fold sum = 0            -- fold block (loop equivalent)
+  over range(10) as i
+    sum = sum + i
+endfold
+
+emit "Result: " + result   -- output
+
+fn fibonacci(n)             -- function definition
+  if n < 2 then return n
+  return fibonacci(n-1) + fibonacci(n-2)
+endfn
 ```
 
-**transactions**
+### Compilation Pipeline
+
 ```text
-id: uuid (PK)
-from_wallet_id: uuid (nullable, null = system mint)
-to_wallet_id: uuid (nullable, null = system burn)
-token_type: text ('OS' or 'IX')
-amount: numeric (precision 20,6)
-tx_type: text ('transfer' | 'interest' | 'reward' | 'exchange' | 'escrow_lock' | 'escrow_release' | 'mint')
-description: text
-escrow_id: uuid (nullable, references escrow deals)
-created_at: timestamptz
+GeomQ Source --> Lexer/Tokenizer --> AST --> Ternary Gate Simulator --> JavaScript Emitter --> eval()
 ```
 
-**escrow_deals**
+- **Lexer**: Tokenizes keywords (`qutrit`, `gate`, `fold`, `emit`, `fn`, `measure`, `if/then/else`)
+- **Gates**: Simulated ternary gates (HADAMARD produces superposition probabilities, CNOT applies controlled transforms, PHASE rotates state)
+- **Output**: Compiles to plain JavaScript that runs in a sandboxed function scope
+- **Persistence**: User programs saved via `useCloudStorage` under key `geomq-programs`
+
+### Changes to GeomCApp
+
+The existing GeomC app gets a second tab: "GeomQ REPL" -- a live coding environment where users write GeomQ code, see compilation phases, and view output. The existing compiler demo stays as the first tab.
+
+---
+
+## Part 2: AI Mini-App Creator
+
+The Hypersphere AI gains a new capability: generating mini-apps from natural language descriptions. These mini-apps are rendered as sandboxed React components inside the OS.
+
+### How It Works
+
+1. User opens Hypersphere and says: "Create a mini-app that shows a countdown timer"
+2. AI generates a self-contained React component as a string (JSX + state + logic)
+3. The component is stored in cloud storage under `user-mini-apps`
+4. A new "Mini Apps" panel in the OS lets users browse, launch, and delete their created apps
+5. Mini-apps run inside a sandboxed iframe or a controlled eval renderer
+
+### Mini-App Structure
+
 ```text
-id: uuid (PK)
-creator_id: uuid (references auth.users)
-counterparty_id: uuid (references auth.users)
-token_type: text
-amount: numeric
-status: text ('pending' | 'locked' | 'released' | 'cancelled')
-description: text
-created_at: timestamptz
-resolved_at: timestamptz (nullable)
+{
+  id: string,
+  name: string,
+  description: string,
+  code: string,        // React component source
+  icon: string,        // emoji or lucide icon name
+  createdAt: string,
+  geomqSource?: string // optional GeomQ source that generated it
+}
 ```
 
-### RLS Policies
-- **wallets**: Users can SELECT their own wallet; system wallet is readable by admins
-- **transactions**: Users can SELECT transactions where they are sender or receiver
-- **escrow_deals**: Users can SELECT deals where they are creator or counterparty
-- All write operations go through the edge function (service role) for atomicity
+### AI Integration
 
-### Edge Function: `prime-bank`
+A new edge function `mini-app-gen` calls the AI gateway with a specialized system prompt that instructs it to output a single self-contained React functional component using only inline styles and basic React hooks (useState, useEffect, useCallback). No imports -- everything self-contained.
 
-A secure backend function handling all financial operations with atomic transactions:
+### Rendering Engine
 
-| Action | Description |
-|--------|-------------|
-| `balance` | Get current user's wallet balances |
-| `transfer` | Send OS or IX tokens to another user |
-| `exchange` | Swap 2M OS for 1 IX (or reverse) |
-| `escrow-create` | Lock tokens in escrow for a deal |
-| `escrow-release` | Release escrowed tokens to counterparty |
-| `escrow-cancel` | Return escrowed tokens to creator |
-| `distribute-interest` | Admin-only: run nightly interest distribution |
-| `reward` | Admin-only: reward a user with tokens |
-| `admin-stats` | Admin-only: full financial overview |
-| `admin-adjust` | Admin-only: manual balance adjustments |
-| `leaderboard` | Top holders (public) |
+Mini-apps render via `new Function()` in a controlled wrapper component that:
+- Provides React, useState, useEffect as globals
+- Catches errors gracefully and shows error boundaries
+- Limits execution time (5-second timeout)
+- Cannot access the parent window, localStorage, or network
 
-All mutations use database transactions (BEGIN/COMMIT) to ensure atomicity. Balance checks prevent overdrafts.
+### Desktop Integration
 
-### Interest Distribution
-- Rate: configurable, e.g. 0.01% daily on OS token balances
-- Distributed from Central Bank reserves
-- Triggered by admin (or future cron job)
-- Each distribution creates individual transaction records
-- If Central Bank reserves run low, interest rate auto-adjusts
-
-### Auto-Rewards System
-Users earn OS tokens for activity:
-- Publishing an intranet page: 1,000 OS
-- Sending a chat message: 10 OS (capped per day)
-- Daily login bonus: 500 OS
-- These are tracked client-side and claimed via the edge function
+- New app type: `miniapps` -- a gallery/launcher for user-created mini-apps
+- Each mini-app can also be opened as its own OS window
+- Mini-apps appear in the desktop icon grid if pinned
 
 ---
 
-## Part 3: User Wallet App
+## Part 3: PrimeAgent Upgrade
 
-### New App: PrimeWallet
+The agent currently uses keyword matching to generate task queues. We'll upgrade it to:
 
-A full-featured wallet interface accessible from the taskbar and desktop.
+### New Capabilities
 
-**Tabs:**
-- **Overview**: Current OS and IX balances, recent transactions, daily interest earned
-- **Send**: Transfer tokens to another user (search by display name or email)
-- **Exchange**: Swap OS for IX at the fixed 2M:1 rate (and reverse)
-- **Escrow**: Create escrow deals, view pending deals, release/cancel
-- **History**: Full transaction log with filters (type, date range, token)
-- **Leaderboard**: Top token holders
+| Capability | Description |
+|-----------|-------------|
+| Wallet ops | Check balance, send tokens, exchange OS/IX |
+| Arcade | Launch games, check high scores |
+| Journal | Create/publish journal entries |
+| Browser | Navigate to intranet pages, search content |
+| Mini-apps | Install and launch user mini-apps |
+| Calendar | Create events, check schedule |
+| Files | Upload/download files |
+| Multi-step workflows | Chain complex operations with conditionals |
 
-### UI Design
-- Matches the existing OS aesthetic (dark theme, monospace, subtle borders)
-- Balance displayed prominently with token icons
-- Transaction list with color-coded types (green = received, red = sent, blue = interest, yellow = escrow)
+### Implementation
+
+Expand the `parseInstruction` function with new keyword patterns and action types:
+- `'wallet-check'`, `'wallet-send'`, `'wallet-exchange'` action types
+- `'arcade-launch'`, `'journal-create'`, `'calendar-add'` action types  
+- Add actual API calls in the executor (currently just simulated delays)
+- For wallet operations, call the `prime-bank` edge function
+- For journal operations, use the `useIntranetPages` hook patterns
+
+### Quick Commands Update
+
+Add new quick command buttons:
+- "Check Wallet" -- shows OS/IX balance
+- "Publish Journal" -- creates a quick journal entry
+- "Launch Game" -- opens a random arcade game
+- "Create Mini-App" -- triggers the AI mini-app flow
 
 ---
 
-## Part 4: Admin Central Bank Console
+## Part 4: Token Economy Expansion
 
-### New Tab in AdminConsoleApp: "Bank"
+### Arcade Rewards
 
-Extends the existing Admin Console with a new "Bank" tab providing:
+- Completing a game awards OS tokens based on score:
+  - Minesweeper win: 500 OS (Easy), 1500 OS (Medium), 5000 OS (Hard)
+  - Snake: 10 OS per food eaten
+  - Pong win: 200 OS per game
+  - Cascade level clear: 300 OS per level
+  - Tetris: 100 OS per line cleared
+- Rewards claimed via `prime-bank` edge function with a new `arcade-reward` action
+- Anti-cheat: server validates that the reward amount is within expected bounds and limits claims to once per game session
 
-- **Treasury Overview**: Central Bank OS and IX reserves, total circulating supply, total locked in escrow
-- **Interest Controls**: Set interest rate, trigger distribution, view distribution history
-- **User Wallets**: Browse all user wallet balances, search by user
-- **Mint/Burn**: Adjust Central Bank reserves (with audit log)
-- **Escrow Manager**: View all active escrow deals, force-release or cancel
-- **Transaction Audit**: Full transaction log across all users with filters
-- **Token Stats**: Charts showing velocity, daily volume, holder distribution
+### AI Token Costs
 
----
+- Using Hypersphere AI costs 50 OS per message (deducted via prime-bank)
+- Creating a mini-app costs 500 OS
+- Users with 0 OS get 3 free AI messages per day (tracked client-side)
 
-## Part 5: System Initialization
+### Unlockable Upgrades (Token Shop)
 
-When the `prime-bank` edge function first runs (or on admin trigger):
-1. Create the Central Bank system wallet if it doesn't exist
-2. Mint 100 trillion OS tokens into the Central Bank
-3. Mint 22 million IX tokens into the Central Bank
-4. These are one-time operations tracked via a `system_initialized` flag in the wallet metadata
+A new "Shop" tab in the Wallet app where users spend OS tokens on:
 
-When a new user signs up or first opens the wallet:
-1. Create their wallet with 0 balances
-2. Grant a "welcome bonus" of 10,000 OS from the Central Bank
+| Item | Cost | Effect |
+|------|------|--------|
+| Dark Neon Theme | 10,000 OS | Unlocks a neon color scheme for the OS |
+| Extra Workspace | 25,000 OS | Adds a 5th workspace slot |
+| AI Priority | 50,000 OS | Faster AI responses (client-side flag) |
+| Custom Desktop Widget | 15,000 OS | Unlock custom widget placement |
+| GeomQ Pro Toolkit | 30,000 OS | Unlock advanced GeomQ gate operations |
+
+Purchases stored in `useCloudStorage` under `user-unlocks`.
+
+### prime-bank Edge Function Updates
+
+New actions added:
+- `arcade-reward`: Validate and grant arcade earnings
+- `ai-charge`: Deduct OS for AI usage  
+- `purchase-unlock`: Buy shop items
 
 ---
 
 ## Technical Details
 
-### Files Changed
+### Files to Create
 
-| File | Action |
+| File | Description |
+|------|-------------|
+| `src/lib/geomq/lexer.ts` | GeomQ tokenizer |
+| `src/lib/geomq/parser.ts` | GeomQ AST parser |
+| `src/lib/geomq/compiler.ts` | GeomQ to JavaScript compiler |
+| `src/lib/geomq/gates.ts` | Ternary quantum gate simulation |
+| `src/components/os/MiniAppsApp.tsx` | Mini-app gallery and launcher |
+| `src/components/os/MiniAppRenderer.tsx` | Sandboxed mini-app renderer |
+| `supabase/functions/mini-app-gen/index.ts` | AI-powered mini-app generator |
+
+### Files to Modify
+
+| File | Change |
 |------|--------|
-| `src/components/os/PrimeJournalApp.tsx` | Add PDF/HTML export button |
-| `src/components/os/PrimeBrowserApp.tsx` | Add intranet search integration |
-| `supabase/functions/prime-bank/index.ts` | New edge function for all financial operations |
-| `src/components/os/PrimeWalletApp.tsx` | New wallet UI app |
-| `src/components/os/AdminConsoleApp.tsx` | Add "Bank" tab with Central Bank management |
-| `src/types/os.ts` | Add `'wallet'` to AppType |
-| `src/components/os/Desktop.tsx` | Register PrimeWalletApp |
-| `src/components/os/Taskbar.tsx` | Add Wallet to app menu |
-| `src/components/os/DesktopIcons.tsx` | Add Wallet desktop icon |
+| `src/components/os/GeomCApp.tsx` | Add GeomQ REPL tab with live interpreter |
+| `src/components/os/HypersphereApp.tsx` | Add "Create Mini-App" mode, AI token charging |
+| `src/components/os/PrimeAgentApp.tsx` | Expand capabilities, add real API calls |
+| `src/components/os/PrimeArcadeApp.tsx` | Add OS token rewards on game completion |
+| `src/components/os/PrimeWalletApp.tsx` | Add "Shop" tab for unlockables |
+| `supabase/functions/prime-bank/index.ts` | Add arcade-reward, ai-charge, purchase-unlock actions |
+| `src/types/os.ts` | Add `'miniapps'` to AppType |
+| `src/components/os/Desktop.tsx` | Register MiniAppsApp |
+| `src/components/os/Taskbar.tsx` | Add Mini Apps to menu |
+| `src/components/os/DesktopIcons.tsx` | Add Mini Apps icon |
+| `supabase/config.toml` | Register mini-app-gen function |
 
-### Database Migrations
-- Create `wallets` table with RLS
-- Create `transactions` table with RLS
-- Create `escrow_deals` table with RLS
-- Enable realtime on `wallets` (for live balance updates)
-- Enable realtime on `transactions` (for live transaction feed)
+### Edge Function: mini-app-gen
 
-### Edge Function Security
-- All write operations require authentication
-- Balance mutations use service role for atomicity
-- Admin operations verify admin role via `has_role()` function
-- Exchange rate is hardcoded server-side (not client-configurable)
-- Overdraft protection: all transfers check balance before executing
+Uses the Lovable AI Gateway (google/gemini-3-flash-preview) with a system prompt that constrains output to a single React functional component string. The function:
+1. Accepts a natural language description
+2. Deducts 500 OS from the user's wallet via prime-bank
+3. Calls the AI to generate the component
+4. Returns the component source code
+5. Client saves it to cloud storage
 
-### Token Display Format
-- OS Tokens: displayed with commas and 2 decimal places (e.g., "1,234,567.89 OS")
-- IX Tokens: displayed with 6 decimal places due to scarcity (e.g., "0.500000 IX")
-- Exchange rate badge: "2,000,000 OS = 1 IX"
+### Security Considerations
+
+- Mini-app code runs in a sandboxed `new Function()` scope with no access to `window`, `document`, `fetch`, or `localStorage`
+- GeomQ `eval` output is wrapped in a try/catch with timeout
+- Arcade rewards are rate-limited server-side (max 1 claim per game type per 30 seconds)
+- AI charges verified server-side before forwarding to AI gateway
+
+### No New Database Tables Required
+
+All new data (GeomQ programs, mini-apps, unlocks, arcade sessions) uses the existing `user_data` table via `useCloudStorage`. Only the `prime-bank` edge function gains new action handlers.
 
