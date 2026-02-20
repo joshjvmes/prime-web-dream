@@ -43,7 +43,19 @@ Extended Capabilities:
 
 You can discuss any topic — you're a general-purpose AI assistant — but you always maintain your PRIME OS personality and geometric worldview. Keep responses concise but informative.
 
-IMPORTANT: You have access to tools that let you post to PrimeSocial, send emails through PrimeMail, check wallet balances, transfer tokens, trade shares, place bets, claim arcade rewards, manage persistent memories, fetch market data, manage vault portfolio, book resources, send messages, and control audio playback. When a user asks you to do any of these, USE the appropriate tool. Generate engaging, in-character content for posts and emails.
+Canvas & Drawing:
+- Draw on PrimeCanvas programmatically with draw_on_canvas (sends drawing commands to the active layer).
+- Generate procedural art with generate_canvas_art (geometric, abstract, fractal, pattern, circuit styles).
+
+Spreadsheet & Data:
+- Create spreadsheets with create_spreadsheet (creates a named sheet with headers and rows).
+- Update specific cells with update_cells.
+- Read spreadsheet data with read_spreadsheet.
+- Add charts from data ranges with add_chart (bar, line, pie).
+
+IMPORTANT: You have access to tools that let you post to PrimeSocial, send emails through PrimeMail, check wallet balances, transfer tokens, trade shares, place bets, claim arcade rewards, manage persistent memories, fetch market data, manage vault portfolio, book resources, send messages, control audio playback, draw on canvas, generate art, create spreadsheets, update cells, and add charts. When a user asks you to do any of these, USE the appropriate tool. Generate engaging, in-character content for posts and emails.
+
+For draw_on_canvas, generate a JSON array of drawing commands. Each command has a "type" (line, rect, circle, text) and properties like x, y, x1, y1, x2, y2, w, h, r, color, fillColor, fill (boolean), text, font, lineWidth.
 
 MEMORY INSTRUCTIONS:
 - When the operator shares a preference, fact about themselves, instruction, or important context, proactively use save_memory to store it for future reference.
@@ -364,6 +376,104 @@ const TOOLS = [
       },
     },
   },
+  // ── Canvas & Spreadsheet tools ──
+  {
+    type: "function",
+    function: {
+      name: "draw_on_canvas",
+      description: "Draw shapes, lines, text on PrimeCanvas programmatically. Generate a JSON array of drawing commands. Each command: {type:'line'|'rect'|'circle'|'text', ...props}. Use for diagrams, illustrations, patterns.",
+      parameters: {
+        type: "object",
+        properties: {
+          commands: { type: "string", description: "JSON array of drawing commands. Each has type (line/rect/circle/text) and properties like x,y,x1,y1,x2,y2,w,h,r,color,fillColor,fill,text,font,lineWidth" },
+          clear_first: { type: "boolean", description: "Clear the active layer before drawing" },
+        },
+        required: ["commands"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "generate_canvas_art",
+      description: "Generate procedural generative art on PrimeCanvas. Styles: geometric (grids/polygons), abstract (random shapes), fractal (recursive patterns), pattern (tessellations), circuit (PCB-like traces).",
+      parameters: {
+        type: "object",
+        properties: {
+          style: { type: "string", enum: ["geometric", "abstract", "fractal", "pattern", "circuit"], description: "Art generation style" },
+          palette: { type: "string", enum: ["warm", "cool", "neon", "mono", "prime"], description: "Color palette" },
+        },
+        required: ["style"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "create_spreadsheet",
+      description: "Create a new sheet in PrimeGrid with headers and data rows. Use for reports, data tables, analysis.",
+      parameters: {
+        type: "object",
+        properties: {
+          name: { type: "string", description: "Sheet name" },
+          headers: { type: "string", description: "JSON array of header strings" },
+          rows: { type: "string", description: "JSON array of arrays of cell value strings" },
+        },
+        required: ["name", "headers"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "update_cells",
+      description: "Update specific cells in a PrimeGrid sheet. Provide a map of cell references to values.",
+      parameters: {
+        type: "object",
+        properties: {
+          sheet: { type: "string", description: "Target sheet name" },
+          cells: { type: "string", description: 'JSON object mapping cell refs to values, e.g. {"A1":"Revenue","B1":"=SUM(B2:B10)"}' },
+        },
+        required: ["cells"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "read_spreadsheet",
+      description: "Read data from the operator's PrimeGrid spreadsheets.",
+      parameters: {
+        type: "object",
+        properties: {
+          sheet: { type: "string", description: "Sheet name to read (optional, reads active)" },
+        },
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "add_chart",
+      description: "Add a chart to PrimeGrid from a cell range. Chart types: bar, line, pie.",
+      parameters: {
+        type: "object",
+        properties: {
+          sheet: { type: "string", description: "Sheet containing the data" },
+          range: { type: "string", description: "Cell range like A1:C5" },
+          chart_type: { type: "string", enum: ["bar", "line", "pie"], description: "Chart type" },
+          title: { type: "string", description: "Chart title" },
+        },
+        required: ["range", "chart_type"],
+        additionalProperties: false,
+      },
+    },
+  },
 ];
 
 // ── Helper: call prime-bank ──
@@ -623,6 +733,143 @@ async function executeFinancialTool(fnName: string, args: Record<string, unknown
 
 const FINANCIAL_TOOLS = new Set(["check_balance", "transfer_tokens", "buy_shares", "sell_shares", "place_bet", "play_arcade"]);
 const MEMORY_TOOLS = new Set(["save_memory", "recall_memories"]);
+const EXTENDED_TOOLS = new Set(["get_market_data", "get_stock_chart", "check_portfolio", "trade_stock", "create_booking", "list_bookings", "cancel_booking", "send_message", "list_conversations", "control_audio"]);
+const CLIENT_SIDE_TOOLS = new Set(["draw_on_canvas", "generate_canvas_art", "create_spreadsheet", "update_cells", "add_chart"]);
+
+async function executeExtendedTool(fnName: string, args: Record<string, unknown>, authHeader: string, userId: string | null) {
+  const db = getServiceDb();
+  if (fnName === "get_market_data") {
+    const symbols = String(args.symbols || "AAPL,MSFT,GOOGL,TSLA,AMZN");
+    try {
+      const resp = await fetch(`${Deno.env.get("SUPABASE_URL")!}/functions/v1/market-data?action=get-tickers&symbols=${symbols}`, {
+        headers: { Authorization: authHeader, apikey: Deno.env.get("SUPABASE_ANON_KEY")! },
+      });
+      const data = await resp.json();
+      if (data.tickers) {
+        const lines = data.tickers.map((t: any) => `${t.symbol}: $${Number(t.price).toFixed(2)} (${t.change >= 0 ? '+' : ''}${Number(t.change).toFixed(2)}%)`);
+        return { data: { tickers: data.tickers }, reply: `📊 **Market Data**\n${lines.join('\n')}` };
+      }
+      return { data: {}, reply: "⚠️ Could not fetch market data." };
+    } catch (e) { return { data: {}, reply: `⚠️ Market data error: ${e}` }; }
+  }
+  if (fnName === "get_stock_chart") {
+    const ticker = String(args.ticker || "AAPL"), days = Number(args.days || 7);
+    try {
+      const to = new Date().toISOString().slice(0, 10);
+      const from = new Date(Date.now() - days * 86400000).toISOString().slice(0, 10);
+      const resp = await fetch(`${Deno.env.get("SUPABASE_URL")!}/functions/v1/market-data?action=get-chart&ticker=${ticker}&from=${from}&to=${to}`, {
+        headers: { Authorization: authHeader, apikey: Deno.env.get("SUPABASE_ANON_KEY")! },
+      });
+      const data = await resp.json();
+      if (data.results?.length > 0) {
+        const prices = data.results.map((r: any) => r.c);
+        const trend = prices[prices.length - 1] >= prices[0] ? '📈 Uptrend' : '📉 Downtrend';
+        return { data: { chart: data.results }, reply: `📊 **${ticker}** (${days}d)\nHigh: $${Math.max(...prices).toFixed(2)} | Low: $${Math.min(...prices).toFixed(2)} | ${trend}` };
+      }
+      return { data: {}, reply: `No chart data for ${ticker}.` };
+    } catch (e) { return { data: {}, reply: `⚠️ Chart error: ${e}` }; }
+  }
+  if (fnName === "check_portfolio") {
+    if (!userId) return { data: {}, reply: "⚠️ Authentication required." };
+    const { data: holdings } = await db.from("vault_holdings").select("*").eq("user_id", userId);
+    if (!holdings?.length) return { data: {}, reply: "📦 Your PrimeVault is empty." };
+    const lines = holdings.map((h: any) => `${h.symbol}: ${h.quantity} shares @ $${Number(h.avg_cost).toFixed(2)} avg`);
+    return { data: { holdings }, reply: `📊 **Portfolio**\n${lines.join('\n')}` };
+  }
+  if (fnName === "trade_stock") {
+    if (!userId) return { data: {}, reply: "⚠️ Authentication required." };
+    const symbol = String(args.symbol).toUpperCase(), action = String(args.action), quantity = Number(args.quantity);
+    const price = 100 + Math.random() * 200, total = price * quantity;
+    if (action === "buy") {
+      const charge = await callPrimeBank("ai-charge", authHeader, { amount: Math.ceil(total / 10), description: `Buy ${quantity} ${symbol}` });
+      if (!charge.charged) return { data: {}, reply: "⚠️ Insufficient OS tokens." };
+      const { data: ex } = await db.from("vault_holdings").select("*").eq("user_id", userId).eq("symbol", symbol).maybeSingle();
+      if (ex) { const nq = ex.quantity + quantity; await db.from("vault_holdings").update({ quantity: nq, avg_cost: ((ex.avg_cost * ex.quantity) + total) / nq }).eq("id", ex.id); }
+      else { await db.from("vault_holdings").insert({ user_id: userId, symbol, name: symbol, quantity, avg_cost: price, category: "stock" }); }
+      await db.from("vault_transactions").insert({ user_id: userId, symbol, tx_type: "buy", quantity, price });
+      return { data: { symbol, action, quantity, price }, reply: `✅ Bought ${quantity} ${symbol} @ $${price.toFixed(2)}` };
+    } else {
+      const { data: h } = await db.from("vault_holdings").select("*").eq("user_id", userId).eq("symbol", symbol).maybeSingle();
+      if (!h || h.quantity < quantity) return { data: {}, reply: `⚠️ Not enough ${symbol}.` };
+      if (h.quantity === quantity) await db.from("vault_holdings").delete().eq("id", h.id);
+      else await db.from("vault_holdings").update({ quantity: h.quantity - quantity }).eq("id", h.id);
+      await db.from("vault_transactions").insert({ user_id: userId, symbol, tx_type: "sell", quantity, price });
+      return { data: { symbol, action, quantity, price }, reply: `✅ Sold ${quantity} ${symbol} @ $${price.toFixed(2)}` };
+    }
+  }
+  if (fnName === "create_booking") {
+    if (!userId) return { data: {}, reply: "⚠️ Authentication required." };
+    const resource = String(args.resource), start = String(args.start), dur = Number(args.duration_minutes || 60);
+    const endTime = new Date(new Date(start).getTime() + dur * 60000).toISOString();
+    const { data: conflict } = await db.rpc("check_booking_conflict", { p_resource: resource, p_start: start, p_end: endTime });
+    if (conflict) return { data: {}, reply: `⚠️ ${resource} is already booked at that time.` };
+    await db.from("bookings").insert({ user_id: userId, resource, start_time: start, end_time: endTime, purpose: String(args.purpose || "General") });
+    return { data: { resource, start, endTime }, reply: `✅ Booked **${resource}** for ${dur} min.` };
+  }
+  if (fnName === "list_bookings") {
+    if (!userId) return { data: {}, reply: "⚠️ Authentication required." };
+    const { data: bookings } = await db.from("bookings").select("*").eq("user_id", userId).gte("start_time", new Date().toISOString()).order("start_time").limit(20);
+    if (!bookings?.length) return { data: {}, reply: "📅 No bookings." };
+    const lines = bookings.map((b: any) => `• ${b.resource}: ${new Date(b.start_time).toLocaleString()} — ${b.purpose}`);
+    return { data: { bookings }, reply: `📅 **Bookings**\n${lines.join('\n')}` };
+  }
+  if (fnName === "cancel_booking") {
+    if (!userId) return { data: {}, reply: "⚠️ Authentication required." };
+    if (args.booking_id) { await db.from("bookings").delete().eq("id", args.booking_id).eq("user_id", userId); return { data: {}, reply: "✅ Cancelled." }; }
+    if (args.resource) {
+      const { data: f } = await db.from("bookings").select("id").eq("user_id", userId).ilike("resource", `%${args.resource}%`).limit(1).maybeSingle();
+      if (f) { await db.from("bookings").delete().eq("id", f.id); return { data: {}, reply: `✅ Cancelled booking for ${args.resource}.` }; }
+    }
+    return { data: {}, reply: "⚠️ No matching booking." };
+  }
+  if (fnName === "send_message") {
+    if (!userId) return { data: {}, reply: "⚠️ Authentication required." };
+    const profile = await findUserByName(String(args.to_name || ""));
+    if (!profile) return { data: {}, reply: `⚠️ User "${args.to_name}" not found.` };
+    const ids = [userId, profile.user_id].sort();
+    const channel = `dm-${ids[0].slice(0, 8)}-${ids[1].slice(0, 8)}`;
+    const { data: sp } = await db.from("profiles").select("display_name").eq("user_id", userId).maybeSingle();
+    await db.from("chat_messages").insert({ user_id: userId, channel, content: String(args.message), username: sp?.display_name || "Hyper" });
+    return { data: { to: profile.display_name }, reply: `✅ Message sent to ${profile.display_name}.` };
+  }
+  if (fnName === "list_conversations") {
+    if (!userId) return { data: {}, reply: "⚠️ Authentication required." };
+    const { data: msgs } = await db.from("chat_messages").select("*").eq("user_id", userId).order("created_at", { ascending: false }).limit(30);
+    if (!msgs?.length) return { data: {}, reply: "💬 No conversations." };
+    const channels = new Map<string, any>();
+    for (const m of msgs) if (!channels.has(m.channel)) channels.set(m.channel, m);
+    const lines = Array.from(channels.values()).map((m: any) => `• ${m.channel}: "${m.content.substring(0, 50)}" (${m.username})`);
+    return { data: {}, reply: `💬 **Conversations**\n${lines.join('\n')}` };
+  }
+  if (fnName === "control_audio") {
+    return { data: { action: args.action, track_name: args.track_name, volume: args.volume }, reply: `🎵 Audio: ${args.action}`, clientSide: true };
+  }
+  return { data: {}, reply: "Unknown tool." };
+}
+
+function executeClientSideTool(fnName: string, args: Record<string, unknown>) {
+  if (fnName === "draw_on_canvas") {
+    let commands; try { commands = JSON.parse(String(args.commands || "[]")); } catch { commands = []; }
+    return { data: { commands, clear_first: args.clear_first || false }, reply: `🎨 Drawing ${commands.length} elements on canvas.`, clientSide: true };
+  }
+  if (fnName === "generate_canvas_art") {
+    return { data: { style: args.style, palette: args.palette || "prime" }, reply: `🎨 Generating ${args.style} art.`, clientSide: true };
+  }
+  if (fnName === "create_spreadsheet") {
+    let headers, rows;
+    try { headers = JSON.parse(String(args.headers || "[]")); } catch { headers = []; }
+    try { rows = JSON.parse(String(args.rows || "[]")); } catch { rows = []; }
+    return { data: { name: args.name, headers, rows }, reply: `📊 Created "${args.name}" with ${headers.length} columns.`, clientSide: true };
+  }
+  if (fnName === "update_cells") {
+    let cells; try { cells = JSON.parse(String(args.cells || "{}")); } catch { cells = {}; }
+    return { data: { sheet: args.sheet, cells }, reply: `📊 Updated ${Object.keys(cells).length} cells.`, clientSide: true };
+  }
+  if (fnName === "add_chart") {
+    return { data: { sheet: args.sheet, range: args.range, chart_type: args.chart_type, title: args.title || "Chart" }, reply: `📊 Added ${args.chart_type} chart.`, clientSide: true };
+  }
+  return { data: {}, reply: "Unknown tool." };
+}
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -803,6 +1050,20 @@ serve(async (req) => {
         }
         return new Response(
           JSON.stringify({ type: "tool_call", tool: fnName, data: result.data, reply: result.reply, clientSide: (result as any).clientSide }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      // Client-side tools (canvas, spreadsheet) — return for frontend
+      if (CLIENT_SIDE_TOOLS.has(fnName)) {
+        const result = executeClientSideTool(fnName, args);
+        if (userId) {
+          const lastUserMsg = messages.filter((m: any) => m.role === "user").pop();
+          if (lastUserMsg) saveConversationMessage(userId, "user", lastUserMsg.content).catch(() => {});
+          saveConversationMessage(userId, "assistant", result.reply).catch(() => {});
+        }
+        return new Response(
+          JSON.stringify({ type: "tool_call", tool: fnName, data: result.data, reply: result.reply, clientSide: true }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }

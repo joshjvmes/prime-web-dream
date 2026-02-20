@@ -21,6 +21,12 @@ export const EVENT_TYPES = [
   'booking.cancelled',
   'audio.control',
   'market.checked',
+  'canvas.draw',
+  'canvas.clear',
+  'canvas.add-layer',
+  'spreadsheet.create',
+  'spreadsheet.update',
+  'spreadsheet.chart',
 ] as const;
 
 export type EventType = typeof EVENT_TYPES[number];

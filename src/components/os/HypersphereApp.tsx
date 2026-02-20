@@ -311,6 +311,27 @@ export default function HypersphereApp({ openWindows, activeWorkspace }: Hypersp
             eventBus.emit('audio.control', data.data);
             logAction('audio', `Audio: ${data.data?.action || '?'}`);
             setMessages(prev => [...prev, { id: assistantId, role: 'hyper', text: data.reply || '🎵 Audio command sent.' }]);
+          } else if (tool === 'draw_on_canvas') {
+            if (data.data?.clear_first) eventBus.emit('canvas.clear', {});
+            eventBus.emit('canvas.draw', data.data);
+            logAction('post', '🎨 Drew on canvas');
+            setMessages(prev => [...prev, { id: assistantId, role: 'hyper', text: data.reply || '🎨 Drawing complete.' }]);
+          } else if (tool === 'generate_canvas_art') {
+            eventBus.emit('canvas.draw', { style: data.data?.style, palette: data.data?.palette, generative: true });
+            logAction('post', `🎨 Generated ${data.data?.style} art`);
+            setMessages(prev => [...prev, { id: assistantId, role: 'hyper', text: data.reply || '🎨 Art generated.' }]);
+          } else if (tool === 'create_spreadsheet') {
+            eventBus.emit('spreadsheet.create', data.data);
+            logAction('post', `📊 Created spreadsheet "${data.data?.name}"`);
+            setMessages(prev => [...prev, { id: assistantId, role: 'hyper', text: data.reply || '📊 Spreadsheet created.' }]);
+          } else if (tool === 'update_cells') {
+            eventBus.emit('spreadsheet.update', data.data);
+            logAction('post', '📊 Updated cells');
+            setMessages(prev => [...prev, { id: assistantId, role: 'hyper', text: data.reply || '📊 Cells updated.' }]);
+          } else if (tool === 'add_chart') {
+            eventBus.emit('spreadsheet.chart', data.data);
+            logAction('post', '📊 Added chart');
+            setMessages(prev => [...prev, { id: assistantId, role: 'hyper', text: data.reply || '📊 Chart added.' }]);
           } else {
             setMessages(prev => [...prev, { id: assistantId, role: 'hyper', text: data.reply || 'Action completed.' }]);
           }

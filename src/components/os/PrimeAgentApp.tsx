@@ -35,6 +35,8 @@ const QUICK_COMMANDS = [
   { label: 'Play Music', icon: <Rocket size={12} />, instruction: 'Play some ambient music' },
   { label: 'Send Message', icon: <Rocket size={12} />, instruction: 'Open PrimeComm to send a message' },
   { label: 'Launch Game', icon: <Rocket size={12} />, instruction: 'Launch a random arcade game' },
+  { label: 'Generate Art', icon: <Rocket size={12} />, instruction: 'Generate some geometric art on the canvas' },
+  { label: 'Create Report', icon: <Rocket size={12} />, instruction: 'Create a spreadsheet report with system data' },
   { label: 'Create Mini-App', icon: <Rocket size={12} />, instruction: 'Create a new mini-app' },
   { label: 'Deploy Build', icon: <Rocket size={12} />, instruction: 'Deploy the latest build to production' },
 ];
@@ -118,10 +120,15 @@ function parseInstruction(input: string): AgentAction[] {
       { id: id(), type: 'open-app', label: 'Open PrimeComm', payload: { app: 'comm', title: 'PrimeComm' }, status: 'pending' },
       { id: id(), type: 'report', label: 'Messaging ready', status: 'pending' },
     );
-  } else if (lower.includes('draw') || lower.includes('canvas') || lower.includes('paint') || lower.includes('sketch')) {
+  } else if (lower.includes('draw') || lower.includes('canvas') || lower.includes('paint') || lower.includes('sketch') || lower.includes('art') || lower.includes('generate art')) {
     actions.push(
       { id: id(), type: 'open-app', label: 'Open PrimeCanvas', payload: { app: 'canvas', title: 'PrimeCanvas' }, status: 'pending' },
-      { id: id(), type: 'report', label: 'Canvas ready', status: 'pending' },
+      { id: id(), type: 'report', label: 'Canvas ready — try asking Hyper to generate art!', status: 'pending' },
+    );
+  } else if (lower.includes('spreadsheet') || lower.includes('report') || lower.includes('grid') || lower.includes('table') || lower.includes('data')) {
+    actions.push(
+      { id: id(), type: 'open-app', label: 'Open PrimeGrid', payload: { app: 'spreadsheet', title: 'PrimeGrid' }, status: 'pending' },
+      { id: id(), type: 'report', label: 'Spreadsheet ready — ask Hyper to create reports!', status: 'pending' },
     );
   } else if (lower.includes('mini-app') || lower.includes('miniapp') || lower.includes('create app')) {
     actions.push(
