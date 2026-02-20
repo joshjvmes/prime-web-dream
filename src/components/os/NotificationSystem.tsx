@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useCallback } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { OSNotification } from '@/hooks/useNotifications';
 import { X } from 'lucide-react';
@@ -10,23 +10,19 @@ interface NotificationSystemProps {
 
 const AUTO_DISMISS_MS = 8000;
 
-function NotificationToast({ notif, onDismiss }: { notif: OSNotification; onDismiss: (id: string) => void }) {
+function useAutoDismiss(id: string, onDismiss: (id: string) => void) {
   const timerRef = useRef<ReturnType<typeof setTimeout>>();
-
   useEffect(() => {
-    timerRef.current = setTimeout(() => onDismiss(notif.id), AUTO_DISMISS_MS);
+    timerRef.current = setTimeout(() => onDismiss(id), AUTO_DISMISS_MS);
     return () => clearTimeout(timerRef.current);
-  }, [notif.id, onDismiss]);
+  }, [id, onDismiss]);
+}
+
+function ToastContent({ notif, onDismiss }: { notif: OSNotification; onDismiss: (id: string) => void }) {
+  useAutoDismiss(notif.id, onDismiss);
 
   return (
-    <motion.div
-      key={notif.id}
-      initial={{ opacity: 0, x: 80 }}
-      animate={{ opacity: 1, x: 0 }}
-      exit={{ opacity: 0, x: 80 }}
-      transition={{ duration: 0.3 }}
-      className="pointer-events-auto bg-card/95 backdrop-blur-md border border-border rounded px-3 py-2 glow-border overflow-hidden"
-    >
+    <>
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <p className="font-display text-[9px] tracking-wider uppercase text-primary">{notif.title}</p>
@@ -39,7 +35,6 @@ function NotificationToast({ notif, onDismiss }: { notif: OSNotification; onDism
           <X size={10} />
         </button>
       </div>
-      {/* Progress bar */}
       <div className="mt-1.5 h-[2px] bg-muted/30 rounded-full overflow-hidden">
         <motion.div
           className="h-full bg-primary/40 rounded-full"
@@ -48,7 +43,7 @@ function NotificationToast({ notif, onDismiss }: { notif: OSNotification; onDism
           transition={{ duration: AUTO_DISMISS_MS / 1000, ease: 'linear' }}
         />
       </div>
-    </motion.div>
+    </>
   );
 }
 
@@ -59,7 +54,16 @@ export default function NotificationSystem({ notifications, onDismiss }: Notific
     <div className="fixed top-3 right-3 z-[200] flex flex-col gap-2 w-72 pointer-events-none">
       <AnimatePresence>
         {visible.map(notif => (
-          <NotificationToast key={notif.id} notif={notif} onDismiss={onDismiss} />
+          <motion.div
+            key={notif.id}
+            initial={{ opacity: 0, x: 80 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: 80 }}
+            transition={{ duration: 0.3 }}
+            className="pointer-events-auto bg-card/95 backdrop-blur-md border border-border rounded px-3 py-2 glow-border overflow-hidden"
+          >
+            <ToastContent notif={notif} onDismiss={onDismiss} />
+          </motion.div>
         ))}
       </AnimatePresence>
     </div>
