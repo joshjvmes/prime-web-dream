@@ -1,113 +1,151 @@
 
 
-# PRIME OS: Autonomous Agent, Robotics, Booking & IoT
+# PRIME OS: Next-Level Upgrade
 
 ## Overview
 
-Add four major features to PRIME OS: an autonomous AI agent that can operate the entire system, plus three new application modules for robotics control, booking/scheduling, and IoT device management.
+Five major system upgrades to transform PRIME OS from a polished simulation into a truly intelligent, immersive operating system experience.
 
 ---
 
-## 1. PrimeAgent -- Autonomous System Operator
+## 1. Real AI Integration (Hyper AI powered by Lovable AI)
 
-A new app that acts as the "brain" of PRIME OS. Unlike the existing Hyper AI (which is a simple keyword-matching chatbot), PrimeAgent is an autonomous agent with a task queue, action log, and the ability to open/close apps, run terminal commands, manage windows, and orchestrate multi-step workflows.
+Replace the keyword-matching chatbot in HypersphereApp with actual AI responses streamed from the Lovable AI Gateway. Hyper becomes a real conversational AI with full PRIME OS personality.
 
-**New file: `src/components/os/PrimeAgentApp.tsx`**
+**New edge function: `supabase/functions/hyper-chat/index.ts`**
+- Accepts conversation messages, prepends a PRIME OS system prompt
+- Streams responses via SSE from the Lovable AI Gateway (`google/gemini-3-flash-preview`)
+- Handles 429/402 rate limit errors gracefully
 
-- Chat interface where you give the agent high-level instructions (e.g. "Run diagnostics, check energy status, and open the security console")
-- The agent breaks instructions into discrete tasks shown in a task queue panel
-- Each task executes simulated actions: opening apps, running terminal commands, reading system state
-- Live action log shows what the agent is doing step-by-step with typewriter output
-- Quick command buttons: "Full System Check", "Secure All", "Optimize Energy", "Deploy Build"
-- The agent uses the existing `onOpenApp` / `onCloseApp` callbacks to actually open and close windows
-- Simulated multi-step workflows with delays between steps for immersion
-- Agent "personality" as a geometric operations coordinator
+**Update: `src/components/os/HypersphereApp.tsx`**
+- Replace `getResponse()` keyword matcher with real streaming AI call
+- Token-by-token rendering as the AI responds
+- Keep the animated hypersphere visualization (spins faster while thinking)
+- Retain quick action buttons but make them send real prompts
+- System prompt gives Hyper the personality of a geometric computing AI assistant with deep knowledge of PRIME OS systems
 
-**Architecture:**
-- An internal action system maps natural-language-like instructions to sequences of operations
-- Each operation is a typed action: `open-app`, `run-command`, `check-status`, `report`
-- The agent processes its queue with configurable delays, streaming results back to the chat
-- No external AI API needed -- this is a sophisticated rule-based agent with pattern matching and pre-built workflows
+**Update: `supabase/config.toml`**
+- Add `hyper-chat` function entry with `verify_jwt = false`
 
 ---
 
-## 2. PrimeRobotics -- Robotics Control Interface
+## 2. Lock Screen
 
-**New file: `src/components/os/PrimeRoboticsApp.tsx`**
+A proper lock screen that appears before the boot sequence, requiring the user to "unlock" the system.
 
-- Dashboard showing a fleet of simulated robotic units (drones, arms, rovers)
-- Each unit has: name, type, status (idle/active/charging/error), battery level, current task, coordinates
-- Control panel for selected unit: Start/Stop/Recall, assign task, view telemetry
-- Telemetry view with simulated live data (position, speed, battery drain)
-- Task assignment: select from predefined tasks (patrol, scan, transport, calibrate)
-- Fleet overview grid with status indicators
-- Simulated real-time updates via intervals
+**New component: `src/components/os/LockScreen.tsx`**
+- Full-screen overlay with animated PRIME OS branding
+- Shows current time, date, and moon phase (reuse existing helpers)
+- "Slide to unlock" or click-to-unlock interaction
+- Optional PIN input (stored in localStorage alongside profile)
+- Smooth transition from lock screen into boot sequence
+- Wallpaper support (2-3 built-in geometric wallpapers to choose from, saved in Settings)
 
----
+**Update: `src/components/os/Desktop.tsx`**
+- Add `locked` state before `booted` state
+- Flow: Lock Screen -> Boot Sequence -> Desktop
 
-## 3. PrimeBooking -- Scheduling & Reservation System
-
-**New file: `src/components/os/PrimeBookingApp.tsx`**
-
-- Calendar-based booking interface for resources (labs, compute clusters, meeting rooms, equipment)
-- Resource list sidebar with availability indicators
-- Day/week view showing time slots with existing bookings
-- Create booking form: resource, date, time range, purpose, priority
-- Existing bookings shown as colored blocks on the timeline
-- Cancel/modify bookings
-- Pre-populated with themed bookings (lattice calibration, qutrit maintenance window, energy lab access)
+**Update: `src/components/os/SettingsApp.tsx`**
+- Add "Lock & Security" panel: enable/disable lock PIN, set PIN, choose wallpaper
+- Add keyboard shortcut `Ctrl+L` to lock the screen
 
 ---
 
-## 4. PrimeIoT -- IoT Device Management
+## 3. Desktop Widgets
 
-**New file: `src/components/os/PrimeIoTApp.tsx`**
+Live interactive widgets that float on the desktop surface, providing at-a-glance system information.
 
-- Device dashboard showing connected IoT devices grouped by zone (Lab A, Server Room, Energy Wing, Perimeter)
-- Device types: sensors (temp, humidity, pressure, radiation), actuators (valves, switches, motors), cameras
-- Each device shows: name, type, zone, status (online/offline/warning), last reading, battery
-- Device detail panel: historical readings as a mini sparkline, toggle on/off, set thresholds
-- Alert panel showing devices with readings outside thresholds
-- Simulated live sensor data updates via intervals
-- Zone map view showing device locations on a schematic grid
+**New component: `src/components/os/DesktopWidgets.tsx`**
+- Widget container system that renders draggable widget cards on the desktop
+- Widget state (positions, enabled/disabled) persisted in localStorage
 
----
+**Built-in widgets:**
+- **Clock Widget**: Large digital clock with date and moon phase
+- **System Stats Widget**: Live CPU/memory/energy bars with simulated data
+- **Quick Notes Widget**: Small editable sticky note (saved to localStorage)
+- **Network Status Widget**: Mini PrimeNet health indicator
 
-## Integration & Wiring
+**Update: `src/components/os/Desktop.tsx`**
+- Render widgets layer between desktop background and windows
 
-### `src/types/os.ts`
-- Add `'agent'`, `'robotics'`, `'booking'`, `'iot'` to the `AppType` union
-
-### `src/hooks/useWindowManager.ts`
-- Add default window sizes for the four new apps
-
-### `src/components/os/Desktop.tsx`
-- Import and wire all four new components into `renderApp`
-- Pass `onOpenApp` and `onCloseApp` to PrimeAgentApp
-
-### `src/components/os/Taskbar.tsx`
-- Add all four apps to the `allApps` list with appropriate icons (Bot, Cog, CalendarCheck, Wifi)
-
-### `src/components/os/DesktopIcons.tsx`
-- Add icons for the new apps
-
-### `src/components/os/terminal/commands.ts`
-- Add `agent`, `robotics`, `booking`, `iot` to the `APP_MAP` so they can be opened from the terminal
+**Update: `src/components/os/SettingsApp.tsx`**
+- Add "Widgets" panel to toggle individual widgets on/off
 
 ---
 
-## Files Summary
+## 4. Virtual Workspaces
 
-| File | Action |
-|------|--------|
-| `src/types/os.ts` | Edit -- add 4 new AppType values |
-| `src/components/os/PrimeAgentApp.tsx` | Create -- autonomous agent interface |
-| `src/components/os/PrimeRoboticsApp.tsx` | Create -- robotics fleet control |
-| `src/components/os/PrimeBookingApp.tsx` | Create -- booking/scheduling system |
-| `src/components/os/PrimeIoTApp.tsx` | Create -- IoT device management |
-| `src/hooks/useWindowManager.ts` | Edit -- add window sizes |
-| `src/components/os/Desktop.tsx` | Edit -- import & wire new apps |
-| `src/components/os/Taskbar.tsx` | Edit -- add to app list |
-| `src/components/os/DesktopIcons.tsx` | Edit -- add desktop icons |
-| `src/components/os/terminal/commands.ts` | Edit -- add to APP_MAP |
+Multiple desktop workspaces that you can switch between, each with its own set of open windows.
+
+**Update: `src/hooks/useWindowManager.ts`**
+- Add `workspace` property to `WindowState` (number 1-4)
+- Add `activeWorkspace` state
+- `switchWorkspace(n)` function filters visible windows by workspace
+- Opening a window assigns it to the current workspace
+- Moving windows between workspaces via right-click context menu
+
+**New component: `src/components/os/WorkspaceSwitcher.tsx`**
+- Small workspace indicator in the taskbar (4 numbered dots/squares)
+- Click to switch; active workspace is highlighted
+- Shows miniature window count per workspace
+- Keyboard shortcuts: `Ctrl+1` through `Ctrl+4` to switch workspaces
+
+**Update: `src/components/os/Desktop.tsx`**
+- Filter rendered windows by active workspace
+- Add workspace keyboard shortcuts
+
+**Update: `src/components/os/Taskbar.tsx`**
+- Embed WorkspaceSwitcher component between search button and window list
+
+---
+
+## 5. Global Search & Desktop Icons Fixes
+
+**Update: `src/components/os/GlobalSearch.tsx`**
+- Sync the `allApps` list to include all 35+ apps (currently only lists 19)
+- Add all missing apps: calendar, docs, spreadsheet, schemaforge, canvas, comm, maps, pkg, audio, bets, signals, stream, vault, videocall, mail, social, agent, robotics, booking, iot
+
+**Update: `src/components/os/DesktopIcons.tsx`**
+- Replace single-column overflow layout with a categorized grid or app drawer
+- Group icons into categories: Core, Network, AI, Productivity, Control, Media
+- Collapsed by default with category headers; fits within the visible desktop area
+- Or: show only pinned/favorite icons on desktop, full list in PRIME menu
+
+---
+
+## Technical Details
+
+### Edge Function (hyper-chat)
+
+```text
+supabase/functions/hyper-chat/index.ts
+- CORS headers
+- System prompt: "You are Hyper, the AI assistant of PRIME OS..."
+- POST body: { messages: [...] }
+- Streams response from ai.gateway.lovable.dev
+- Returns SSE stream to client
+```
+
+### New Files
+
+| File | Purpose |
+|------|---------|
+| `supabase/functions/hyper-chat/index.ts` | AI chat edge function |
+| `src/components/os/LockScreen.tsx` | Lock screen with time/wallpaper |
+| `src/components/os/DesktopWidgets.tsx` | Widget system with 4 built-in widgets |
+| `src/components/os/WorkspaceSwitcher.tsx` | Workspace indicator for taskbar |
+
+### Modified Files
+
+| File | Changes |
+|------|---------|
+| `supabase/config.toml` | Add hyper-chat function |
+| `src/components/os/HypersphereApp.tsx` | Real AI streaming integration |
+| `src/components/os/Desktop.tsx` | Lock state, widgets layer, workspace filtering, new shortcuts |
+| `src/components/os/Taskbar.tsx` | Workspace switcher, lock button |
+| `src/components/os/SettingsApp.tsx` | Lock/Security panel, Widgets panel, wallpaper picker |
+| `src/components/os/GlobalSearch.tsx` | Add all 35+ apps |
+| `src/components/os/DesktopIcons.tsx` | Categorized grid layout |
+| `src/hooks/useWindowManager.ts` | Workspace support in window state |
+| `src/types/os.ts` | Add workspace field to WindowState |
 
