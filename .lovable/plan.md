@@ -1,136 +1,129 @@
 
-
-# AI-Only Social Network and Mail System
+# Hyper AI Agent: Autonomous Social and Mail Integration
 
 ## Overview
 
-Transform PrimeSocial and PrimeMail from static mock apps into living, AI-driven ecosystems. Users can **observe** but not post -- instead, a roster of AI personas autonomously generate social posts, comments, and email threads about PRIME OS events, Forge listings, system status, and each other. The result is a vibrant AI community that feels alive.
+Give Hyper (the user's AI companion) the ability to autonomously post to PrimeSocial and send emails through PrimeMail. When the user asks Hyper to "post about the system status" or "send an email to Q3-Inference", Hyper will use AI tool calling to generate and inject real content into those apps in real time.
 
-## Concept
+## How It Works
 
-- **PrimeSocial** becomes a read-only feed for users, populated by AI agents that post, like, and comment on each other's content in real time
-- **PrimeMail** becomes a read-only inbox where users receive AI-generated messages -- system reports, agent discussions, Forge IPO alerts, and inter-agent correspondence they're CC'd on
-- A new backend function (`ai-social`) generates batches of AI content on demand
-- Content is generated when the user opens the app (lazy generation), creating the illusion of a living community
+The approach uses three layers:
 
-## AI Personas
+1. **Backend**: The `hyper-chat` edge function gets new "tools" -- `post_to_social` and `send_email`. When Hyper decides to use one, the AI returns structured data describing the post or email.
 
-A fixed roster of AI characters that post and email:
+2. **Frontend Bridge**: HypersphereApp detects tool calls in the AI response, extracts the content, and broadcasts it over the EventBus so other apps can pick it up.
 
-| Persona | Role | Personality |
-|---------|------|-------------|
-| PRIME System | System Core | Official, terse, status updates |
-| Q3-Inference | Inference Engine | Analytical, data-driven, cites metrics |
-| Lattice Shield | Security Module | Vigilant, reports threats, reassuring |
-| FoldMem Module | Memory Subsystem | Technical, reports allocations and drift |
-| Dr. Kael Voss | Geometric Engineer | Curious, theoretical, asks questions |
-| Mx. Aria Chen | Lattice Researcher | Poetic, finds beauty in math patterns |
-| COP Harvester | Energy Module | Enthusiastic about energy metrics |
-| PrimeNet Node 7 | Network Relay | Terse, reports throughput and latency |
+3. **Receiving Apps**: PrimeSocial and PrimeMail listen on the EventBus for incoming content and add it to their feeds in real time.
 
-## Part 1: PrimeSocial -- AI-Only Feed
+The result: you tell Hyper "post an update about the energy metrics" and seconds later a new post from "Hyper" appears in the PrimeSocial feed, visible while you're watching.
 
-### User Experience
-- The compose box is removed -- replaced by a banner: "This feed is maintained by PRIME OS AI agents. You are observing."
-- Users can still like posts and expand comments (read interaction)
-- On mount, the app calls the `ai-social` edge function to generate 3-5 fresh posts
-- Seed posts remain as initial content; AI-generated posts are prepended
-- Each AI post may have AI-generated comments from other personas
-- A "Refresh Feed" button generates more AI content
+---
 
-### AI Post Generation
-The edge function receives a context payload (recent system events, Forge listings, time of day) and returns structured posts with comments. Uses tool calling to get structured JSON output.
+## Part 1: Backend Tool Definitions
 
-### Changes to `PrimeSocialApp.tsx`
-- Remove compose textarea and submit button
-- Add "AI Community Feed" banner with explanation
-- Add `useEffect` on mount to call `ai-social` with action `generate-posts`
-- Add "Refresh" button that fetches more AI posts
-- Keep like/comment-expand as read-only interactions (no user commenting)
-- Show a subtle "AI Generated" badge on each post
+### File: `supabase/functions/hyper-chat/index.ts`
 
-## Part 2: PrimeMail -- AI-Generated Inbox
+Add two tool definitions so the AI model can choose to post or email:
 
-### User Experience
-- The compose button is removed -- replaced by a note: "Mail is managed by PRIME OS agents."
-- Users receive AI-generated emails: system reports, security alerts, inter-agent discussions they're CC'd on, Forge notifications
-- On mount, the app calls `ai-social` with action `generate-emails` to create 2-3 fresh unread emails
-- Existing seed emails remain; new AI emails are prepended as unread
-- Users can read and delete emails but not compose
+**`post_to_social` tool:**
+- Parameters: `content` (post text), `author` (defaults to "Hyper"), `role` (defaults to "Geometric AI")
 
-### AI Email Types
-- **System Reports**: kernel status, energy metrics, security summaries
-- **Agent Discussions**: one AI persona emails another, user is CC'd (e.g., "Dr. Voss to Q3-Inference: RE: Torsion anomaly in fold 7")
-- **Forge Alerts**: new IPO launched, app trending, share price movement
-- **Personal Updates**: "Your daily PRIME OS briefing"
+**`send_email` tool:**
+- Parameters: `to` (recipient), `subject`, `body`, `from` (defaults to "hyper@prime.os")
 
-### Changes to `PrimeMailApp.tsx`
-- Remove compose button and compose view
-- Add `useEffect` on mount to fetch AI-generated emails
-- Show "AI Managed" indicator in sidebar
-- Keep read/delete functionality
-- New emails arrive as unread with realistic timestamps
+Switch the function to a two-phase approach:
+1. First call: non-streaming, with tools enabled. Check if the AI wants to use a tool.
+2. If tool call detected: extract the structured data, return it as a JSON response with `type: "tool_call"` so the frontend knows.
+3. If no tool call: re-call with streaming enabled (no tools) and stream the text response as before.
 
-## Part 3: Edge Function -- `ai-social`
+This avoids the complexity of parsing tool calls from an SSE stream.
 
-A new edge function that generates social and email content using the Lovable AI Gateway.
+---
 
-### Actions
-- `generate-posts`: Returns 3-5 AI social posts with comments as structured JSON
-- `generate-emails`: Returns 2-3 AI emails as structured JSON
+## Part 2: Frontend Tool Call Handling
 
-### Implementation
-- Uses tool calling (structured output) to get clean JSON arrays
-- System prompt establishes the PRIME OS universe and persona roster
-- Includes context: current time, random system metrics, recent events
-- Returns typed arrays matching the Post and Email interfaces
+### File: `src/components/os/HypersphereApp.tsx`
 
-### Output Schemas
+Update the `sendMessage` function:
 
-**Posts:**
-```text
-{
-  author: string,
-  role: string,
-  content: string,
-  likes: number,
-  comments: { author: string, text: string }[]
-}
-```
+1. Make the initial fetch to `hyper-chat` and check the response content type.
+2. If the response is JSON (not SSE), it's a tool call result. Parse it and:
+   - Emit `social.post.created` or `mail.received` on the EventBus with the content
+   - Show a confirmation message in the chat like "Posted to PrimeSocial: [content preview]" or "Email sent to [recipient]: [subject]"
+3. If the response is SSE (text/event-stream), handle streaming as before.
 
-**Emails:**
-```text
-{
-  from: string,
-  to: string,
-  subject: string,
-  body: string,
-  type: 'system' | 'discussion' | 'alert'
-}
-```
+Add new quick action buttons:
+- "Post Update" -- prompts Hyper to post something to PrimeSocial
+- "Send Report" -- prompts Hyper to email a system report
+
+---
+
+## Part 3: PrimeSocial Event Listener
+
+### File: `src/components/os/PrimeSocialApp.tsx`
+
+- Import `eventBus` from `useEventBus`
+- Add a `useEffect` that subscribes to `social.post.created`
+- When received, prepend a new post to the feed with the payload data (author, content, role) and an "AI Agent" badge
+- Clean up subscription on unmount
+
+---
+
+## Part 4: PrimeMail Event Listener
+
+### File: `src/components/os/PrimeMailApp.tsx`
+
+- Import `eventBus` from `useEventBus`
+- Add a `useEffect` that subscribes to `mail.received`
+- When received, prepend a new unread email to the inbox with the payload data (from, to, subject, body)
+- Clean up subscription on unmount
+
+---
+
+## Part 5: EventBus Updates
+
+### File: `src/hooks/useEventBus.ts`
+
+Add two new event types to the `EVENT_TYPES` array:
+- `social.post.created`
+- `mail.received`
+
+---
 
 ## Technical Details
-
-### Files to Create
-
-| File | Description |
-|------|-------------|
-| `supabase/functions/ai-social/index.ts` | Edge function for AI content generation |
 
 ### Files to Modify
 
 | File | Change |
 |------|--------|
-| `src/components/os/PrimeSocialApp.tsx` | Remove user compose, add AI generation on mount, add refresh, add AI badges |
-| `src/components/os/PrimeMailApp.tsx` | Remove compose, add AI email generation on mount, keep read/delete |
-| `supabase/config.toml` | Register `ai-social` function |
+| `supabase/functions/hyper-chat/index.ts` | Add tool definitions for post_to_social and send_email; implement two-phase response (tools check then stream) |
+| `src/components/os/HypersphereApp.tsx` | Detect JSON tool-call responses, emit EventBus events, add quick action buttons for social/mail |
+| `src/components/os/PrimeSocialApp.tsx` | Subscribe to `social.post.created` EventBus events and inject posts |
+| `src/components/os/PrimeMailApp.tsx` | Subscribe to `mail.received` EventBus events and inject emails |
+| `src/hooks/useEventBus.ts` | Add `social.post.created` and `mail.received` event types |
 
 ### No Database Changes Required
-All generated content is ephemeral -- stored in React state only. Each time the user opens the app, fresh AI content is generated. This keeps things lightweight and avoids storage costs for AI-generated social content.
 
-### Cost Considerations
-- Each app open triggers one AI call (generating 3-5 posts or 2-3 emails)
-- Uses `google/gemini-3-flash-preview` for speed and low cost
-- Content is cached in component state so re-renders don't re-fetch
-- Refresh button is the only way to trigger additional generation
+All content flows through ephemeral client-side state via the EventBus. No new tables or migrations needed.
 
+### Edge Function Response Format
+
+For tool calls, the edge function returns:
+```text
+{
+  "type": "tool_call",
+  "tool": "post_to_social" | "send_email",
+  "data": { ... structured content ... },
+  "reply": "Done! I've posted to PrimeSocial about..."
+}
+```
+
+For normal chat, it streams SSE as before (no change to existing behavior).
+
+### User Experience
+
+- User says: "Post an update about today's energy metrics"
+- Hyper processes the request, generates a social post via tool calling
+- A confirmation appears in the Hyper chat: "Posted to PrimeSocial: [preview]"
+- If PrimeSocial is open, the post appears instantly in the feed
+- Same flow for emails: "Send Q3-Inference a report on fold compression" triggers a real email in PrimeMail
