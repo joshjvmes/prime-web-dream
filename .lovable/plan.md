@@ -1,66 +1,75 @@
 
-# New GUI Apps + Expanded Interactivity
+
+# New GUI Apps: Web Browser, Data Center, and More
 
 ## Overview
 
-Add 4 new applications to PRIME OS -- a System Monitor dashboard, a Text Editor, a Chat/Messaging app, and a Security Console -- plus wire them into the existing terminal, taskbar, and window manager. Each app follows the established pattern: a component in `src/components/os/`, registered in the `AppType` union, and accessible from the PRIME menu and terminal.
+Add 2-4 new applications to PRIME OS, each following the established component pattern. The Web Browser and Data Center are the primary additions, with a Task Manager and Media Viewer as optional extras.
 
 ---
 
-## New App 1: System Monitor Dashboard
+## App 1: PrimeBrowser (Web Browser)
 
-**File:** `src/components/os/SystemMonitorApp.tsx`
+**File:** `src/components/os/PrimeBrowserApp.tsx`
 
-A real-time mission-control overview combining data from across the OS into one view:
+A simulated intranet browser for the prime coordinate lattice:
 
-- **CPU/Memory gauges:** Animated arc gauges (SVG) showing aggregate qutrit core utilization and FoldMem usage, updating every second with simulated fluctuations.
-- **Process sparklines:** A mini chart showing total process count and state distribution (Past/Present/Future) over the last 30 ticks.
-- **Network throughput bar:** Live packets-per-second with a rolling sparkline, similar to the Energy Monitor's COP history.
-- **Energy COP tile:** Current COP value and mode in a compact badge.
-- **Storage capacity ring:** A donut chart showing folded vs. free capacity.
-- **Grid layout:** 2x3 tile grid so every subsystem is visible at a glance.
-
----
-
-## New App 2: Text Editor (PrimeEdit)
-
-**File:** `src/components/os/TextEditorApp.tsx`
-
-A minimal code/text editor integrated with the Files app's file tree:
-
-- **File browser sidebar:** A narrow left panel listing the same file tree from FilesApp. Click a file to open it.
-- **Editor pane:** A `<textarea>` with monospace styling, line numbers rendered as a gutter column, and basic syntax-style coloring (lines starting with `//` dimmed, keywords like `fold`, `map`, `flow` highlighted via regex class assignment).
-- **Tab bar:** Open multiple files as tabs across the top. Active tab is highlighted.
-- **Save/New/Close controls:** A toolbar with buttons. "Save" writes back to the in-memory file tree (shared state or self-contained). "New" creates a blank untitled file.
-- **Status bar:** Bottom row showing line count, cursor position, and file coordinate.
+- **Address bar** with navigation buttons (back, forward, refresh) and a URL input field showing `prime://` protocol addresses.
+- **Bookmarks bar** with preset links: `prime://home`, `prime://docs`, `prime://net-status`, `prime://q3-lab`, `prime://energy-grid`.
+- **Rendered pages** -- each URL maps to a mini "web page" component rendered inline:
+  - `prime://home` -- Welcome portal with system status summary and quick links
+  - `prime://docs` -- A documentation page with collapsible sections about PRIME OS concepts
+  - `prime://net-status` -- Live network stats (reuses PrimeNet data patterns)
+  - `prime://q3-lab` -- Interactive qutrit playground (toggle states, see superposition)
+  - `prime://energy-grid` -- Energy grid visualization
+  - Unknown URLs show a "404 - Coordinate not found in lattice" error page
+- **Tab system** -- open multiple tabs, each with its own URL and history stack.
+- **Loading animation** -- brief progress bar on navigation with "Resolving geometric route..." text.
+- **Page source button** -- toggles showing the "source" of the current page (simulated markup in a monospace view).
 
 ---
 
-## New App 3: PrimeChat (Messaging)
+## App 2: Data Center (LatticeCore)
 
-**File:** `src/components/os/PrimeChatApp.tsx`
+**File:** `src/components/os/DataCenterApp.tsx`
 
-A simulated inter-node messaging interface:
+A visual server infrastructure management dashboard:
 
-- **Channel list sidebar:** Left panel with channels like `#general`, `#primenet-ops`, `#q3-research`, `#energy-lab`. Each shows an unread indicator.
-- **Message view:** Right panel with timestamped messages from simulated users (e.g., `lattice-admin`, `q3-daemon`, `node-07`). Messages are styled as chat bubbles with monospace text.
-- **Auto-responses:** When the user sends a message, after a 1-2 second delay, a simulated AI/system user responds with contextually relevant text (randomized from a pool per channel). Encrypted channel indicators shown as a lock icon.
-- **Input bar:** Bottom text input with a send button. Messages from the user appear right-aligned with a distinct color.
-- **Typing indicator:** A brief "lattice-admin is computing..." animation before auto-responses appear.
+- **Rack visualization** -- a grid of 4x4 server racks rendered as styled rectangles, each containing 6 server units. Color-coded by status: green (online), amber (high load), red (critical), gray (offline).
+- **Live metrics per node** -- temperature (with heat gradient coloring), CPU load bar, memory usage, and uptime counter. Values fluctuate with simulated intervals.
+- **Node detail panel** -- click any server unit to open a detail sidebar showing: hostname, prime coordinate, OS version, running processes list, network connections, and a mini sparkline of load history.
+- **Aggregate stats header** -- total nodes online, average temperature, total compute capacity, and network throughput across the data center.
+- **Alert feed** -- a bottom panel showing recent alerts (node overheating, failover triggered, maintenance scheduled) with timestamps and severity badges.
+- **Controls** -- buttons to "Restart Node", "Migrate Workload", and "Run Diagnostics" (trigger animations and status changes).
+- **Map view toggle** -- switch between rack grid view and a geographic-style topology map showing node locations on a stylized lattice diagram.
 
 ---
 
-## New App 4: Security Console (Lattice Shield)
+## App 3: Task Manager (PrimeBoard) -- Optional
 
-**File:** `src/components/os/SecurityConsoleApp.tsx`
+**File:** `src/components/os/PrimeBoardApp.tsx`
 
-A visual security dashboard for the prime coordinate network:
+A Kanban-style task/operation tracker:
 
-- **Threat feed:** A scrolling log of simulated security events (e.g., "Unauthorized coordinate probe at (41,43,47)", "Lattice integrity verified: sector 7"). Color-coded by severity (green/amber/red). Auto-generates a new event every 3-5 seconds.
-- **Integrity scanner:** A button to run a "full lattice scan" -- triggers an animated progress bar that fills over 5 seconds, then displays a report with pass/fail items.
-- **Firewall rules table:** A list of simulated rules (allow/deny) with source/destination coordinates. Users can toggle rules on/off.
-- **Threat level gauge:** An SVG arc gauge showing current threat level (Low/Medium/High) that fluctuates.
-- **Active connections panel:** Shows currently "connected" nodes with their coordinates and encryption status.
+- **Three columns**: Queued, Computing, Complete -- each styled as a scrollable lane.
+- **Task cards** with operation name, priority badge (P0/P1/P2), assigned node, and estimated completion time.
+- **Drag and drop** between columns using mouse events (no external library needed -- use onDragStart/onDrop handlers).
+- **Auto-generated tasks** -- new "lattice operations" appear in the Queued column every 10-15 seconds with randomized names like "Fold sector 7 manifold", "Recalibrate Q3 core 41".
+- **Auto-completion** -- tasks in Computing column have a progress timer; after their duration elapses they auto-move to Complete.
+- **Add task button** -- manually create a new task with a name input.
+
+---
+
+## App 4: Media Viewer (PrimeGallery) -- Optional
+
+**File:** `src/components/os/PrimeGalleryApp.tsx`
+
+A viewer for procedurally generated geometric visualizations:
+
+- **Gallery grid** -- thumbnails of generated SVG art pieces (Adinkra symbols, prime spirals, lattice projections, Fibonacci patterns).
+- **Full viewer** -- click a thumbnail to view it full-size with title, description, and coordinate metadata.
+- **Live generation** -- each piece is an SVG rendered with randomized parameters so it looks different on each visit.
+- **Categories sidebar** -- filter by type: Adinkra, Fractals, Lattice Maps, Prime Spirals.
 
 ---
 
@@ -69,36 +78,40 @@ A visual security dashboard for the prime coordinate network:
 ### `src/types/os.ts`
 Add to `AppType` union:
 ```
-'monitor' | 'editor' | 'chat' | 'security'
+'browser' | 'datacenter' | 'board' | 'gallery'
 ```
+(Only the ones being built.)
 
 ### `src/components/os/Desktop.tsx`
-- Import the 4 new app components.
+- Import new app components.
 - Add cases to the `renderApp` switch.
 
 ### `src/components/os/Taskbar.tsx`
-- Add 4 entries to the `allApps` array with appropriate icons:
-  - Monitor: `Monitor` icon
-  - Editor: `FileText` icon
-  - Chat: `MessageSquare` icon
-  - Security: `Shield` icon
-
-### `src/components/os/DesktopContextMenu.tsx`
-- Add the new apps to the context menu if they're listed there.
+- Add entries to `allApps` array:
+  - Browser: `Globe` icon, title "PrimeBrowser"
+  - Data Center: `Server` icon, title "LatticeCore"
+  - Board: `Kanban` icon (or `LayoutList`), title "PrimeBoard"
+  - Gallery: `Image` icon, title "PrimeGallery"
 
 ### `src/components/os/terminal/commands.ts`
-- Add entries to `APP_MAP` so `open monitor`, `open editor`, `open chat`, `open security` work.
-- Update `HELP_TEXT` to mention new apps.
+- Add entries to `APP_MAP`: `open browser`, `open datacenter`, `open board`, `open gallery`.
+- Update `HELP_TEXT`.
 
 ### `src/hooks/useWindowManager.ts`
-- Adjust default window sizes for new app types (monitor gets larger default, editor gets wider).
+- Default sizes: browser 850x550, datacenter 800x550, board 750x500, gallery 700x480.
+
+### `src/components/os/DesktopIcons.tsx`
+- Add icons for the new apps to the desktop icon grid.
 
 ---
 
 ## Technical Notes
 
-- All data is simulated with `useState` + `setInterval` -- no backend needed.
-- SVG gauges follow the same pattern as `EnergyMonitorApp` (arc paths with `strokeDasharray`/`strokeDashoffset`).
-- Styling uses existing CSS custom properties (`--prime-cyan`, `--prime-amber`, `--prime-green`, etc.) and the `font-mono`/`font-display` classes.
-- No new dependencies required. Uses `framer-motion` for animations (already installed), `lucide-react` for icons.
-- Each app is self-contained in its own file with no shared state dependencies.
+- All data simulated with `useState` + `setInterval` -- no backend.
+- Browser tab/history system uses a simple stack array per tab in state.
+- Data Center rack grid uses CSS Grid with inline style coloring for temperature gradients.
+- Kanban drag-and-drop uses native HTML5 drag events (no library needed).
+- SVG gallery pieces generated with parameterized path functions.
+- Styling follows existing conventions: `font-mono`, `font-display`, CSS custom properties for colors.
+- No new dependencies required.
+
