@@ -119,6 +119,29 @@ export default function Desktop() {
   const latticeOpsRef = useRef(0);
   const [latticeOps, setLatticeOps] = useState(0);
 
+  // Read display settings for font size, animation speed, cursor theme
+  const [displaySettings, setDisplaySettings] = useState(() => {
+    try {
+      const s = localStorage.getItem('prime-os-settings');
+      return s ? JSON.parse(s) : {};
+    } catch { return {}; }
+  });
+
+  useEffect(() => {
+    const handler = () => {
+      try {
+        const s = localStorage.getItem('prime-os-settings');
+        setDisplaySettings(s ? JSON.parse(s) : {});
+      } catch {}
+    };
+    window.addEventListener('storage', handler);
+    window.addEventListener('prime-settings-changed', handler);
+    return () => {
+      window.removeEventListener('storage', handler);
+      window.removeEventListener('prime-settings-changed', handler);
+    };
+  }, []);
+
   const {
     windows, openWindow, closeWindow, minimizeWindow, focusWindow, moveWindow, resizeWindow,
     maximizeWindow, snapWindow, tileAllWindows, cascadeWindows,
@@ -385,8 +408,12 @@ export default function Desktop() {
     }
   };
 
-  return (
-    <div className="h-screen w-screen overflow-hidden bg-background prime-grid scan-lines relative">
+    const fontSizeClass = displaySettings.fontSize === 'compact' ? 'text-xs' : displaySettings.fontSize === 'large' ? 'text-base' : 'text-sm';
+    const cursorStyle = displaySettings.cursorTheme === 'Crosshair' ? 'crosshair' : displaySettings.cursorTheme === 'Lattice' ? 'cell' : 'default';
+    const animSpeed = displaySettings.animationSpeed === 'slow' ? '0.5' : displaySettings.animationSpeed === 'fast' ? '2' : '1';
+
+    return (
+    <div className={`h-screen w-screen overflow-hidden bg-background prime-grid scan-lines relative ${fontSizeClass}`} style={{ cursor: cursorStyle, '--animation-speed': animSpeed } as React.CSSProperties}>
       {locked && <LockScreen onUnlock={handleUnlock} user={user} />}
       {!locked && <BootSequence onComplete={handleBootComplete} />}
 

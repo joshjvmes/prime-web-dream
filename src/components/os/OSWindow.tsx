@@ -1,7 +1,33 @@
-import { useRef, useCallback } from 'react';
+import { useRef, useCallback, useState, useEffect, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { WindowState } from '@/types/os';
 import { X, Minus, Maximize2, Minimize2 } from 'lucide-react';
+
+function useOSSettings() {
+  const [settings, setSettings] = useState(() => {
+    try {
+      const s = localStorage.getItem('prime-os-settings');
+      return s ? JSON.parse(s) : {};
+    } catch { return {}; }
+  });
+
+  useEffect(() => {
+    const handler = () => {
+      try {
+        const s = localStorage.getItem('prime-os-settings');
+        setSettings(s ? JSON.parse(s) : {});
+      } catch {}
+    };
+    window.addEventListener('storage', handler);
+    window.addEventListener('prime-settings-changed', handler);
+    return () => {
+      window.removeEventListener('storage', handler);
+      window.removeEventListener('prime-settings-changed', handler);
+    };
+  }, []);
+
+  return settings;
+}
 
 interface OSWindowProps {
   window: WindowState;
@@ -21,6 +47,9 @@ const SNAP_THRESHOLD = 12;
 
 export default function OSWindow({ window: win, onClose, onMinimize, onMaximize, onFocus, onMove, onResize, onSnap, children }: OSWindowProps) {
   const dragRef = useRef<{ startX: number; startY: number; winX: number; winY: number } | null>(null);
+  const osSettings = useOSSettings();
+  const windowOpacity = osSettings.windowOpacity ?? 0.95;
+  const animSpeed = osSettings.animationSpeed === 'slow' ? 0.4 : osSettings.animationSpeed === 'fast' ? 0.1 : 0.2;
 
   const handleTitleMouseDown = useCallback((e: React.MouseEvent) => {
     if (win.isMaximized) return;
@@ -112,7 +141,7 @@ export default function OSWindow({ window: win, onClose, onMinimize, onMaximize,
       initial={{ opacity: 0, scale: 0.9 }}
       animate={{ opacity: 1, scale: 1 }}
       exit={{ opacity: 0, scale: 0.9 }}
-      transition={{ duration: 0.2 }}
+      transition={{ duration: animSpeed }}
       className="absolute"
       style={{
         left: win.x,
@@ -131,6 +160,7 @@ export default function OSWindow({ window: win, onClose, onMinimize, onMaximize,
             ? 'border-primary/40 glow-border'
             : 'border-border'
         } bg-card`}
+        style={{ opacity: windowOpacity }}
       >
         {resizeHandles}
         {/* Title bar */}
