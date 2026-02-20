@@ -1,44 +1,24 @@
 
 
-# Metadata, Favicon, Social Share & README Update
+# Landing Page Viewport & Spacing Fix
 
-## Overview
+## Problem
+The hero section has excessive padding and margins, causing the terminal preview and even the CTA buttons to get cut off below the viewport fold. The page correctly scrolls for all the other sections, but the first impression (hero) should fit within the initial viewport.
 
-Update branding across the project for **PRIME OS by Rocket Logic Global** -- favicon, metadata, social share image, and README.
-
----
+## Solution
+Tighten the hero section spacing so the headline, tagline, CTA buttons, and terminal preview all fit within the initial viewport on desktop. Keep the page scrollable for the remaining sections (stats, features, architecture, CTA, footer).
 
 ## Changes
 
-### 1. Copy the uploaded SVG to `public/`
-- Copy `user-uploads://rocket-logic-silver.svg` to `public/rocket-logic-silver.svg`
-- This makes it available at `/rocket-logic-silver.svg` for favicon and OG image references
+### `src/pages/LandingPage.tsx`
 
-### 2. Update `index.html`
-- Set document title to "PRIME OS -- Geometric Computing Interface"
-- Update meta description
-- Add favicon link pointing to `/rocket-logic-silver.svg`
-- Add Apple touch icon
-- Update all Open Graph tags (og:title, og:description, og:image)
-- Update Twitter card tags
-- Add theme-color meta tag (dark background matching the OS)
-- Add author meta to "Rocket Logic Global"
+**Hero section spacing adjustments:**
+- Reduce top padding from `pt-32 md:pt-44` to `pt-24 md:pt-32` (less dead space above the hero)
+- Reduce bottom padding from `pb-20 md:pb-32` to `pb-12 md:pb-20`
+- Reduce the version badge bottom margin from `mb-8` to `mb-6`
+- Reduce the subtitle bottom margin from `mb-10` to `mb-6`
+- Reduce the terminal preview top margin from `mt-16 md:mt-20` to `mt-10 md:mt-14`
 
-### 3. Update `README.md`
-- Rebrand entirely for PRIME OS by Rocket Logic Global
-- Include project description (geometric computing OS, ternary logic, 11D folding)
-- List key features/apps
-- Keep development setup instructions
-- Add technology stack section
-- Add branding/attribution to Rocket Logic Global
+These are small tweaks that bring everything up so the hero content -- including the terminal preview -- is visible on first load without scrolling on standard desktop screens (1080p+). On smaller screens it will still scroll naturally, which is expected.
 
----
-
-## Files
-
-| File | Action |
-|------|--------|
-| `public/rocket-logic-silver.svg` | Copy from upload |
-| `index.html` | Edit -- favicon, metadata, OG tags |
-| `README.md` | Rewrite -- brand-appropriate content |
-
+No other files are affected. The rest of the page sections remain unchanged.
