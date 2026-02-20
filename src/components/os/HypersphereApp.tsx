@@ -5,11 +5,13 @@ import { eventBus } from '@/hooks/useEventBus';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import type { WindowState } from '@/types/os';
 
 interface Message {
   id: string;
   role: 'hyper' | 'user';
   text: string;
+  fromPriorSession?: boolean;
 }
 
 interface AgentAction {
@@ -22,6 +24,11 @@ interface Permissions {
   canPost: boolean;
   canEmail: boolean;
   canWallet: boolean;
+}
+
+interface HypersphereProps {
+  openWindows?: WindowState[];
+  activeWorkspace?: number;
 }
 
 function loadPermissions(): Permissions {
@@ -46,7 +53,7 @@ const QUICK_ACTIONS = [
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
-export default function HypersphereApp() {
+export default function HypersphereApp({ openWindows, activeWorkspace }: HypersphereProps) {
   const [messages, setMessages] = useState<Message[]>([
     { id: 'greeting', role: 'hyper', text: GREETING },
   ]);
@@ -56,8 +63,10 @@ export default function HypersphereApp() {
   const [agentActions, setAgentActions] = useState<AgentAction[]>([]);
   const [permissions, setPermissions] = useState<Permissions>(loadPermissions);
   const [activityOpen, setActivityOpen] = useState(false);
+  const [historyLoaded, setHistoryLoaded] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const sessionStartRef = useRef(Date.now());
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
@@ -67,10 +76,79 @@ export default function HypersphereApp() {
     localStorage.setItem('prime-os-hyper-permissions', JSON.stringify(permissions));
   }, [permissions]);
 
+  // Load conversation history for signed-in users
+  useEffect(() => {
+    if (historyLoaded) return;
+    (async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user) { setHistoryLoaded(true); return; }
+      try {
+        const { data } = await (supabase as any).from('ai_conversations')
+          .select('role, content, created_at')
+          .eq('user_id', session.user.id)
+          .order('created_at', { ascending: false })
+          .limit(20);
+        if (data && data.length > 0) {
+          const priorMessages: Message[] = data.reverse().map((m: any, i: number) => ({
+            id: `prior-${i}`,
+            role: m.role === 'user' ? 'user' as const : 'hyper' as const,
+            text: m.content,
+            fromPriorSession: true,
+          }));
+          setMessages(prev => [
+            prev[0], // greeting
+            ...priorMessages,
+            { id: 'divider', role: 'hyper' as const, text: '── New Session ──', fromPriorSession: true },
+          ]);
+        }
+      } catch {}
+      setHistoryLoaded(true);
+    })();
+  }, [historyLoaded]);
+
+  // Save assistant streaming response to DB after it completes
+  const saveAssistantResponse = async (content: string) => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user) return;
+      await (supabase as any).from('ai_conversations').insert({
+        user_id: session.user.id,
+        role: 'assistant',
+        content,
+      });
+    } catch {}
+  };
+
   const logAction = (type: AgentAction['type'], summary: string) => {
     const action: AgentAction = { type, summary, timestamp: new Date() };
     setAgentActions(prev => [action, ...prev].slice(0, 50));
     eventBus.emit('agent.action.logged', action);
+  };
+
+  // Build context payload
+  const buildContext = () => {
+    const profile = (() => {
+      try {
+        const p = JSON.parse(localStorage.getItem('prime-os-profile') || '{}');
+        return { name: p.name || '', title: p.title || 'Operator', bio: p.bio || '' };
+      } catch { return { name: '', title: 'Operator', bio: '' }; }
+    })();
+
+    const wallet = (() => {
+      try {
+        const w = JSON.parse(localStorage.getItem('prime-os-wallet-cache') || '{}');
+        return { os: w.os_balance ?? null, ix: w.ix_balance ?? null };
+      } catch { return { os: null, ix: null }; }
+    })();
+
+    return {
+      profile,
+      wallet,
+      permissions,
+      sessionMessages: messages.filter(m => !m.fromPriorSession && m.id !== 'greeting').length,
+      openApps: openWindows?.filter(w => !w.isMinimized).map(w => w.app) || [],
+      workspace: activeWorkspace || 1,
+    };
   };
 
   const sendMessage = async (text: string) => {
@@ -99,11 +177,13 @@ export default function HypersphereApp() {
       }
     } catch {}
 
-    // Build conversation history for API
-    const history = [...messages.filter(m => m.id !== 'greeting'), userMsg].map(m => ({
+    // Build conversation history for API (exclude prior session messages and divider)
+    const history = [...messages.filter(m => m.id !== 'greeting' && m.id !== 'divider' && !m.fromPriorSession), userMsg].map(m => ({
       role: m.role === 'user' ? 'user' as const : 'assistant' as const,
       content: m.text,
     }));
+
+    const context = buildContext();
 
     const assistantId = `h-${Date.now()}`;
     let assistantSoFar = '';
@@ -112,13 +192,17 @@ export default function HypersphereApp() {
       const controller = new AbortController();
       abortRef.current = controller;
 
+      // Get auth token for context-aware requests
+      const { data: { session } } = await supabase.auth.getSession();
+      const authToken = session?.access_token || SUPABASE_KEY;
+
       const resp = await fetch(`${SUPABASE_URL}/functions/v1/hyper-chat`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${SUPABASE_KEY}`,
+          Authorization: `Bearer ${authToken}`,
         },
-        body: JSON.stringify({ messages: history }),
+        body: JSON.stringify({ messages: history, context }),
         signal: controller.signal,
       });
 
@@ -154,7 +238,6 @@ export default function HypersphereApp() {
               setMessages(prev => [...prev, { id: assistantId, role: 'hyper', text: '⚠️ Email sending is currently disabled by operator. Enable it in the permission toggles above.' }]);
             }
           } else if (tool === 'check_balance') {
-            // Balance checks always allowed
             setMessages(prev => [...prev, { id: assistantId, role: 'hyper', text: data.reply || 'Balance checked.' }]);
           } else if (tool === 'transfer_tokens') {
             if (permissions.canWallet) {
@@ -268,6 +351,9 @@ export default function HypersphereApp() {
 
       if (!assistantSoFar) {
         setMessages(prev => [...prev, { id: assistantId, role: 'hyper', text: 'The lattice resonance is unclear. Please try again.' }]);
+      } else {
+        // Save assistant response to DB
+        saveAssistantResponse(assistantSoFar);
       }
     } catch (e: any) {
       if (e.name !== 'AbortError') {
@@ -340,19 +426,29 @@ export default function HypersphereApp() {
       {/* Messages */}
       <div ref={scrollRef} className="flex-1 overflow-y-auto p-3 space-y-3">
         {messages.map(msg => (
-          <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-            <div className={`max-w-[85%] px-3 py-2 rounded-lg text-[11px] leading-relaxed whitespace-pre-wrap ${
-              msg.role === 'user'
-                ? 'bg-primary/15 text-foreground border border-primary/20'
-                : 'bg-card/60 text-muted-foreground border border-border'
-            }`}>
-              {msg.role === 'hyper' && <span className="text-primary font-display text-[9px] tracking-wider block mb-1">HYPER</span>}
-              {msg.text.split(/(\*\*[^*]+\*\*)/).map((part, i) =>
-                part.startsWith('**') && part.endsWith('**')
-                  ? <strong key={i} className="text-foreground">{part.slice(2, -2)}</strong>
-                  : <span key={i}>{part}</span>
-              )}
-            </div>
+          <div key={msg.id}>
+            {msg.id === 'divider' ? (
+              <div className="flex items-center gap-2 py-2">
+                <div className="flex-1 h-px bg-border/50" />
+                <span className="text-[8px] text-muted-foreground/50 font-display tracking-wider">PRIOR SESSION</span>
+                <div className="flex-1 h-px bg-border/50" />
+              </div>
+            ) : (
+              <div className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                <div className={`max-w-[85%] px-3 py-2 rounded-lg text-[11px] leading-relaxed whitespace-pre-wrap ${
+                  msg.role === 'user'
+                    ? 'bg-primary/15 text-foreground border border-primary/20'
+                    : 'bg-card/60 text-muted-foreground border border-border'
+                } ${msg.fromPriorSession ? 'opacity-60' : ''}`}>
+                  {msg.role === 'hyper' && <span className="text-primary font-display text-[9px] tracking-wider block mb-1">HYPER</span>}
+                  {msg.text.split(/(\*\*[^*]+\*\*)/).map((part, i) =>
+                    part.startsWith('**') && part.endsWith('**')
+                      ? <strong key={i} className="text-foreground">{part.slice(2, -2)}</strong>
+                      : <span key={i}>{part}</span>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         ))}
         {thinking && !messages.some(m => m.id.startsWith('h-') && messages.indexOf(m) === messages.length - 1 && m.role === 'hyper') && (

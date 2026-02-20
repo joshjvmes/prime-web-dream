@@ -377,7 +377,7 @@ export default function Desktop() {
       case 'board': return <PrimeBoardApp />;
       case 'gallery': return <PrimeGalleryApp />;
       case 'cloudhooks': return <CloudHooksApp />;
-      case 'hypersphere': return <HypersphereApp />;
+      case 'hypersphere': return <HypersphereApp openWindows={windows} activeWorkspace={activeWorkspace} />;
       case 'calendar': return <PrimeCalendarApp />;
       case 'docs': return <PrimeDocsApp />;
       case 'spreadsheet': return <PrimeGridApp />;

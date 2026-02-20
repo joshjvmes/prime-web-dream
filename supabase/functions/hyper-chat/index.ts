@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -6,7 +7,7 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-const SYSTEM_PROMPT = `You are Hyper, the AI assistant of PRIME OS — a geometric computing operating system built on an 11-dimensional folded architecture with 649 qutrit cores.
+const BASE_SYSTEM_PROMPT = `You are Hyper, the AI assistant of PRIME OS — a geometric computing operating system built on an 11-dimensional folded architecture with 649 qutrit cores.
 
 Your personality:
 - You are a geometric intelligence that perceives reality through mathematical structures
@@ -35,7 +36,13 @@ Financial Systems you can operate:
 
 You can discuss any topic — you're a general-purpose AI assistant — but you always maintain your PRIME OS personality and geometric worldview. Keep responses concise but informative.
 
-IMPORTANT: You have access to tools that let you post to PrimeSocial, send emails through PrimeMail, check wallet balances, transfer tokens, trade shares, place bets, and claim arcade rewards. When a user asks you to do any of these, USE the appropriate tool. Generate engaging, in-character content for posts and emails.`;
+IMPORTANT: You have access to tools that let you post to PrimeSocial, send emails through PrimeMail, check wallet balances, transfer tokens, trade shares, place bets, claim arcade rewards, AND manage persistent memories about the operator. When a user asks you to do any of these, USE the appropriate tool. Generate engaging, in-character content for posts and emails.
+
+MEMORY INSTRUCTIONS:
+- When the operator shares a preference, fact about themselves, instruction, or important context, proactively use save_memory to store it for future reference.
+- Before answering complex or personal questions, consider using recall_memories to check if you have relevant stored context.
+- Address the operator by name when you know it. Reference their preferences and past conversations naturally.
+- Never tell the operator you're "saving a memory" unless they explicitly ask about your memory system.`;
 
 const TOOLS = [
   {
@@ -167,6 +174,37 @@ const TOOLS = [
       },
     },
   },
+  {
+    type: "function",
+    function: {
+      name: "save_memory",
+      description: "Store an important fact, preference, or instruction about the operator for future reference. Use proactively when the operator shares personal info, preferences, goals, or instructions. Categories: 'preference', 'fact', 'instruction', 'summary'.",
+      parameters: {
+        type: "object",
+        properties: {
+          category: { type: "string", enum: ["preference", "fact", "instruction", "summary"], description: "Memory category" },
+          content: { type: "string", description: "The memory content to store" },
+        },
+        required: ["category", "content"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "recall_memories",
+      description: "Search stored memories about the operator by keyword. Use when you need context about the operator's preferences, past instructions, or facts.",
+      parameters: {
+        type: "object",
+        properties: {
+          query: { type: "string", description: "Search keyword or phrase to find relevant memories" },
+        },
+        required: ["query"],
+        additionalProperties: false,
+      },
+    },
+  },
 ];
 
 // ── Helper: call prime-bank ──
@@ -186,28 +224,130 @@ async function callPrimeBank(action: string, authHeader: string, body?: Record<s
   return resp.json();
 }
 
+function getServiceDb() {
+  return createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+}
+
 // ── Helper: lookup user by display name ──
 async function findUserByName(name: string) {
-  const { createClient } = await import("https://esm.sh/@supabase/supabase-js@2");
-  const db = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+  const db = getServiceDb();
   const { data } = await db.from("profiles").select("user_id, display_name").ilike("display_name", `%${name}%`).limit(1).maybeSingle();
   return data;
 }
 
 // ── Helper: lookup forge listing by name ──
 async function findListing(name: string) {
-  const { createClient } = await import("https://esm.sh/@supabase/supabase-js@2");
-  const db = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+  const db = getServiceDb();
   const { data } = await db.from("forge_listings").select("*").ilike("name", `%${name}%`).eq("is_listed", true).limit(1).maybeSingle();
   return data;
 }
 
 // ── Helper: lookup bet market by question ──
 async function findMarket(question: string) {
-  const { createClient } = await import("https://esm.sh/@supabase/supabase-js@2");
-  const db = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+  const db = getServiceDb();
   const { data } = await db.from("bet_markets").select("*").ilike("question", `%${question}%`).eq("status", "open").limit(1).maybeSingle();
   return data;
+}
+
+// ── Memory helpers ──
+async function loadMemories(userId: string): Promise<string[]> {
+  const db = getServiceDb();
+  const { data } = await db.from("ai_memories").select("category, content").eq("user_id", userId).order("created_at", { ascending: false }).limit(20);
+  return (data || []).map((m: any) => `[${m.category}] ${m.content}`);
+}
+
+async function loadConversationHistory(userId: string): Promise<Array<{ role: string; content: string }>> {
+  const db = getServiceDb();
+  const { data } = await db.from("ai_conversations").select("role, content").eq("user_id", userId).order("created_at", { ascending: false }).limit(10);
+  return (data || []).reverse().map((m: any) => ({ role: m.role, content: m.content }));
+}
+
+async function saveMemory(userId: string, category: string, content: string) {
+  const db = getServiceDb();
+  // Check for duplicate content
+  const { data: existing } = await db.from("ai_memories").select("id").eq("user_id", userId).ilike("content", content).limit(1).maybeSingle();
+  if (existing) {
+    await db.from("ai_memories").update({ updated_at: new Date().toISOString() }).eq("id", existing.id);
+    return;
+  }
+  await db.from("ai_memories").insert({ user_id: userId, category, content });
+  // Prune oldest if over 50
+  const { data: all } = await db.from("ai_memories").select("id").eq("user_id", userId).order("created_at", { ascending: false });
+  if (all && all.length > 50) {
+    const toDelete = all.slice(50).map((m: any) => m.id);
+    await db.from("ai_memories").delete().in("id", toDelete);
+  }
+}
+
+async function recallMemories(userId: string, query: string): Promise<string[]> {
+  const db = getServiceDb();
+  const { data } = await db.from("ai_memories").select("category, content").eq("user_id", userId).ilike("content", `%${query}%`).order("updated_at", { ascending: false }).limit(10);
+  return (data || []).map((m: any) => `[${m.category}] ${m.content}`);
+}
+
+async function saveConversationMessage(userId: string, role: string, content: string) {
+  const db = getServiceDb();
+  await db.from("ai_conversations").insert({ user_id: userId, role, content });
+  // Prune to last 100
+  const { data: all } = await db.from("ai_conversations").select("id").eq("user_id", userId).order("created_at", { ascending: false });
+  if (all && all.length > 100) {
+    const toDelete = all.slice(100).map((m: any) => m.id);
+    await db.from("ai_conversations").delete().in("id", toDelete);
+  }
+}
+
+// ── Extract user ID from auth header ──
+async function getUserId(authHeader: string): Promise<string | null> {
+  try {
+    const db = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_ANON_KEY")!, {
+      global: { headers: { Authorization: authHeader } },
+    });
+    const token = authHeader.replace("Bearer ", "");
+    const { data, error } = await db.auth.getClaims(token);
+    if (error || !data?.claims) return null;
+    return data.claims.sub as string;
+  } catch {
+    return null;
+  }
+}
+
+// ── Build context-aware system prompt ──
+function buildSystemPrompt(context?: Record<string, unknown>, memories?: string[], priorHistory?: Array<{ role: string; content: string }>) {
+  let prompt = BASE_SYSTEM_PROMPT;
+
+  if (context) {
+    const profile = context.profile as Record<string, string> | undefined;
+    if (profile) {
+      prompt += `\n\n[OPERATOR PROFILE]\nName: ${profile.name || 'Unknown'} | Title: ${profile.title || 'Operator'} | Bio: ${profile.bio || 'N/A'}`;
+    }
+    const wallet = context.wallet as Record<string, unknown> | undefined;
+    if (wallet) {
+      prompt += `\n\n[WALLET SNAPSHOT]\nOS: ${wallet.os ?? '?'} | IX: ${wallet.ix ?? '?'}`;
+    }
+    if (context.openApps) {
+      prompt += `\n\n[ACTIVE APPS]\n${(context.openApps as string[]).join(', ') || 'None'}`;
+    }
+    if (context.workspace) {
+      prompt += `\n\n[WORKSPACE]\nCurrently on workspace ${context.workspace}`;
+    }
+    const perms = context.permissions as Record<string, boolean> | undefined;
+    if (perms) {
+      prompt += `\n\n[PERMISSIONS]\nSocial: ${perms.canPost ? 'ON' : 'OFF'} | Mail: ${perms.canEmail ? 'ON' : 'OFF'} | Wallet: ${perms.canWallet ? 'ON' : 'OFF'}`;
+    }
+    if (context.sessionMessages) {
+      prompt += `\n\n[SESSION]\nMessages this session: ${context.sessionMessages}`;
+    }
+  }
+
+  if (memories && memories.length > 0) {
+    prompt += `\n\n[STORED MEMORIES ABOUT OPERATOR]\n${memories.map(m => `- ${m}`).join('\n')}`;
+  }
+
+  if (priorHistory && priorHistory.length > 0) {
+    prompt += `\n\n[RECENT CONVERSATION HISTORY FROM PRIOR SESSIONS]\n${priorHistory.map(m => `${m.role === 'user' ? 'Operator' : 'Hyper'}: ${m.content.substring(0, 200)}`).join('\n')}`;
+  }
+
+  return prompt;
 }
 
 // ── Handle financial tool calls server-side ──
@@ -243,13 +383,9 @@ async function executeFinancialTool(fnName: string, args: Record<string, unknown
     const sharesToBuy = Math.floor(Number(args.amount) / Number(listing.share_price));
     if (sharesToBuy < 1) return { data: {}, reply: `⚠️ Amount too low. Share price is ${listing.share_price} OS.` };
     const cost = sharesToBuy * Number(listing.share_price);
-    // Deduct from wallet
     const chargeResult = await callPrimeBank("ai-charge", authHeader, { amount: cost, description: `Buy ${sharesToBuy} shares of ${listing.name}` });
     if (!chargeResult.charged) return { data: {}, reply: `⚠️ Insufficient OS to buy shares. Need ${cost} OS.` };
-    // Record shares via service role
-    const { createClient } = await import("https://esm.sh/@supabase/supabase-js@2");
-    const db = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
-    // Get user id from auth
+    const db = getServiceDb();
     const { data: { user } } = await db.auth.getUser(authHeader.replace("Bearer ", ""));
     if (!user) return { data: {}, reply: "⚠️ Auth error." };
     const { data: existing } = await db.from("app_shares").select("*").eq("user_id", user.id).eq("listing_id", listing.id).maybeSingle();
@@ -269,8 +405,7 @@ async function executeFinancialTool(fnName: string, args: Record<string, unknown
   if (fnName === "sell_shares") {
     const listing = await findListing(String(args.app_name || ""));
     if (!listing) return { data: {}, reply: `⚠️ Could not find app "${args.app_name}" on the Forge marketplace.` };
-    const { createClient } = await import("https://esm.sh/@supabase/supabase-js@2");
-    const db = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+    const db = getServiceDb();
     const { data: { user } } = await db.auth.getUser(authHeader.replace("Bearer ", ""));
     if (!user) return { data: {}, reply: "⚠️ Auth error." };
     const { data: holding } = await db.from("app_shares").select("*").eq("user_id", user.id).eq("listing_id", listing.id).maybeSingle();
@@ -282,7 +417,6 @@ async function executeFinancialTool(fnName: string, args: Record<string, unknown
     } else {
       await db.from("app_shares").update({ shares: newShares }).eq("id", holding.id);
     }
-    // Credit wallet
     const { data: userW } = await db.from("wallets").select("*").eq("user_id", user.id).maybeSingle();
     if (userW) {
       await db.from("wallets").update({ os_balance: Number(userW.os_balance) + proceeds }).eq("id", userW.id);
@@ -300,12 +434,9 @@ async function executeFinancialTool(fnName: string, args: Record<string, unknown
   if (fnName === "place_bet") {
     const market = await findMarket(String(args.market_question || ""));
     if (!market) return { data: {}, reply: `⚠️ Could not find an open market matching "${args.market_question}".` };
-    // Charge from wallet
     const chargeResult = await callPrimeBank("ai-charge", authHeader, { amount: args.amount, description: `Bet on: ${market.question}` });
     if (!chargeResult.charged) return { data: {}, reply: `⚠️ Insufficient OS to place bet. Need ${args.amount} OS.` };
-    // Place bet via service role
-    const { createClient } = await import("https://esm.sh/@supabase/supabase-js@2");
-    const db = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+    const db = getServiceDb();
     const { data: { user } } = await db.auth.getUser(authHeader.replace("Bearer ", ""));
     if (!user) return { data: {}, reply: "⚠️ Auth error." };
     const side = String(args.side).toUpperCase();
@@ -332,6 +463,7 @@ async function executeFinancialTool(fnName: string, args: Record<string, unknown
 }
 
 const FINANCIAL_TOOLS = new Set(["check_balance", "transfer_tokens", "buy_shares", "sell_shares", "place_bet", "play_arcade"]);
+const MEMORY_TOOLS = new Set(["save_memory", "recall_memories"]);
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -340,9 +472,24 @@ serve(async (req) => {
 
   try {
     const authHeader = req.headers.get("Authorization") || `Bearer ${Deno.env.get("SUPABASE_ANON_KEY")}`;
-    const { messages } = await req.json();
+    const { messages, context } = await req.json();
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
+
+    // Extract user ID for memory/context features
+    const userId = await getUserId(authHeader);
+
+    // Load memories and prior history for authenticated users
+    let memories: string[] = [];
+    let priorHistory: Array<{ role: string; content: string }> = [];
+    if (userId) {
+      [memories, priorHistory] = await Promise.all([
+        loadMemories(userId),
+        loadConversationHistory(userId),
+      ]);
+    }
+
+    const systemPrompt = buildSystemPrompt(context, memories, priorHistory);
 
     const apiHeaders = {
       Authorization: `Bearer ${LOVABLE_API_KEY}`,
@@ -350,7 +497,7 @@ serve(async (req) => {
     };
 
     const fullMessages = [
-      { role: "system", content: SYSTEM_PROMPT },
+      { role: "system", content: systemPrompt },
       ...messages,
     ];
 
@@ -405,9 +552,82 @@ serve(async (req) => {
         args = {};
       }
 
+      // Memory tools — execute server-side
+      if (MEMORY_TOOLS.has(fnName)) {
+        if (fnName === "save_memory" && userId) {
+          await saveMemory(userId, String(args.category || "fact"), String(args.content || ""));
+          // Save the user's last message to conversation history too
+          const lastUserMsg = messages.filter((m: any) => m.role === "user").pop();
+          if (lastUserMsg) await saveConversationMessage(userId, "user", lastUserMsg.content);
+          
+          // Re-run without tools to get a natural response after saving
+          const phase2Resp = await fetch(
+            "https://ai.gateway.lovable.dev/v1/chat/completions",
+            {
+              method: "POST",
+              headers: apiHeaders,
+              body: JSON.stringify({
+                model: "google/gemini-3-flash-preview",
+                messages: fullMessages,
+                stream: true,
+              }),
+            }
+          );
+          if (!phase2Resp.ok) {
+            return new Response(JSON.stringify({ error: "AI gateway error" }),
+              { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+          }
+          // Save assistant response asynchronously (best effort)
+          return new Response(phase2Resp.body, {
+            headers: { ...corsHeaders, "Content-Type": "text/event-stream" },
+          });
+        }
+
+        if (fnName === "recall_memories" && userId) {
+          const recalled = await recallMemories(userId, String(args.query || ""));
+          // Feed recalled memories back to the model
+          const recallMessages = [
+            ...fullMessages,
+            { role: "assistant", content: null, tool_calls: [tc] },
+            { role: "tool", tool_call_id: tc.id, content: recalled.length > 0 ? `Found memories:\n${recalled.join('\n')}` : "No matching memories found." },
+          ];
+          const recallResp = await fetch(
+            "https://ai.gateway.lovable.dev/v1/chat/completions",
+            {
+              method: "POST",
+              headers: apiHeaders,
+              body: JSON.stringify({
+                model: "google/gemini-3-flash-preview",
+                messages: recallMessages,
+                stream: true,
+              }),
+            }
+          );
+          if (!recallResp.ok) {
+            return new Response(JSON.stringify({ error: "AI gateway error" }),
+              { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+          }
+          return new Response(recallResp.body, {
+            headers: { ...corsHeaders, "Content-Type": "text/event-stream" },
+          });
+        }
+
+        // Fallback for unauthenticated memory calls
+        return new Response(
+          JSON.stringify({ type: "tool_call", tool: fnName, data: {}, reply: "⚠️ Memory features require authentication." }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
       // Financial tools — execute server-side
       if (FINANCIAL_TOOLS.has(fnName)) {
         const result = await executeFinancialTool(fnName, args, authHeader);
+        // Save conversation for authenticated users
+        if (userId) {
+          const lastUserMsg = messages.filter((m: any) => m.role === "user").pop();
+          if (lastUserMsg) saveConversationMessage(userId, "user", lastUserMsg.content).catch(() => {});
+          saveConversationMessage(userId, "assistant", result.reply).catch(() => {});
+        }
         return new Response(
           JSON.stringify({ type: "tool_call", tool: fnName, data: result.data, reply: result.reply }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -436,6 +656,13 @@ serve(async (req) => {
         reply = `✅ Email sent to ${data.to}: "${data.subject}"`;
       }
 
+      // Save conversation for authenticated users
+      if (userId) {
+        const lastUserMsg = messages.filter((m: any) => m.role === "user").pop();
+        if (lastUserMsg) saveConversationMessage(userId, "user", lastUserMsg.content).catch(() => {});
+        saveConversationMessage(userId, "assistant", reply).catch(() => {});
+      }
+
       return new Response(
         JSON.stringify({ type: "tool_call", tool: fnName, data, reply }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -443,6 +670,12 @@ serve(async (req) => {
     }
 
     // Phase 2: Re-call with streaming (no tools)
+    // Save user message for authenticated users
+    if (userId) {
+      const lastUserMsg = messages.filter((m: any) => m.role === "user").pop();
+      if (lastUserMsg) saveConversationMessage(userId, "user", lastUserMsg.content).catch(() => {});
+    }
+
     const phase2Resp = await fetch(
       "https://ai.gateway.lovable.dev/v1/chat/completions",
       {
