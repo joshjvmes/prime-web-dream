@@ -11,3 +11,6 @@ verify_jwt = false
 
 [functions.mini-app-gen]
 verify_jwt = false
+
+[functions.ai-social]
+verify_jwt = false
