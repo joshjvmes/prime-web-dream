@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { Send, Coins, ChevronDown, ChevronUp, Share2, Mail, Activity } from 'lucide-react';
+import { Send, Coins, ChevronDown, ChevronUp, Share2, Mail, Activity, Wallet, TrendingUp, Gamepad2, Target } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { eventBus } from '@/hooks/useEventBus';
 import { Switch } from '@/components/ui/switch';
@@ -13,7 +13,7 @@ interface Message {
 }
 
 interface AgentAction {
-  type: 'post' | 'email';
+  type: 'post' | 'email' | 'trade' | 'wallet' | 'bet' | 'game';
   summary: string;
   timestamp: Date;
 }
@@ -21,24 +21,26 @@ interface AgentAction {
 interface Permissions {
   canPost: boolean;
   canEmail: boolean;
+  canWallet: boolean;
 }
 
 function loadPermissions(): Permissions {
   try {
     const s = localStorage.getItem('prime-os-hyper-permissions');
-    return s ? JSON.parse(s) : { canPost: true, canEmail: true };
-  } catch { return { canPost: true, canEmail: true }; }
+    const p = s ? JSON.parse(s) : {};
+    return { canPost: p.canPost ?? true, canEmail: p.canEmail ?? true, canWallet: p.canWallet ?? true };
+  } catch { return { canPost: true, canEmail: true, canWallet: true }; }
 }
 
-const GREETING = "Greetings, operator. I am Hyper — your geometric AI companion, powered by real intelligence. I can also post to PrimeSocial and send emails through PrimeMail on your behalf. How may I assist your lattice operations?";
+const GREETING = "Greetings, operator. I am Hyper — your geometric AI companion, powered by real intelligence. I can post to PrimeSocial, send emails, manage your wallet, trade shares, place bets, and claim arcade rewards. How may I assist your lattice operations?";
 
 const QUICK_ACTIONS = [
   { label: 'System Status', prompt: 'Give me a full PRIME OS system status report including all subsystems.' },
-  { label: 'Run Diagnostics', prompt: 'Run a complete diagnostic check on all PRIME OS systems and report results.' },
-  { label: 'Threat Scan', prompt: 'Perform a security threat scan across all 11 dimensions and report findings.' },
-  { label: 'Energy Report', prompt: 'Generate a detailed energy harvesting report with COP metrics.' },
+  { label: 'Check Balance', prompt: 'Check my wallet balance.' },
+  { label: 'Portfolio', prompt: 'What shares do I currently hold in the Forge marketplace?' },
   { label: 'Post Update', prompt: 'Post an update to PrimeSocial about the current state of all PRIME OS systems and any interesting metrics.' },
   { label: 'Send Report', prompt: 'Send a detailed system status report email to the operator with current metrics across all subsystems.' },
+  { label: 'Energy Report', prompt: 'Generate a detailed energy harvesting report with COP metrics.' },
 ];
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
@@ -65,7 +67,7 @@ export default function HypersphereApp() {
     localStorage.setItem('prime-os-hyper-permissions', JSON.stringify(permissions));
   }, [permissions]);
 
-  const logAction = (type: 'post' | 'email', summary: string) => {
+  const logAction = (type: AgentAction['type'], summary: string) => {
     const action: AgentAction = { type, summary, timestamp: new Date() };
     setAgentActions(prev => [action, ...prev].slice(0, 50));
     eventBus.emit('agent.action.logged', action);
@@ -134,7 +136,8 @@ export default function HypersphereApp() {
       if (contentType.includes('application/json')) {
         const data = await resp.json();
         if (data.type === 'tool_call') {
-          if (data.tool === 'post_to_social') {
+          const tool = data.tool;
+          if (tool === 'post_to_social') {
             if (permissions.canPost) {
               eventBus.emit('social.post.created', data.data);
               logAction('post', data.data?.content?.substring(0, 80) || 'Social post');
@@ -142,7 +145,7 @@ export default function HypersphereApp() {
             } else {
               setMessages(prev => [...prev, { id: assistantId, role: 'hyper', text: '⚠️ Social posting is currently disabled by operator. Enable it in the permission toggles above.' }]);
             }
-          } else if (data.tool === 'send_email') {
+          } else if (tool === 'send_email') {
             if (permissions.canEmail) {
               eventBus.emit('mail.received', data.data);
               logAction('email', `To: ${data.data?.to || 'operator'} — ${data.data?.subject?.substring(0, 60) || 'Email'}`);
@@ -150,6 +153,38 @@ export default function HypersphereApp() {
             } else {
               setMessages(prev => [...prev, { id: assistantId, role: 'hyper', text: '⚠️ Email sending is currently disabled by operator. Enable it in the permission toggles above.' }]);
             }
+          } else if (tool === 'check_balance') {
+            // Balance checks always allowed
+            setMessages(prev => [...prev, { id: assistantId, role: 'hyper', text: data.reply || 'Balance checked.' }]);
+          } else if (tool === 'transfer_tokens') {
+            if (permissions.canWallet) {
+              eventBus.emit('wallet.transfer', data.data);
+              logAction('wallet', `Transfer: ${data.data?.amount || '?'} ${data.data?.token_type || 'OS'} → ${data.data?.to || '?'}`);
+              setMessages(prev => [...prev, { id: assistantId, role: 'hyper', text: data.reply || '✅ Transfer complete.' }]);
+            } else {
+              setMessages(prev => [...prev, { id: assistantId, role: 'hyper', text: '⚠️ Financial operations are currently disabled by operator.' }]);
+            }
+          } else if (tool === 'buy_shares' || tool === 'sell_shares') {
+            if (permissions.canWallet) {
+              eventBus.emit('trade.executed', data.data);
+              logAction('trade', `${tool === 'buy_shares' ? 'Buy' : 'Sell'}: ${data.data?.app || '?'} (${data.data?.shares || '?'} shares)`);
+              setMessages(prev => [...prev, { id: assistantId, role: 'hyper', text: data.reply || '✅ Trade executed.' }]);
+            } else {
+              setMessages(prev => [...prev, { id: assistantId, role: 'hyper', text: '⚠️ Financial operations are currently disabled by operator.' }]);
+            }
+          } else if (tool === 'place_bet') {
+            if (permissions.canWallet) {
+              eventBus.emit('bet.placed', data.data);
+              logAction('bet', `Bet: ${data.data?.side || '?'} on "${data.data?.market?.substring(0, 50) || '?'}"`);
+              setMessages(prev => [...prev, { id: assistantId, role: 'hyper', text: data.reply || '✅ Bet placed.' }]);
+            } else {
+              setMessages(prev => [...prev, { id: assistantId, role: 'hyper', text: '⚠️ Financial operations are currently disabled by operator.' }]);
+            }
+          } else if (tool === 'play_arcade') {
+            logAction('game', `Arcade: ${data.data?.game || '?'} — ${data.data?.reward || '?'} OS`);
+            setMessages(prev => [...prev, { id: assistantId, role: 'hyper', text: data.reply || '🎮 Arcade reward claimed.' }]);
+          } else {
+            setMessages(prev => [...prev, { id: assistantId, role: 'hyper', text: data.reply || 'Action completed.' }]);
           }
         } else {
           setMessages(prev => [...prev, { id: assistantId, role: 'hyper', text: data.error || 'Unexpected response.' }]);
@@ -290,6 +325,15 @@ export default function HypersphereApp() {
               className="h-3.5 w-7 data-[state=checked]:bg-primary data-[state=unchecked]:bg-muted"
             />
           </div>
+          <div className="flex items-center gap-1.5">
+            <Wallet size={9} className={permissions.canWallet ? 'text-primary' : 'text-muted-foreground/40'} />
+            <span className="text-[8px] text-muted-foreground w-8">Wallet</span>
+            <Switch
+              checked={permissions.canWallet}
+              onCheckedChange={v => setPermissions(p => ({ ...p, canWallet: v }))}
+              className="h-3.5 w-7 data-[state=checked]:bg-primary data-[state=unchecked]:bg-muted"
+            />
+          </div>
         </div>
       </div>
 
@@ -338,7 +382,13 @@ export default function HypersphereApp() {
             <div className="max-h-28 overflow-y-auto px-3 py-1 space-y-1">
               {agentActions.slice(0, 10).map((a, i) => (
                 <div key={i} className="flex items-center gap-1.5 text-[9px]">
-                  {a.type === 'post' ? <Share2 size={8} className="text-primary/60 shrink-0" /> : <Mail size={8} className="text-primary/60 shrink-0" />}
+                  {a.type === 'post' ? <Share2 size={8} className="text-primary/60 shrink-0" /> :
+                   a.type === 'email' ? <Mail size={8} className="text-primary/60 shrink-0" /> :
+                   a.type === 'wallet' ? <Wallet size={8} className="text-primary/60 shrink-0" /> :
+                   a.type === 'trade' ? <TrendingUp size={8} className="text-primary/60 shrink-0" /> :
+                   a.type === 'bet' ? <Target size={8} className="text-primary/60 shrink-0" /> :
+                   a.type === 'game' ? <Gamepad2 size={8} className="text-primary/60 shrink-0" /> :
+                   <Activity size={8} className="text-primary/60 shrink-0" />}
                   <span className="text-muted-foreground truncate flex-1">{a.summary}</span>
                   <span className="text-muted-foreground/40 text-[7px] shrink-0">{a.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                 </div>
