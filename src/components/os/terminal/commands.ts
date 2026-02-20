@@ -136,6 +136,7 @@ const APP_MAP: Record<string, { app: string; title: string }> = {
   devices: { app: 'iot', title: 'PrimeIoT' },
   arcade: { app: 'arcade', title: 'PrimeArcade' },
   games: { app: 'arcade', title: 'PrimeArcade' },
+  admin: { app: 'admin', title: 'Admin Console' },
 };
 
 // Boot timestamp for uptime

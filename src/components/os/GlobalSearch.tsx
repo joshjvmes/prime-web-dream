@@ -9,7 +9,7 @@ import {
   Globe, Server, LayoutList, Image, LayoutGrid, Layers, Search, Link2, Orbit,
   CalendarDays, BookOpen, Table, Workflow, Paintbrush, Smartphone, Map,
   Package, Music, Dices, TrendingUp, Radio, Vault, Video, Mail, Users,
-  Bot, Cog, CalendarCheck, Wifi, Gamepad2,
+  Bot, Cog, CalendarCheck, Wifi, Gamepad2, ShieldCheck,
 } from 'lucide-react';
 
 const allApps: { app: AppType; title: string; icon: React.ReactNode; label: string }[] = [
@@ -54,6 +54,7 @@ const allApps: { app: AppType; title: string; icon: React.ReactNode; label: stri
   { app: 'booking', title: 'PrimeBooking', icon: <CalendarCheck size={16} />, label: 'Booking' },
   { app: 'iot', title: 'PrimeIoT', icon: <Wifi size={16} />, label: 'IoT' },
   { app: 'arcade', title: 'PrimeArcade', icon: <Gamepad2 size={16} />, label: 'Arcade' },
+  { app: 'admin', title: 'Admin Console', icon: <ShieldCheck size={16} />, label: 'Admin Console' },
   { app: 'settings', title: 'Settings', icon: <Settings size={16} />, label: 'Settings' },
 ];
 

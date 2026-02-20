@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Terminal, FolderTree, Activity, Cpu, Brain, Network, Code, HardDrive, Database, Zap, Settings, Globe, Server, LayoutList, Image, Link2, Orbit, CalendarDays, BookOpen, Table, Workflow, Paintbrush, Smartphone, Map, Package, Music, Dices, TrendingUp, Radio, Vault, Video, Bot, Cog, CalendarCheck, Wifi, Monitor, FileText, MessageSquare, Shield, Mail, Users, ChevronDown, ChevronRight, Gamepad2 } from 'lucide-react';
+import { Terminal, FolderTree, Activity, Cpu, Brain, Network, Code, HardDrive, Database, Zap, Settings, Globe, Server, LayoutList, Image, Link2, Orbit, CalendarDays, BookOpen, Table, Workflow, Paintbrush, Smartphone, Map, Package, Music, Dices, TrendingUp, Radio, Vault, Video, Bot, Cog, CalendarCheck, Wifi, Monitor, FileText, MessageSquare, Shield, Mail, Users, ChevronDown, ChevronRight, Gamepad2, ShieldCheck } from 'lucide-react';
 import { AppType } from '@/types/os';
 
 interface DesktopIconsProps {
@@ -72,6 +72,7 @@ const categories: { name: string; apps: AppEntry[] }[] = [
       { app: 'vault', title: 'PrimeVault', icon: <Vault size={22} />, label: 'Vault' },
       { app: 'robotics', title: 'PrimeRobotics', icon: <Cog size={22} />, label: 'Robotics' },
       { app: 'iot', title: 'PrimeIoT', icon: <Wifi size={22} />, label: 'IoT' },
+      { app: 'admin', title: 'Admin Console', icon: <ShieldCheck size={22} />, label: 'Admin' },
     ],
   },
   {

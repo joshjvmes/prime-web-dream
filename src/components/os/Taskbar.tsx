@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { AppType, WindowState } from '@/types/os';
 import { OSNotification } from '@/hooks/useNotifications';
-import { Terminal, FolderTree, Activity, Cpu, Brain, Network, Code, HardDrive, Database, Zap, Settings, ChevronUp, Bell, X, Monitor, FileText, MessageSquare, Shield, Globe, Server, LayoutList, Image, Search, Link2, Orbit, CalendarDays, Moon, BookOpen, Table, Workflow, Paintbrush, Smartphone, Map, Package, Music, Dices, TrendingUp, Radio, Vault, Video, Mail, Users, Info, Bot, Cog, CalendarCheck, Wifi, Lock, Gamepad2, Clipboard } from 'lucide-react';
+import { Terminal, FolderTree, Activity, Cpu, Brain, Network, Code, HardDrive, Database, Zap, Settings, ChevronUp, Bell, X, Monitor, FileText, MessageSquare, Shield, Globe, Server, LayoutList, Image, Search, Link2, Orbit, CalendarDays, Moon, BookOpen, Table, Workflow, Paintbrush, Smartphone, Map, Package, Music, Dices, TrendingUp, Radio, Vault, Video, Mail, Users, Info, Bot, Cog, CalendarCheck, Wifi, Lock, Gamepad2, Clipboard, ShieldCheck } from 'lucide-react';
 import { startOfMonth, endOfMonth, eachDayOfInterval, getDay, isToday, format } from 'date-fns';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import WorkspaceSwitcher from '@/components/os/WorkspaceSwitcher';
@@ -22,6 +22,7 @@ interface TaskbarProps {
   voiceState?: { isListening: boolean; lastCommand: string; supported: boolean };
   onToggleVoice?: () => void;
   onToggleClipboard?: () => void;
+  isAdmin?: boolean;
 }
 
 const allApps: { app: AppType; title: string; icon: React.ReactNode; label: string }[] = [
@@ -66,10 +67,11 @@ const allApps: { app: AppType; title: string; icon: React.ReactNode; label: stri
   { app: 'booking', title: 'PrimeBooking', icon: <CalendarCheck size={18} />, label: 'Booking' },
   { app: 'iot', title: 'PrimeIoT', icon: <Wifi size={18} />, label: 'IoT' },
   { app: 'arcade', title: 'PrimeArcade', icon: <Gamepad2 size={18} />, label: 'Arcade' },
+  { app: 'admin', title: 'Admin Console', icon: <ShieldCheck size={18} />, label: 'Admin' },
   { app: 'settings', title: 'Settings', icon: <Settings size={18} />, label: 'Settings' },
 ];
 
-export default function Taskbar({ windows, onOpenApp, onFocusWindow, notifications = [], onDismissNotification, onSearch, onOpenAbout, onLock, activeWorkspace, onSwitchWorkspace, windowCountsByWorkspace, voiceState, onToggleVoice, onToggleClipboard }: TaskbarProps) {
+export default function Taskbar({ windows, onOpenApp, onFocusWindow, notifications = [], onDismissNotification, onSearch, onOpenAbout, onLock, activeWorkspace, onSwitchWorkspace, windowCountsByWorkspace, voiceState, onToggleVoice, onToggleClipboard, isAdmin }: TaskbarProps) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
 
@@ -102,7 +104,7 @@ export default function Taskbar({ windows, onOpenApp, onFocusWindow, notificatio
             <p className="font-display text-[9px] tracking-[0.2em] uppercase text-primary">Applications</p>
           </div>
           <div className="flex flex-col gap-0.5 max-h-80 overflow-y-auto">
-            {allApps.map(a => (
+            {allApps.filter(a => a.app !== 'admin' || isAdmin).map(a => (
               <button
                 key={a.app}
                 onClick={() => {
