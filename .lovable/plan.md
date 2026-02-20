@@ -1,106 +1,172 @@
 
-
-# Make All Settings and Customizations Functional
+# AI Memory, Context, and Identity System for Hyper
 
 ## Overview
 
-Many settings in the Settings app are stored in localStorage but never actually applied to the OS. This plan makes every setting toggle, slider, and selector actually change the system behavior, and syncs all preferences to the cloud for signed-in users.
+Give Hyper persistent memory, user identity awareness, and session context so it seamlessly knows who the user is, what they've done, and what they care about -- across sessions and devices. This transforms Hyper from a stateless chatbot into a personalized AI companion.
 
----
+## What Changes
 
-## What's Currently Working
+### 1. User Context Injection (Frontend -> Backend)
 
-- Scan lines / Grid background (CSS classes toggled)
-- Accent color theme (CSS variables applied)
-- Lock screen PIN, auto-lock, wallpaper
-- Voice control enable/disable
-- System Pulse / Ambience
-- Profile (name, title, bio, avatar -- DB synced)
+**File: `src/components/os/HypersphereApp.tsx`**
 
-## What's Currently Cosmetic Only (Stored but Never Applied)
+Before sending messages to hyper-chat, gather and inject a context payload:
 
-These settings are saved to localStorage but have zero effect on the OS:
+- **Profile**: Display name, title, bio (from `profiles` table or localStorage)
+- **Wallet snapshot**: OS/IX balances (from localStorage cache or quick fetch)
+- **Active apps**: Which windows are currently open (from window manager state)
+- **Current workspace**: Which workspace the user is on
+- **Permissions**: What Hyper is allowed to do
+- **Session stats**: How long they've been active, number of messages this session
 
-| Setting | Panel | What It Should Do |
-|---------|-------|-------------------|
-| Window Opacity | Display | Set backdrop opacity on all OS windows |
-| Animation Speed | Display | Control framer-motion transition durations globally |
-| Font Size | Display | Scale the base font size across the OS |
-| Key Repeat Rate/Delay | Keyboard | Cosmetic only -- keep as display, no browser API |
-| Keyboard Layout | Keyboard | Cosmetic only -- keep as display |
-| Cursor Speed | Mouse | Cosmetic only -- keep as display |
-| Double-click Speed | Mouse | Cosmetic only -- keep as display |
-| Scroll Direction | Mouse | Cosmetic only -- keep as display |
-| Pointer Precision | Mouse | Cosmetic only -- keep as display |
-| Cursor Theme | Mouse | Apply custom CSS cursor to the desktop |
-| Master Volume | Audio | Cosmetic only -- no real audio system |
-| System/Notification Sounds | Audio | Cosmetic only |
-| Widget toggles | Widgets | Missing forge and agentLog toggles in the UI |
+Send this as a `context` field alongside `messages` in the request body.
 
----
+### 2. Persistent AI Memory (New Database Table)
 
-## Changes
+**New table: `ai_memories`**
 
-### 1. Apply Window Opacity (`src/components/os/OSWindow.tsx`)
+| Column | Type | Description |
+|--------|------|-------------|
+| id | uuid | Primary key |
+| user_id | uuid | Owner |
+| category | text | 'preference', 'fact', 'instruction', 'summary' |
+| content | text | The memory content |
+| created_at | timestamptz | When stored |
+| updated_at | timestamptz | Last updated |
 
-- Read `windowOpacity` from `prime-os-settings` in localStorage
-- Apply it as `opacity` or `background-opacity` on the window card container
-- Listen for `storage` events to update live when settings change
+RLS: Users can only read/write their own memories.
 
-### 2. Apply Font Size Globally (`src/components/os/Desktop.tsx`)
+Hyper gets a new tool `save_memory` to store important facts about the user (e.g., "Operator prefers concise responses", "Operator's favorite app is Terminal", "Operator is working on a trading strategy"). Also a `recall_memories` tool that searches stored memories.
 
-- Read `fontSize` setting on mount and when it changes
-- Apply a CSS class to the root desktop container: `text-xs` (compact), `text-sm` (default), `text-base` (large)
-- This cascades through all child components
+### 3. Conversation History Persistence
 
-### 3. Apply Animation Speed (`src/components/os/Desktop.tsx`)
+**New table: `ai_conversations`**
 
-- Set a CSS custom property `--animation-speed` on the root: `0.5` (slow), `1` (normal), `2` (fast)
-- OSWindow and other motion components can read this for transition durations
-- Update `OSWindow.tsx` to use the speed multiplier for open/close/drag animations
+| Column | Type | Description |
+|--------|------|-------------|
+| id | uuid | Primary key |
+| user_id | uuid | Owner |
+| role | text | 'user' or 'assistant' |
+| content | text | Message text |
+| created_at | timestamptz | When sent |
 
-### 4. Apply Cursor Theme (`src/components/os/Desktop.tsx`)
+RLS: Users can only read/write their own conversations.
 
-- Read `cursorTheme` from settings
-- Apply CSS cursor style to the desktop div: `default` (Default), `crosshair` (Crosshair), `url(...)` or `cell` (Lattice)
+On each exchange, save the user message and Hyper's response. On session start, load the last N messages as conversation history so Hyper remembers what was discussed previously.
 
-### 5. Add Missing Widget Toggles (`src/components/os/SettingsApp.tsx`)
+### 4. Backend: Context-Aware System Prompt
 
-- Add "Forge Activity Widget" and "Agent Activity Widget" toggle rows to the Widgets panel
-- These already exist in DesktopWidgets but have no toggle in Settings
+**File: `supabase/functions/hyper-chat/index.ts`**
 
-### 6. Cloud-Sync All Settings (`src/components/os/SettingsApp.tsx`)
+- Accept `context` object from frontend
+- Load user's memories from `ai_memories` table (last 20 entries)
+- Load recent conversation history from `ai_conversations` (last 10 messages from prior sessions)
+- Inject all of this into the system prompt as structured context blocks:
 
-- For signed-in users, save the full `SettingsState`, `LockSettings`, and `WidgetToggles` to the cloud via `useCloudStorage`
-- On profile load, also load settings from cloud and merge with localStorage (cloud wins)
-- This gives users consistent preferences across devices
+```text
+[OPERATOR PROFILE]
+Name: {name} | Title: {title} | Bio: {bio}
 
-### 7. Settings Upgrade: Add Reset Button
+[WALLET]
+OS: {balance} | IX: {balance}
 
-- Add a "Reset to Defaults" button at the bottom of each panel that restores factory settings for that category
+[MEMORIES]
+- Operator prefers detailed technical reports
+- Operator is building a trading bot
+- ...
 
----
+[RECENT HISTORY]
+(last 10 messages from previous sessions)
+```
+
+- Add two new tools: `save_memory` and `recall_memories`
+
+### 5. New Hyper Tools
+
+| Tool | Description | Parameters |
+|------|-------------|------------|
+| `save_memory` | Store a fact/preference about the operator for future reference | `category`, `content` |
+| `recall_memories` | Search stored memories by keyword | `query` |
+
+When Hyper detects the user sharing a preference, fact, or instruction, it proactively saves it. When it needs context, it can recall memories.
+
+### 6. Session Context from Frontend
+
+**File: `src/components/os/HypersphereApp.tsx`**
+
+Build and send context object on each message:
+
+```typescript
+const context = {
+  profile: { name, title, bio },
+  permissions: { canPost, canEmail, canWallet },
+  sessionMessages: messages.length,
+  openApps: windows.filter(w => !w.isMinimized).map(w => w.app),
+  workspace: currentWorkspace,
+};
+```
+
+This requires accepting optional props for open windows and workspace from the parent Desktop component.
+
+### 7. Conversation Persistence in Frontend
+
+- On mount, load last 20 messages from `ai_conversations` for the signed-in user
+- Display them in the chat (with a "Previous session" divider)
+- After each exchange, save both user and assistant messages to the table
+- For guests (not signed in), keep current in-memory-only behavior
 
 ## Technical Details
 
-### Files to Modify
+### Files to Create/Modify
 
 | File | Change |
 |------|--------|
-| `src/components/os/OSWindow.tsx` | Read window opacity from localStorage, apply to container |
-| `src/components/os/Desktop.tsx` | Apply font size class, animation speed CSS var, cursor theme |
-| `src/components/os/SettingsApp.tsx` | Add forge/agentLog widget toggles, cloud sync, reset buttons |
+| `supabase/functions/hyper-chat/index.ts` | Accept context, load memories + history, inject into system prompt, add save_memory/recall_memories tools |
+| `src/components/os/HypersphereApp.tsx` | Build context payload, load/save conversation history, accept window/workspace props |
+| `src/components/os/Desktop.tsx` | Pass open windows and workspace to HypersphereApp |
+| Database migration | Create `ai_memories` and `ai_conversations` tables with RLS |
 
-### Settings Application Flow
+### Database Migration
 
-When a user changes a setting:
-1. State updates in SettingsApp
-2. Saved to localStorage (existing behavior)
-3. If signed in, also saved to cloud via `useCloudStorage`
-4. A `storage` event fires (or custom event)
-5. Desktop.tsx and OSWindow.tsx react to the change and apply it live
+```sql
+CREATE TABLE ai_memories (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL,
+  category text NOT NULL DEFAULT 'fact',
+  content text NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
 
-### No Database Changes Required
+ALTER TABLE ai_memories ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Users can read own memories" ON ai_memories FOR SELECT USING (auth.uid() = user_id);
+CREATE POLICY "Users can insert own memories" ON ai_memories FOR INSERT WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "Users can update own memories" ON ai_memories FOR UPDATE USING (auth.uid() = user_id);
+CREATE POLICY "Users can delete own memories" ON ai_memories FOR DELETE USING (auth.uid() = user_id);
 
-Cloud sync uses the existing `user_data` table via `useCloudStorage`. All settings fit in a single JSON blob under the key `os-settings`.
+CREATE TABLE ai_conversations (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL,
+  role text NOT NULL,
+  content text NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
 
+ALTER TABLE ai_conversations ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Users can read own conversations" ON ai_conversations FOR SELECT USING (auth.uid() = user_id);
+CREATE POLICY "Users can insert own conversations" ON ai_conversations FOR INSERT WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "Users can delete own conversations" ON ai_conversations FOR DELETE USING (auth.uid() = user_id);
+```
+
+### Memory Management
+
+- Memories are capped at 50 per user; oldest auto-pruned when saving new ones
+- Conversation history is trimmed to last 100 messages per user (older deleted on save)
+- The system prompt receives at most 20 memories and 10 prior-session messages to stay within token limits
+
+### Auth Flow
+
+- Signed-in users: Full memory + history persistence
+- Guests: In-memory only, no persistence (current behavior preserved)
+- The hyper-chat edge function extracts the user from the auth header to load their memories server-side
