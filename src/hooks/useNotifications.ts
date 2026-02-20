@@ -31,6 +31,10 @@ const DEFAULT_EVENTS: NotificationEvent[] = [
   { id: 'evt-12', title: 'PrimeGrid', message: 'Lattice metrics auto-refreshed — 6 regions updated', enabled: false, triggerApps: ['spreadsheet'] },
   { id: 'evt-13', title: 'SchemaForge', message: 'Schema validation complete — 5 entities, 0 errors', enabled: false, triggerApps: ['schemaforge'] },
   { id: 'evt-14', title: 'PrimeAudio', message: 'Now playing: Harmonic Fold — Lattice Core', enabled: false, triggerApps: ['audio'] },
+  { id: 'evt-15', title: 'PrimeBets', message: 'Market resolved: Lattice expansion — YES wins at 0.92', enabled: false, triggerApps: ['bets'] },
+  { id: 'evt-16', title: 'PrimeSignals', message: 'New signal: LATT long entry at 142.50 — High conviction', enabled: false, triggerApps: ['signals'] },
+  { id: 'evt-17', title: 'PrimeStream', message: 'Pipeline alert: Energy Flow latency spike — 4.2ms', enabled: false, triggerApps: ['stream'] },
+  { id: 'evt-18', title: 'PrimeVault', message: 'Price alert: GeomC License up 15.6% today', enabled: false, triggerApps: ['vault'] },
 ];
 
 function loadEvents(): NotificationEvent[] {

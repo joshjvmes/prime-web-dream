@@ -119,6 +119,13 @@ const APP_MAP: Record<string, { app: string; title: string }> = {
   pkg: { app: 'pkg', title: 'PrimePkg' },
   audio: { app: 'audio', title: 'PrimeAudio' },
   music: { app: 'audio', title: 'PrimeAudio' },
+  bets: { app: 'bets', title: 'PrimeBets' },
+  signals: { app: 'signals', title: 'PrimeSignals' },
+  stream: { app: 'stream', title: 'PrimeStream' },
+  vault: { app: 'vault', title: 'PrimeVault' },
+  videocall: { app: 'videocall', title: 'PrimeLink' },
+  video: { app: 'videocall', title: 'PrimeLink' },
+  link: { app: 'videocall', title: 'PrimeLink' },
 };
 
 // Boot timestamp for uptime
