@@ -170,7 +170,7 @@ export default function OSWindow({ window: win, onClose, onMinimize, onMaximize,
           </div>
         </div>
         {/* Content */}
-        <div className="flex-1 overflow-hidden">
+        <div className="flex-1 overflow-hidden select-text">
           {children}
         </div>
       </div>

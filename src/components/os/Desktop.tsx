@@ -70,6 +70,10 @@ export default function Desktop() {
         setSearchOpen(prev => !prev);
         return;
       }
+      // Ctrl+C / Ctrl+V / Ctrl+A — allow native clipboard & select
+      if ((e.ctrlKey || e.metaKey) && ['c', 'v', 'a', 'x'].includes(e.key)) {
+        return; // let browser handle natively
+      }
       // Ctrl+W — close focused window
       if ((e.ctrlKey || e.metaKey) && e.key === 'w') {
         e.preventDefault();

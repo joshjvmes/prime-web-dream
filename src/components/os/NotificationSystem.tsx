@@ -22,7 +22,7 @@ function ToastContent({ notif, onDismiss }: { notif: OSNotification; onDismiss: 
   useAutoDismiss(notif.id, onDismiss);
 
   return (
-    <>
+    <div>
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <p className="font-display text-[9px] tracking-wider uppercase text-primary">{notif.title}</p>
@@ -43,7 +43,7 @@ function ToastContent({ notif, onDismiss }: { notif: OSNotification; onDismiss: 
           transition={{ duration: AUTO_DISMISS_MS / 1000, ease: 'linear' }}
         />
       </div>
-    </>
+    </div>
   );
 }
 
