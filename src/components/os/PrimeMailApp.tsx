@@ -1,5 +1,7 @@
-import { useState } from 'react';
-import { Mail, Send, FileText, Inbox, ArrowLeft, Trash2 } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { Mail, FileText, Inbox, ArrowLeft, Trash2, Bot, Loader2, RefreshCw } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
+import { Badge } from '@/components/ui/badge';
 
 interface Email {
   id: string;
@@ -10,6 +12,7 @@ interface Email {
   date: string;
   read: boolean;
   folder: 'inbox' | 'sent' | 'drafts';
+  aiGenerated?: boolean;
 }
 
 const INITIAL_EMAILS: Email[] = [
@@ -28,32 +31,54 @@ const INITIAL_EMAILS: Email[] = [
     body: 'Greetings from Rocket Logic Global.\n\nWe are pleased to report that the T3-649 architecture is exceeding performance benchmarks by 14%. The 11D fold compression is stable and COP ratings remain above 3.0 across all nodes.\n\nUpcoming: SchemaForge v2 release, PrimeNet mesh expansion.\n\n— Rocket Logic Global',
     date: '2026-02-18T10:00:00', read: true, folder: 'inbox',
   },
-  {
-    id: '4', from: 'operator', to: 'team@prime.os', subject: 'Re: Fold Memory Allocation',
-    body: 'Acknowledged. Increasing FoldMem allocation to 48 blocks for the inference cluster.\n\nWill monitor torsion values overnight.',
-    date: '2026-02-17T14:20:00', read: true, folder: 'sent',
-  },
-  {
-    id: '5', from: 'operator', to: '', subject: 'Notes on Hypersphere calibration',
-    body: 'Need to check the rotation matrices after the last kernel update. The 7D projection seems slightly off on axis 3.\n\nTODO: Run diagnostic via terminal.',
-    date: '2026-02-20T07:00:00', read: true, folder: 'drafts',
-  },
 ];
 
 const FOLDERS = [
   { id: 'inbox' as const, label: 'Inbox', icon: <Inbox size={14} /> },
-  { id: 'sent' as const, label: 'Sent', icon: <Send size={14} /> },
-  { id: 'drafts' as const, label: 'Drafts', icon: <FileText size={14} /> },
 ];
 
 export default function PrimeMailApp() {
   const [emails, setEmails] = useState<Email[]>(INITIAL_EMAILS);
-  const [folder, setFolder] = useState<'inbox' | 'sent' | 'drafts'>('inbox');
+  const [folder, setFolder] = useState<'inbox'>('inbox');
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [composing, setComposing] = useState(false);
-  const [composeTo, setComposeTo] = useState('');
-  const [composeSubject, setComposeSubject] = useState('');
-  const [composeBody, setComposeBody] = useState('');
+  const [loading, setLoading] = useState(false);
+  const hasFetched = useRef(false);
+
+  const fetchAIEmails = async () => {
+    setLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('ai-social', {
+        body: { action: 'generate-emails' },
+      });
+      if (error) throw error;
+      if (data?.emails) {
+        const now = Date.now();
+        const newEmails: Email[] = data.emails.map((e: any, i: number) => ({
+          id: `ai-${now}-${i}`,
+          from: e.from,
+          to: e.to || 'operator',
+          subject: e.subject,
+          body: e.body,
+          date: new Date(now - i * 3600000).toISOString(),
+          read: false,
+          folder: 'inbox' as const,
+          aiGenerated: true,
+        }));
+        setEmails(prev => [...newEmails, ...prev]);
+      }
+    } catch (e) {
+      console.error('Failed to fetch AI emails:', e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!hasFetched.current) {
+      hasFetched.current = true;
+      fetchAIEmails();
+    }
+  }, []);
 
   const folderEmails = emails.filter(e => e.folder === folder);
   const selected = selectedId ? emails.find(e => e.id === selectedId) : null;
@@ -63,50 +88,12 @@ export default function PrimeMailApp() {
     setEmails(prev => prev.map(e => e.id === id ? { ...e, read: true } : e));
   };
 
-  const sendEmail = () => {
-    if (!composeTo.trim() || !composeSubject.trim()) return;
-    const newEmail: Email = {
-      id: Date.now().toString(), from: 'operator', to: composeTo, subject: composeSubject,
-      body: composeBody, date: new Date().toISOString(), read: true, folder: 'sent',
-    };
-    setEmails(prev => [newEmail, ...prev]);
-    setComposing(false);
-    setComposeTo('');
-    setComposeSubject('');
-    setComposeBody('');
-  };
-
   const deleteEmail = (id: string) => {
     setEmails(prev => prev.filter(e => e.id !== id));
     if (selectedId === id) setSelectedId(null);
   };
 
   const unreadCount = emails.filter(e => e.folder === 'inbox' && !e.read).length;
-
-  // Compose view
-  if (composing) {
-    return (
-      <div className="h-full bg-background flex flex-col font-mono text-xs">
-        <div className="flex items-center gap-2 px-3 py-2 border-b border-border">
-          <button onClick={() => setComposing(false)} className="text-muted-foreground hover:text-foreground"><ArrowLeft size={14} /></button>
-          <Mail size={14} className="text-primary" />
-          <span className="font-display text-[10px] tracking-wider uppercase text-primary">New Message</span>
-        </div>
-        <div className="flex-1 flex flex-col p-3 gap-2">
-          <input placeholder="To" value={composeTo} onChange={e => setComposeTo(e.target.value)}
-            className="bg-card/50 border border-border rounded px-2 py-1.5 text-xs text-foreground placeholder:text-muted-foreground/50" />
-          <input placeholder="Subject" value={composeSubject} onChange={e => setComposeSubject(e.target.value)}
-            className="bg-card/50 border border-border rounded px-2 py-1.5 text-xs text-foreground placeholder:text-muted-foreground/50" />
-          <textarea placeholder="Message body..." value={composeBody} onChange={e => setComposeBody(e.target.value)}
-            className="flex-1 bg-card/50 border border-border rounded px-2 py-2 text-xs text-foreground placeholder:text-muted-foreground/50 resize-none" />
-          <button onClick={sendEmail}
-            className="self-end flex items-center gap-1.5 px-3 py-1.5 rounded border border-primary/40 text-primary hover:bg-primary/10 transition-colors text-[10px] font-display tracking-wider uppercase">
-            <Send size={12} /> Send
-          </button>
-        </div>
-      </div>
-    );
-  }
 
   // Read view
   if (selected) {
@@ -115,6 +102,11 @@ export default function PrimeMailApp() {
         <div className="flex items-center gap-2 px-3 py-2 border-b border-border">
           <button onClick={() => setSelectedId(null)} className="text-muted-foreground hover:text-foreground"><ArrowLeft size={14} /></button>
           <span className="font-display text-[10px] tracking-wider uppercase text-primary flex-1 truncate">{selected.subject}</span>
+          {selected.aiGenerated && (
+            <Badge variant="outline" className="text-[7px] px-1 py-0 h-3.5 border-primary/30 text-primary/70">
+              <Bot size={7} className="mr-0.5" /> AI
+            </Badge>
+          )}
           <button onClick={() => deleteEmail(selected.id)} className="text-muted-foreground hover:text-destructive"><Trash2 size={13} /></button>
         </div>
         <div className="flex-1 overflow-y-auto p-3">
@@ -155,16 +147,28 @@ export default function PrimeMailApp() {
             </button>
           ))}
         </div>
-        <div className="mt-auto p-2 border-t border-border">
-          <button onClick={() => setComposing(true)}
-            className="w-full flex items-center justify-center gap-1 px-2 py-1.5 rounded border border-primary/30 text-primary hover:bg-primary/10 transition-colors text-[10px] font-display tracking-wider uppercase">
-            <Mail size={11} /> Compose
+        <div className="mt-auto p-2 border-t border-border space-y-1.5">
+          <button
+            onClick={fetchAIEmails}
+            disabled={loading}
+            className="w-full flex items-center justify-center gap-1 px-2 py-1.5 rounded border border-primary/30 text-primary hover:bg-primary/10 transition-colors text-[9px] font-display tracking-wider uppercase disabled:opacity-40"
+          >
+            {loading ? <Loader2 size={10} className="animate-spin" /> : <RefreshCw size={10} />}
+            Refresh
           </button>
+          <div className="flex items-center gap-1 px-1 py-1 text-[8px] text-muted-foreground/50">
+            <Bot size={9} /> AI Managed
+          </div>
         </div>
       </div>
 
       {/* Email list */}
       <div className="flex-1 overflow-y-auto">
+        {loading && emails.length <= INITIAL_EMAILS.length && (
+          <div className="p-4 text-center text-muted-foreground/50 text-[10px] flex items-center justify-center gap-1.5">
+            <Loader2 size={12} className="animate-spin" /> Generating mail…
+          </div>
+        )}
         {folderEmails.length === 0 ? (
           <div className="p-4 text-center text-muted-foreground/50 text-[10px]">No messages</div>
         ) : (
@@ -173,11 +177,14 @@ export default function PrimeMailApp() {
               className={`w-full text-left px-3 py-2.5 border-b border-border/30 hover:bg-muted/20 transition-colors ${!e.read ? 'bg-primary/5' : ''}`}>
               <div className="flex items-center justify-between">
                 <span className={`text-[10px] truncate ${!e.read ? 'text-foreground font-semibold' : 'text-muted-foreground'}`}>
-                  {folder === 'sent' ? `To: ${e.to}` : e.from}
+                  {e.from}
                 </span>
-                <span className="text-[8px] text-muted-foreground/50 shrink-0 ml-2">
-                  {new Date(e.date).toLocaleDateString()}
-                </span>
+                <div className="flex items-center gap-1 shrink-0 ml-2">
+                  {e.aiGenerated && <Bot size={8} className="text-primary/50" />}
+                  <span className="text-[8px] text-muted-foreground/50">
+                    {new Date(e.date).toLocaleDateString()}
+                  </span>
+                </div>
               </div>
               <p className={`text-[10px] truncate mt-0.5 ${!e.read ? 'text-foreground' : 'text-muted-foreground/70'}`}>{e.subject}</p>
               <p className="text-[9px] text-muted-foreground/40 truncate mt-0.5">{e.body.substring(0, 80)}</p>
