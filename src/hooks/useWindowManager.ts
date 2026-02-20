@@ -52,6 +52,7 @@ export function useWindowManager() {
           case 'robotics': return [780, 520];
           case 'booking': return [850, 550];
           case 'iot': return [800, 520];
+          case 'arcade': return [700, 520];
           default: return [600, 420];
         }
       };

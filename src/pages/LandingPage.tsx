@@ -1,11 +1,13 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, useInView } from 'framer-motion';
 import {
   Terminal, Brain, Network, Shield, Zap, HardDrive,
   Database, Code, Monitor, MessageSquare, FileText,
-  Activity, ChevronRight, ArrowRight, Menu, X, Cpu
+  Activity, ChevronRight, ArrowRight, Menu, X, Cpu,
+  Mail, CheckCircle, Loader2
 } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
 
 /* ─── Animated counter ─── */
 function AnimatedNumber({ target, suffix = '' }: { target: number; suffix?: string }) {
@@ -31,7 +33,6 @@ function GridBackground() {
   return (
     <div className="absolute inset-0 overflow-hidden pointer-events-none">
       <div className="absolute inset-0 prime-grid opacity-40" />
-      {/* Floating orbs */}
       <motion.div
         className="absolute w-[600px] h-[600px] rounded-full"
         style={{ background: 'radial-gradient(circle, hsl(180 100% 50% / 0.06), transparent 70%)' }}
@@ -68,7 +69,7 @@ function FeatureCard({ icon: Icon, title, desc, color, delay }: {
         style={{ boxShadow: `inset 0 0 30px hsl(var(--${color}) / 0.05), 0 0 20px hsl(var(--${color}) / 0.08)` }}
       />
       <div className="relative">
-        <div className={`w-10 h-10 rounded flex items-center justify-center mb-4`}
+        <div className="w-10 h-10 rounded flex items-center justify-center mb-4"
           style={{ background: `hsl(var(--${color}) / 0.1)`, border: `1px solid hsl(var(--${color}) / 0.2)` }}
         >
           <Icon size={20} style={{ color: `hsl(var(--${color}))` }} />
@@ -98,6 +99,112 @@ function SectionHeader({ tag, title, desc }: { tag: string; title: string; desc:
       <h2 className="font-display text-2xl md:text-3xl lg:text-4xl tracking-wider uppercase text-foreground mb-4">{title}</h2>
       <p className="font-body text-base md:text-lg text-muted-foreground max-w-2xl mx-auto">{desc}</p>
     </motion.div>
+  );
+}
+
+/* ─── Waitlist Section ─── */
+function WaitlistSection() {
+  const [email, setEmail] = useState('');
+  const [name, setName] = useState('');
+  const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'duplicate' | 'error'>('idle');
+  const [count, setCount] = useState<number | null>(null);
+  const ref = useRef<HTMLDivElement>(null);
+  const inView = useInView(ref, { once: true, margin: '-40px' });
+
+  useEffect(() => {
+    (supabase as any).rpc('get_waitlist_count').then(({ data }: any) => {
+      if (typeof data === 'number') setCount(data);
+    });
+  }, []);
+
+  const handleSubmit = useCallback(async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!email.trim()) return;
+    setStatus('loading');
+    try {
+      const { error } = await (supabase as any).from('waitlist').insert({ email: email.trim().toLowerCase(), name: name.trim() || null });
+      if (error) {
+        if (error.code === '23505') setStatus('duplicate');
+        else setStatus('error');
+      } else {
+        setStatus('success');
+        setCount(prev => (prev ?? 0) + 1);
+      }
+    } catch { setStatus('error'); }
+  }, [email, name]);
+
+  return (
+    <section className="relative py-16 md:py-24 px-4 border-t border-border/30">
+      <div className="max-w-2xl mx-auto">
+        <motion.div
+          ref={ref}
+          initial={{ opacity: 0, y: 20 }}
+          animate={inView ? { opacity: 1, y: 0 } : {}}
+          transition={{ duration: 0.6 }}
+          className="text-center"
+        >
+          <span className="inline-block font-display text-[10px] tracking-[0.3em] uppercase text-primary/70 border border-primary/20 rounded-full px-4 py-1.5 mb-4">
+            Early Access
+          </span>
+          <h2 className="font-display text-2xl md:text-3xl tracking-wider uppercase text-foreground mb-3">
+            Join the <span className="text-primary">Waitlist</span>
+          </h2>
+          <p className="font-body text-base text-muted-foreground mb-8">
+            Reserve your node in the lattice. Be first to access new features, cloud persistence, and multiplayer.
+          </p>
+
+          {status === 'success' ? (
+            <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="flex flex-col items-center gap-3">
+              <CheckCircle size={32} className="text-prime-green" />
+              <p className="font-display text-sm tracking-wider uppercase text-prime-green">Node Reserved</p>
+              <p className="font-body text-sm text-muted-foreground">You're on the list. We'll ping your lattice when it's time.</p>
+            </motion.div>
+          ) : (
+            <form onSubmit={handleSubmit} className="flex flex-col sm:flex-row gap-3 max-w-lg mx-auto">
+              <div className="flex-1 flex flex-col gap-2">
+                <input
+                  type="email"
+                  required
+                  value={email}
+                  onChange={e => setEmail(e.target.value)}
+                  placeholder="you@lattice.prime"
+                  className="w-full bg-card/40 border border-border rounded px-4 py-2.5 text-sm font-mono text-foreground placeholder:text-muted-foreground/40 outline-none focus:border-primary/50 transition-colors"
+                />
+                <input
+                  type="text"
+                  value={name}
+                  onChange={e => setName(e.target.value)}
+                  placeholder="Operator name (optional)"
+                  maxLength={100}
+                  className="w-full bg-card/40 border border-border rounded px-4 py-2.5 text-sm font-mono text-foreground placeholder:text-muted-foreground/40 outline-none focus:border-primary/50 transition-colors"
+                />
+              </div>
+              <button
+                type="submit"
+                disabled={status === 'loading'}
+                className="flex items-center justify-center gap-2 px-6 py-2.5 rounded bg-primary/20 border border-primary/40 text-primary font-display text-[10px] tracking-[0.2em] uppercase hover:bg-primary/30 disabled:opacity-50 transition-all shrink-0"
+              >
+                {status === 'loading' ? <Loader2 size={14} className="animate-spin" /> : <Mail size={14} />}
+                Reserve Node
+              </button>
+            </form>
+          )}
+
+          {status === 'duplicate' && (
+            <p className="mt-3 text-[11px] font-mono text-prime-amber">You're already on the list! Your node is secured.</p>
+          )}
+          {status === 'error' && (
+            <p className="mt-3 text-[11px] font-mono text-prime-red">Lattice error. Please try again.</p>
+          )}
+
+          {count !== null && count > 0 && (
+            <p className="mt-6 text-[11px] font-mono text-muted-foreground/60">
+              <span className="text-primary">{count}</span> operators have joined the lattice
+            </p>
+          )}
+        </motion.div>
+      </div>
+    </section>
   );
 }
 
@@ -159,7 +266,6 @@ export default function LandingPage() {
           </button>
         </div>
 
-        {/* Mobile menu */}
         {mobileMenu && (
           <motion.div
             initial={{ opacity: 0, y: -10 }}
@@ -184,7 +290,6 @@ export default function LandingPage() {
               <span className="w-1.5 h-1.5 rounded-full bg-prime-green animate-pulse" />
               <span className="font-mono text-[10px] text-muted-foreground">v2.0.0 — Geometric Computing Kernel</span>
             </div>
-
 
             <h1 className="font-display text-4xl sm:text-5xl md:text-6xl lg:text-7xl tracking-wider uppercase text-foreground mb-6">
               <span className="text-primary glow-text">PRIME</span> OS
@@ -347,6 +452,9 @@ export default function LandingPage() {
           </div>
         </div>
       </section>
+
+      {/* ─── Waitlist ─── */}
+      <WaitlistSection />
 
       {/* ─── CTA ─── */}
       <section className="relative py-20 md:py-32 px-4 border-t border-border/30">
