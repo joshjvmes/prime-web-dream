@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { AppType, WindowState } from '@/types/os';
 import { OSNotification } from '@/hooks/useNotifications';
-import { Terminal, FolderTree, Activity, Cpu, Brain, Network, Code, HardDrive, Database, Zap, Settings, ChevronUp, Bell, X, Monitor, FileText, MessageSquare, Shield, Globe, Server, LayoutList, Image, Search, Link2, Orbit, CalendarDays, Moon, BookOpen, Table, Workflow, Paintbrush, Smartphone, Map, Package, Music, Dices, TrendingUp, Radio, Vault, Video } from 'lucide-react';
+import { Terminal, FolderTree, Activity, Cpu, Brain, Network, Code, HardDrive, Database, Zap, Settings, ChevronUp, Bell, X, Monitor, FileText, MessageSquare, Shield, Globe, Server, LayoutList, Image, Search, Link2, Orbit, CalendarDays, Moon, BookOpen, Table, Workflow, Paintbrush, Smartphone, Map, Package, Music, Dices, TrendingUp, Radio, Vault, Video, Mail, Users, Info } from 'lucide-react';
 import { startOfMonth, endOfMonth, eachDayOfInterval, getDay, isToday, isSameMonth, format } from 'date-fns';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 
@@ -12,6 +12,7 @@ interface TaskbarProps {
   notifications?: OSNotification[];
   onDismissNotification?: (id: string) => void;
   onSearch?: () => void;
+  onOpenAbout?: () => void;
 }
 
 const allApps: { app: AppType; title: string; icon: React.ReactNode; label: string }[] = [
@@ -49,14 +50,22 @@ const allApps: { app: AppType; title: string; icon: React.ReactNode; label: stri
   { app: 'stream', title: 'PrimeStream', icon: <Radio size={18} />, label: 'Stream' },
   { app: 'vault', title: 'PrimeVault', icon: <Vault size={18} />, label: 'Vault' },
   { app: 'videocall', title: 'PrimeLink', icon: <Video size={18} />, label: 'Video' },
+  { app: 'mail', title: 'PrimeMail', icon: <Mail size={18} />, label: 'Mail' },
+  { app: 'social', title: 'PrimeSocial', icon: <Users size={18} />, label: 'Social' },
   { app: 'settings', title: 'Settings', icon: <Settings size={18} />, label: 'Settings' },
 ];
 
-export default function Taskbar({ windows, onOpenApp, onFocusWindow, notifications = [], onDismissNotification, onSearch }: TaskbarProps) {
+export default function Taskbar({ windows, onOpenApp, onFocusWindow, notifications = [], onDismissNotification, onSearch, onOpenAbout }: TaskbarProps) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
 
-  const openWindows = windows.filter(w => !w.isMinimized);
+  const userName = (() => {
+    try {
+      const p = localStorage.getItem('prime-os-profile');
+      if (p) { const parsed = JSON.parse(p); return parsed.name || ''; }
+    } catch {}
+    return '';
+  })();
 
   return (
     <div className="fixed bottom-0 left-0 right-0 z-[100] flex items-center h-10 px-3 bg-card/90 backdrop-blur-md border-t border-border">
@@ -91,6 +100,16 @@ export default function Taskbar({ windows, onOpenApp, onFocusWindow, notificatio
                 {a.label}
               </button>
             ))}
+            {/* About button at bottom */}
+            <div className="border-t border-border mt-1 pt-1">
+              <button
+                onClick={() => { onOpenAbout?.(); setMenuOpen(false); }}
+                className="flex items-center gap-2.5 px-2 py-1.5 rounded text-xs font-body transition-all text-muted-foreground hover:text-foreground hover:bg-primary/10 w-full"
+              >
+                <Info size={18} className="text-muted-foreground" />
+                About PRIME OS
+              </button>
+            </div>
           </div>
         </PopoverContent>
       </Popover>
@@ -109,13 +128,17 @@ export default function Taskbar({ windows, onOpenApp, onFocusWindow, notificatio
 
       {/* Open windows */}
       <div className="flex items-center gap-1 overflow-x-auto scrollbar-none">
-        {openWindows.map(w => {
+        {windows.map(w => {
           const appDef = allApps.find(a => a.app === w.app);
           return (
             <button
               key={w.id}
               onClick={() => onFocusWindow(w.id)}
-              className="flex items-center gap-1.5 px-2 py-1 rounded text-xs font-body transition-all shrink-0 bg-primary/10 text-primary border border-primary/20"
+              className={`flex items-center gap-1.5 px-2 py-1 rounded text-xs font-body transition-all shrink-0 border ${
+                w.isMinimized
+                  ? 'bg-transparent text-muted-foreground border-border/50 opacity-60'
+                  : 'bg-primary/10 text-primary border-primary/20'
+              }`}
             >
               {appDef?.icon && <span className="[&>svg]:size-4">{appDef.icon}</span>}
               <span className="hidden sm:inline max-w-20 truncate">{w.title}</span>
@@ -178,6 +201,11 @@ export default function Taskbar({ windows, onOpenApp, onFocusWindow, notificatio
           <span className="w-1.5 h-1.5 rounded-full bg-prime-green animate-pulse-glow" />
           <span>649 cores</span>
         </div>
+        {userName && (
+          <span className="text-[9px] font-mono text-muted-foreground/70 hidden md:inline">
+            Op: {userName}
+          </span>
+        )}
         <ClockPopover onOpenApp={onOpenApp} />
       </div>
     </div>
