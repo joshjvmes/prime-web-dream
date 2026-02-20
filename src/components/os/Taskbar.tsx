@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { AppType, WindowState } from '@/types/os';
 import { OSNotification } from '@/hooks/useNotifications';
-import { Terminal, FolderTree, Activity, Cpu, Brain, Network, Code, HardDrive, Database, Zap, Settings, ChevronUp, Bell, X, Monitor, FileText, MessageSquare, Shield, Globe, Server, LayoutList, Image, Search, Link2, Orbit, CalendarDays, Moon, BookOpen, Table, Workflow, Paintbrush, Smartphone, Map, Package, Music, Dices, TrendingUp, Radio, Vault, Video, Mail, Users, Info, Bot, Cog, CalendarCheck, Wifi, Lock, Gamepad2 } from 'lucide-react';
+import { Terminal, FolderTree, Activity, Cpu, Brain, Network, Code, HardDrive, Database, Zap, Settings, ChevronUp, Bell, X, Monitor, FileText, MessageSquare, Shield, Globe, Server, LayoutList, Image, Search, Link2, Orbit, CalendarDays, Moon, BookOpen, Table, Workflow, Paintbrush, Smartphone, Map, Package, Music, Dices, TrendingUp, Radio, Vault, Video, Mail, Users, Info, Bot, Cog, CalendarCheck, Wifi, Lock, Gamepad2, Clipboard } from 'lucide-react';
 import { startOfMonth, endOfMonth, eachDayOfInterval, getDay, isToday, format } from 'date-fns';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import WorkspaceSwitcher from '@/components/os/WorkspaceSwitcher';
@@ -21,6 +21,7 @@ interface TaskbarProps {
   windowCountsByWorkspace: number[];
   voiceState?: { isListening: boolean; lastCommand: string; supported: boolean };
   onToggleVoice?: () => void;
+  onToggleClipboard?: () => void;
 }
 
 const allApps: { app: AppType; title: string; icon: React.ReactNode; label: string }[] = [
@@ -68,7 +69,7 @@ const allApps: { app: AppType; title: string; icon: React.ReactNode; label: stri
   { app: 'settings', title: 'Settings', icon: <Settings size={18} />, label: 'Settings' },
 ];
 
-export default function Taskbar({ windows, onOpenApp, onFocusWindow, notifications = [], onDismissNotification, onSearch, onOpenAbout, onLock, activeWorkspace, onSwitchWorkspace, windowCountsByWorkspace, voiceState, onToggleVoice }: TaskbarProps) {
+export default function Taskbar({ windows, onOpenApp, onFocusWindow, notifications = [], onDismissNotification, onSearch, onOpenAbout, onLock, activeWorkspace, onSwitchWorkspace, windowCountsByWorkspace, voiceState, onToggleVoice, onToggleClipboard }: TaskbarProps) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
 
@@ -169,6 +170,13 @@ export default function Taskbar({ windows, onOpenApp, onFocusWindow, notificatio
             supported={voiceState.supported}
             onToggle={onToggleVoice}
           />
+        )}
+
+        {/* Clipboard Manager */}
+        {onToggleClipboard && (
+          <button onClick={onToggleClipboard} aria-label="Clipboard (Ctrl+Shift+V)" className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors" title="Clipboard (Ctrl+Shift+V)">
+            <Clipboard size={13} />
+          </button>
         )}
 
         {/* Lock button */}

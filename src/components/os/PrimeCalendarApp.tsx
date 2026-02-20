@@ -1,105 +1,18 @@
-import { useState, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   startOfMonth, endOfMonth, eachDayOfInterval, format, addMonths, subMonths,
-  getDay, isSameDay, isToday, getDayOfYear, getMonth
+  getDay, isSameDay, isToday, getMonth, addDays, addWeeks, isSameMonth
 } from 'date-fns';
-import { ChevronLeft, ChevronRight, Diamond, Sun, Moon } from 'lucide-react';
-
-// Moon phase calculation using synodic period
-const SYNODIC_PERIOD = 29.53058867;
-const KNOWN_NEW_MOON = new Date(2000, 0, 6, 18, 14); // Jan 6, 2000
-
-function getMoonPhase(date: Date): number {
-  const diff = date.getTime() - KNOWN_NEW_MOON.getTime();
-  const days = diff / (1000 * 60 * 60 * 24);
-  const phase = ((days % SYNODIC_PERIOD) + SYNODIC_PERIOD) % SYNODIC_PERIOD;
-  return phase;
-}
-
-function getMoonPhaseIndex(date: Date): number {
-  const phase = getMoonPhase(date);
-  const segment = SYNODIC_PERIOD / 8;
-  return Math.floor(phase / segment) % 8;
-}
-
-const MOON_PHASE_NAMES = [
-  'New Moon', 'Waxing Crescent', 'First Quarter', 'Waxing Gibbous',
-  'Full Moon', 'Waning Gibbous', 'Last Quarter', 'Waning Crescent',
-];
-
-const MOON_PHASE_ICONS = ['🌑', '🌒', '🌓', '🌔', '🌕', '🌖', '🌗', '🌘'];
-
-function getMoonIllumination(date: Date): number {
-  const phase = getMoonPhase(date);
-  const angle = (phase / SYNODIC_PERIOD) * Math.PI * 2;
-  return Math.round((1 - Math.cos(angle)) / 2 * 100);
-}
-
-function isPrime(n: number): boolean {
-  if (n < 2) return false;
-  if (n < 4) return true;
-  if (n % 2 === 0 || n % 3 === 0) return false;
-  for (let i = 5; i * i <= n; i += 6) {
-    if (n % i === 0 || n % (i + 2) === 0) return false;
-  }
-  return true;
-}
-
-function primeFactorization(n: number): string {
-  if (n < 2) return String(n);
-  const factors: string[] = [];
-  let x = n;
-  for (let i = 2; i * i <= x; i++) {
-    let count = 0;
-    while (x % i === 0) { count++; x /= i; }
-    if (count > 0) factors.push(count > 1 ? `${i}^${count}` : String(i));
-  }
-  if (x > 1) factors.push(String(x));
-  return factors.join(' × ');
-}
-
-function latticeCoord(day: number): string {
-  const primes = [2, 3, 5, 7, 11, 13];
-  const coords = primes.slice(0, 3).map(p => ((day * p) % 97));
-  return `⟨${coords.join(',')}⟩`;
-}
-
-function getSeasonTint(month: number): string {
-  if (month >= 11 || month <= 1) return 'bg-blue-500/5'; // winter
-  if (month >= 2 && month <= 4) return 'bg-green-500/5'; // spring
-  if (month >= 5 && month <= 7) return 'bg-amber-500/5'; // summer
-  return 'bg-orange-500/5'; // autumn
-}
-
-function getSolarCategory(date: Date): string {
-  const doy = getDayOfYear(date);
-  if (doy <= 80 || doy >= 355) return 'Low Arc';
-  if (doy <= 172) return 'Rising Arc';
-  if (doy <= 264) return 'High Arc';
-  return 'Falling Arc';
-}
-
-// Solstice/equinox approximate day-of-year
-function getSolarProgress(date: Date): { daysSinceSolstice: number; daysToNext: number; label: string } {
-  const doy = getDayOfYear(date);
-  const markers = [
-    { doy: 21, label: 'Winter Solstice' },
-    { doy: 80, label: 'Spring Equinox' },
-    { doy: 172, label: 'Summer Solstice' },
-    { doy: 264, label: 'Autumn Equinox' },
-    { doy: 356, label: 'Winter Solstice' },
-  ];
-  for (let i = 0; i < markers.length - 1; i++) {
-    if (doy >= markers[i].doy && doy < markers[i + 1].doy) {
-      return {
-        daysSinceSolstice: doy - markers[i].doy,
-        daysToNext: markers[i + 1].doy - doy,
-        label: `${markers[i].label} → ${markers[i + 1].label}`,
-      };
-    }
-  }
-  return { daysSinceSolstice: 0, daysToNext: 21, label: 'Winter Solstice → Spring Equinox' };
-}
+import { ChevronLeft, ChevronRight, Diamond, Sun, Moon, Plus } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
+import EventModal from './calendar/EventModal';
+import {
+  getMoonPhaseIndex, getMoonIllumination, getMoonPhase,
+  MOON_PHASE_NAMES, MOON_PHASE_ICONS, SYNODIC_PERIOD,
+  isPrime, primeFactorization, latticeCoord,
+  getSeasonTint, getSolarCategory, getSolarProgress,
+  CalendarEvent, EVENT_COLORS,
+} from './calendar/calendarUtils';
 
 const SYSTEM_EVENTS = [
   { title: 'Q3 batch scheduled', offset: 3 },
@@ -110,15 +23,146 @@ const SYSTEM_EVENTS = [
 ];
 
 const WEEKDAYS = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
+const GUEST_STORAGE_KEY = 'prime-os-calendar-events';
+
+function loadGuestEvents(): CalendarEvent[] {
+  try { return JSON.parse(localStorage.getItem(GUEST_STORAGE_KEY) || '[]'); } catch { return []; }
+}
 
 export default function PrimeCalendarApp() {
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [selectedDay, setSelectedDay] = useState<Date | null>(null);
+  const [events, setEvents] = useState<CalendarEvent[]>([]);
+  const [userId, setUserId] = useState<string | null>(null);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [editingEvent, setEditingEvent] = useState<CalendarEvent | null>(null);
+
+  // Auth check
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data: { user } }) => setUserId(user?.id ?? null));
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, session) => {
+      setUserId(session?.user?.id ?? null);
+    });
+    return () => subscription.unsubscribe();
+  }, []);
+
+  // Load events
+  useEffect(() => {
+    if (userId) {
+      (supabase.from('calendar_events') as any).select('*').eq('user_id', userId).then(({ data }: any) => {
+        if (data) setEvents(data as CalendarEvent[]);
+      });
+      // Realtime
+      const channel = supabase.channel('calendar-events')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'calendar_events', filter: `user_id=eq.${userId}` }, () => {
+          (supabase.from('calendar_events') as any).select('*').eq('user_id', userId).then(({ data }: any) => {
+            if (data) setEvents(data as CalendarEvent[]);
+          });
+        }).subscribe();
+      return () => { supabase.removeChannel(channel); };
+    } else {
+      setEvents(loadGuestEvents());
+    }
+  }, [userId]);
+
+  // Generate recurring instances for the visible month
+  const visibleEvents = useMemo(() => {
+    const monthStart = startOfMonth(currentMonth);
+    const monthEnd = endOfMonth(currentMonth);
+    const result: CalendarEvent[] = [];
+
+    for (const evt of events) {
+      const evtDate = new Date(evt.start_time);
+      
+      if (!evt.recurring) {
+        if (evtDate >= monthStart && evtDate <= monthEnd) result.push(evt);
+        continue;
+      }
+
+      // Generate recurring instances
+      let cursor = new Date(evtDate);
+      const maxIterations = 400;
+      let iter = 0;
+      while (cursor <= monthEnd && iter < maxIterations) {
+        iter++;
+        if (cursor >= monthStart) {
+          result.push({ ...evt, id: `${evt.id}-${format(cursor, 'yyyy-MM-dd')}`, start_time: cursor.toISOString() });
+        }
+        if (evt.recurring === 'daily') cursor = addDays(cursor, 1);
+        else if (evt.recurring === 'weekly') cursor = addWeeks(cursor, 1);
+        else if (evt.recurring === 'monthly') {
+          cursor = new Date(cursor);
+          cursor.setMonth(cursor.getMonth() + 1);
+        }
+        else break;
+      }
+    }
+    return result;
+  }, [events, currentMonth]);
+
+  const getEventsForDay = useCallback((day: Date) => {
+    return visibleEvents.filter(e => isSameDay(new Date(e.start_time), day));
+  }, [visibleEvents]);
+
+  const handleSaveEvent = useCallback(async (data: Partial<CalendarEvent>) => {
+    if (editingEvent) {
+      // Update
+      const realId = editingEvent.id.split('-')[0] === 'local' ? editingEvent.id : editingEvent.id.replace(/-\d{4}-\d{2}-\d{2}$/, '');
+      if (userId) {
+        await (supabase.from('calendar_events') as any).update(data).eq('id', realId).eq('user_id', userId);
+      } else {
+        setEvents(prev => {
+          const updated = prev.map(e => e.id === realId ? { ...e, ...data } : e);
+          localStorage.setItem(GUEST_STORAGE_KEY, JSON.stringify(updated));
+          return updated;
+        });
+      }
+    } else {
+      // Create
+      if (userId) {
+        await (supabase.from('calendar_events') as any).insert({ ...data, user_id: userId });
+      } else {
+        const newEvt: CalendarEvent = {
+          id: `local-${Date.now()}`,
+          user_id: 'guest',
+          title: data.title || 'Untitled',
+          description: data.description ?? null,
+          start_time: data.start_time || new Date().toISOString(),
+          end_time: null,
+          color: data.color || '#8b5cf6',
+          reminder_minutes: data.reminder_minutes ?? null,
+          recurring: data.recurring ?? null,
+          created_at: new Date().toISOString(),
+        };
+        setEvents(prev => {
+          const next = [...prev, newEvt];
+          localStorage.setItem(GUEST_STORAGE_KEY, JSON.stringify(next));
+          return next;
+        });
+      }
+    }
+    setModalOpen(false);
+    setEditingEvent(null);
+  }, [editingEvent, userId]);
+
+  const handleDeleteEvent = useCallback(async () => {
+    if (!editingEvent) return;
+    const realId = editingEvent.id.split('-')[0] === 'local' ? editingEvent.id : editingEvent.id.replace(/-\d{4}-\d{2}-\d{2}$/, '');
+    if (userId) {
+      await (supabase.from('calendar_events') as any).delete().eq('id', realId).eq('user_id', userId);
+    } else {
+      setEvents(prev => {
+        const next = prev.filter(e => e.id !== realId);
+        localStorage.setItem(GUEST_STORAGE_KEY, JSON.stringify(next));
+        return next;
+      });
+    }
+    setModalOpen(false);
+    setEditingEvent(null);
+  }, [editingEvent, userId]);
 
   const days = useMemo(() => {
-    const start = startOfMonth(currentMonth);
-    const end = endOfMonth(currentMonth);
-    return eachDayOfInterval({ start, end });
+    return eachDayOfInterval({ start: startOfMonth(currentMonth), end: endOfMonth(currentMonth) });
   }, [currentMonth]);
 
   const startDayOfWeek = getDay(startOfMonth(currentMonth));
@@ -147,9 +191,11 @@ export default function PrimeCalendarApp() {
     });
   }, []);
 
+  const selectedDayEvents = selectedDay ? getEventsForDay(selectedDay) : [];
+
   return (
     <div className="h-full bg-background flex flex-col font-mono text-xs overflow-hidden">
-      {/* Header with nav */}
+      {/* Header */}
       <div className="flex items-center justify-between px-3 py-2 border-b border-border">
         <button onClick={() => setCurrentMonth(m => subMonths(m, 1))} className="p-1 hover:bg-primary/10 rounded text-muted-foreground hover:text-primary">
           <ChevronLeft size={14} />
@@ -185,7 +231,6 @@ export default function PrimeCalendarApp() {
         <div className="flex-1">
           <div className="h-1.5 bg-muted rounded-full overflow-hidden relative">
             <div className="h-full bg-primary/40 rounded-full" style={{ width: `${solarPct}%` }} />
-            {/* Equinox/solstice markers */}
             <div className="absolute top-0 left-1/4 w-px h-full bg-muted-foreground/30" />
             <div className="absolute top-0 left-1/2 w-px h-full bg-muted-foreground/30" />
             <div className="absolute top-0 left-3/4 w-px h-full bg-muted-foreground/30" />
@@ -197,29 +242,26 @@ export default function PrimeCalendarApp() {
       <div className="flex flex-1 overflow-hidden">
         {/* Calendar Grid */}
         <div className="flex-1 p-2 overflow-y-auto">
-          {/* Weekday headers */}
           <div className="grid grid-cols-7 gap-px mb-1">
             {WEEKDAYS.map(d => (
               <div key={d} className="text-center text-[9px] text-muted-foreground/60 font-display tracking-wider">{d}</div>
             ))}
           </div>
-
-          {/* Day cells */}
           <div className="grid grid-cols-7 gap-px">
-            {Array.from({ length: startDayOfWeek }).map((_, i) => (
-              <div key={`pad-${i}`} />
-            ))}
+            {Array.from({ length: startDayOfWeek }).map((_, i) => <div key={`pad-${i}`} />)}
             {days.map(day => {
               const dayNum = day.getDate();
               const phaseIdx = getMoonPhaseIndex(day);
               const prime = isPrime(dayNum);
               const selected = selectedDay && isSameDay(day, selectedDay);
               const todayMatch = isToday(day);
+              const dayEvents = getEventsForDay(day);
 
               return (
                 <button
                   key={dayNum}
                   onClick={() => setSelectedDay(day)}
+                  onDoubleClick={() => { setSelectedDay(day); setEditingEvent(null); setModalOpen(true); }}
                   className={`relative p-1 rounded text-center transition-all min-h-[40px] flex flex-col items-center justify-center gap-0.5
                     ${seasonTint}
                     ${selected ? 'ring-1 ring-primary bg-primary/10' : 'hover:bg-muted/40'}
@@ -232,18 +274,52 @@ export default function PrimeCalendarApp() {
                     <span className={`text-[10px] ${todayMatch ? 'text-primary font-bold' : 'text-foreground'}`}>{dayNum}</span>
                   </div>
                   <span className="text-[7px] leading-none">{MOON_PHASE_ICONS[phaseIdx]}</span>
+                  {/* Event dots */}
+                  {dayEvents.length > 0 && (
+                    <div className="flex gap-0.5 mt-0.5">
+                      {dayEvents.slice(0, 3).map((e, i) => (
+                        <span key={i} className="w-1 h-1 rounded-full" style={{ backgroundColor: e.color }} />
+                      ))}
+                      {dayEvents.length > 3 && <span className="text-[6px] text-muted-foreground">+{dayEvents.length - 3}</span>}
+                    </div>
+                  )}
                 </button>
               );
             })}
           </div>
         </div>
 
-        {/* Right Panel: Day Detail / Events */}
-        <div className="w-44 border-l border-border p-2 overflow-y-auto flex flex-col gap-3">
+        {/* Right Panel */}
+        <div className="w-48 border-l border-border p-2 overflow-y-auto flex flex-col gap-3">
           {selectedDay ? (
             <div className="space-y-2">
-              <h3 className="font-display text-[9px] tracking-wider uppercase text-primary">Day Detail</h3>
+              <div className="flex items-center justify-between">
+                <h3 className="font-display text-[9px] tracking-wider uppercase text-primary">Day Detail</h3>
+                <button onClick={() => { setEditingEvent(null); setModalOpen(true); }} className="p-0.5 rounded hover:bg-primary/10 text-primary" title="Add event">
+                  <Plus size={11} />
+                </button>
+              </div>
               <p className="text-[10px] text-foreground">{format(selectedDay, 'EEEE, MMMM d, yyyy')}</p>
+
+              {/* Events for this day */}
+              {selectedDayEvents.length > 0 && (
+                <div className="space-y-1">
+                  <p className="text-[8px] text-muted-foreground uppercase tracking-wider">Events</p>
+                  {selectedDayEvents.map(evt => (
+                    <button
+                      key={evt.id}
+                      onClick={() => { setEditingEvent(evt); setModalOpen(true); }}
+                      className="w-full text-left p-1.5 rounded border border-border/30 hover:border-border bg-card/50 transition-colors"
+                    >
+                      <div className="flex items-center gap-1.5">
+                        <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: evt.color }} />
+                        <span className="text-[10px] text-foreground truncate">{evt.title}</span>
+                      </div>
+                      <span className="text-[8px] text-muted-foreground">{format(new Date(evt.start_time), 'HH:mm')}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
 
               <div className="space-y-1.5">
                 <div>
@@ -253,12 +329,10 @@ export default function PrimeCalendarApp() {
                   </p>
                   <p className="text-[9px] text-muted-foreground">{getMoonIllumination(selectedDay)}% illumination</p>
                 </div>
-
                 <div>
                   <p className="text-[8px] text-muted-foreground uppercase tracking-wider">Solar</p>
                   <p className="text-[10px] text-foreground">{getSolarCategory(selectedDay)}</p>
                 </div>
-
                 <div>
                   <p className="text-[8px] text-muted-foreground uppercase tracking-wider">Factorization</p>
                   <p className="text-[10px] text-foreground font-mono">{primeFactorization(selectedDay.getDate())}</p>
@@ -266,7 +340,6 @@ export default function PrimeCalendarApp() {
                     <p className="text-[9px] text-primary flex items-center gap-1"><Diamond size={8} /> Prime day</p>
                   )}
                 </div>
-
                 <div>
                   <p className="text-[8px] text-muted-foreground uppercase tracking-wider">Lattice Coord</p>
                   <p className="text-[10px] text-primary font-mono">{latticeCoord(selectedDay.getDate())}</p>
@@ -276,7 +349,7 @@ export default function PrimeCalendarApp() {
           ) : (
             <div>
               <h3 className="font-display text-[9px] tracking-wider uppercase text-muted-foreground">Select a day</h3>
-              <p className="text-[9px] text-muted-foreground/60 mt-1">Click any day cell for details</p>
+              <p className="text-[9px] text-muted-foreground/60 mt-1">Click to view, double-click to add event</p>
             </div>
           )}
 
@@ -293,6 +366,17 @@ export default function PrimeCalendarApp() {
           </div>
         </div>
       </div>
+
+      {/* Event Modal */}
+      {modalOpen && selectedDay && (
+        <EventModal
+          date={selectedDay}
+          event={editingEvent}
+          onSave={handleSaveEvent}
+          onDelete={editingEvent ? handleDeleteEvent : undefined}
+          onClose={() => { setModalOpen(false); setEditingEvent(null); }}
+        />
+      )}
     </div>
   );
 }

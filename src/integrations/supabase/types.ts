@@ -14,6 +14,45 @@ export type Database = {
   }
   public: {
     Tables: {
+      calendar_events: {
+        Row: {
+          color: string
+          created_at: string
+          description: string | null
+          end_time: string | null
+          id: string
+          recurring: string | null
+          reminder_minutes: number | null
+          start_time: string
+          title: string
+          user_id: string
+        }
+        Insert: {
+          color?: string
+          created_at?: string
+          description?: string | null
+          end_time?: string | null
+          id?: string
+          recurring?: string | null
+          reminder_minutes?: number | null
+          start_time: string
+          title: string
+          user_id: string
+        }
+        Update: {
+          color?: string
+          created_at?: string
+          description?: string | null
+          end_time?: string | null
+          id?: string
+          recurring?: string | null
+          reminder_minutes?: number | null
+          start_time?: string
+          title?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       chat_messages: {
         Row: {
           channel: string
@@ -62,6 +101,39 @@ export type Database = {
           last_seen?: string
           user_id?: string
           username?: string
+        }
+        Relationships: []
+      }
+      file_metadata: {
+        Row: {
+          created_at: string
+          file_name: string
+          file_path: string
+          file_size: number
+          folder: string
+          id: string
+          mime_type: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          file_name: string
+          file_path: string
+          file_size: number
+          folder?: string
+          id?: string
+          mime_type?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          file_name?: string
+          file_path?: string
+          file_size?: number
+          folder?: string
+          id?: string
+          mime_type?: string | null
+          user_id?: string
         }
         Relationships: []
       }
