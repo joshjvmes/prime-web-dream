@@ -170,3 +170,22 @@
   color: hsl(var(--primary));
   margin-right: 0.5rem;
 }
+
+/* Mobile: disable scan-lines for performance, safe area insets */
+@media (max-width: 767px) {
+  .scan-lines::after {
+    display: none;
+  }
+  body {
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+  }
+}
+
+/* Safe area padding utility */
+.safe-area-bottom {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+.safe-area-top {
+  padding-top: env(safe-area-inset-top);
+}

@@ -1,9 +1,11 @@
 import { useState } from 'react';
 import { Terminal, FolderTree, Activity, Cpu, Brain, Network, Code, HardDrive, Database, Zap, Settings, Globe, Server, LayoutList, Image, Link2, Orbit, CalendarDays, BookOpen, Table, Workflow, Paintbrush, Smartphone, Map, Package, Music, Dices, TrendingUp, Radio, Vault, Video, Bot, Cog, CalendarCheck, Wifi, Monitor, FileText, MessageSquare, Shield, Mail, Users, ChevronDown, ChevronRight, Gamepad2, ShieldCheck, PenLine, Wallet, Blocks, Store } from 'lucide-react';
 import { AppType } from '@/types/os';
+import type { DeviceClass } from '@/hooks/useDeviceClass';
 
 interface DesktopIconsProps {
   onOpenApp: (app: AppType, title: string) => void;
+  deviceClass?: DeviceClass;
 }
 
 interface AppEntry { app: AppType; title: string; icon: React.ReactNode; label: string; }
@@ -93,16 +95,16 @@ const categories: { name: string; apps: AppEntry[] }[] = [
   },
 ];
 
-export default function DesktopIcons({ onOpenApp }: DesktopIconsProps) {
+export default function DesktopIcons({ onOpenApp, deviceClass = 'desktop' }: DesktopIconsProps) {
+  const isTablet = deviceClass === 'tablet';
   const [expanded, setExpanded] = useState<Record<string, boolean>>(() => {
-    // Start with Core expanded
     return { Core: true };
   });
 
   const toggle = (name: string) => setExpanded(prev => ({ ...prev, [name]: !prev[name] }));
 
   return (
-    <div className="absolute top-14 left-4 flex flex-col gap-0.5 select-none z-[2] max-h-[calc(100vh-100px)] overflow-y-auto scrollbar-none w-[84px]">
+    <div className={`absolute top-14 left-4 flex flex-col gap-0.5 select-none z-[2] max-h-[calc(100vh-100px)] overflow-y-auto scrollbar-none ${isTablet ? 'w-[100px]' : 'w-[84px]'}`}>
       {categories.map(cat => (
         <div key={cat.name}>
           <button
@@ -117,8 +119,9 @@ export default function DesktopIcons({ onOpenApp }: DesktopIconsProps) {
               {cat.apps.map(({ app, title, icon, label }) => (
                 <button
                   key={app}
-                  onDoubleClick={() => onOpenApp(app, title)}
-                  className="flex flex-col items-center justify-center w-full py-1.5 rounded hover:bg-primary/10 transition-colors group"
+                  onClick={isTablet ? () => onOpenApp(app, title) : undefined}
+                  onDoubleClick={isTablet ? undefined : () => onOpenApp(app, title)}
+                  className={`flex flex-col items-center justify-center w-full ${isTablet ? 'py-2' : 'py-1.5'} rounded hover:bg-primary/10 transition-colors group`}
                 >
                   <div className="text-muted-foreground group-hover:text-primary transition-colors">{icon}</div>
                   <span className="font-body text-[8px] mt-0.5 text-muted-foreground group-hover:text-foreground text-center leading-tight">{label}</span>
