@@ -1,117 +1,103 @@
 
-
-# New GUI Apps: Web Browser, Data Center, and More
+# Global Search, Keyboard Accessibility, and Quick Tour
 
 ## Overview
 
-Add 2-4 new applications to PRIME OS, each following the established component pattern. The Web Browser and Data Center are the primary additions, with a Task Manager and Media Viewer as optional extras.
+Add three features to PRIME OS: a global command palette for searching apps/files/windows, keyboard navigation improvements across all apps and dialogs, and a first-launch quick tour modal introducing the OS.
 
 ---
 
-## App 1: PrimeBrowser (Web Browser)
+## Feature 1: Global Search (Command Palette)
 
-**File:** `src/components/os/PrimeBrowserApp.tsx`
+**New File:** `src/components/os/GlobalSearch.tsx`
 
-A simulated intranet browser for the prime coordinate lattice:
+A Spotlight/command-palette overlay triggered by `Ctrl+K` (or `Cmd+K` on Mac):
 
-- **Address bar** with navigation buttons (back, forward, refresh) and a URL input field showing `prime://` protocol addresses.
-- **Bookmarks bar** with preset links: `prime://home`, `prime://docs`, `prime://net-status`, `prime://q3-lab`, `prime://energy-grid`.
-- **Rendered pages** -- each URL maps to a mini "web page" component rendered inline:
-  - `prime://home` -- Welcome portal with system status summary and quick links
-  - `prime://docs` -- A documentation page with collapsible sections about PRIME OS concepts
-  - `prime://net-status` -- Live network stats (reuses PrimeNet data patterns)
-  - `prime://q3-lab` -- Interactive qutrit playground (toggle states, see superposition)
-  - `prime://energy-grid` -- Energy grid visualization
-  - Unknown URLs show a "404 - Coordinate not found in lattice" error page
-- **Tab system** -- open multiple tabs, each with its own URL and history stack.
-- **Loading animation** -- brief progress bar on navigation with "Resolving geometric route..." text.
-- **Page source button** -- toggles showing the "source" of the current page (simulated markup in a monospace view).
+- Built on top of the existing `cmdk` library (already installed) using the `Command`, `CommandInput`, `CommandList`, `CommandGroup`, `CommandItem`, `CommandEmpty` components from `src/components/ui/command.tsx`.
+- Renders as a centered dialog overlay (using `CommandDialog` pattern) at `z-[300]` so it floats above all windows.
+- **Search categories:**
+  - **Applications** -- all 19 apps from the `allApps` array in Taskbar, searchable by label. Selecting one opens/focuses the app.
+  - **Open Windows** -- lists currently open windows. Selecting one focuses that window.
+  - **Quick Actions** -- "Tile All Windows", "Cascade Windows", "Open Settings", "Open Terminal".
+- Keyboard-navigable out of the box (cmdk handles arrow keys and Enter).
+- Escape closes the palette.
 
----
+**Integration in `Desktop.tsx`:**
+- Import `GlobalSearch` component.
+- Add state `searchOpen` with `useState(false)`.
+- Add a `useEffect` listening for `Ctrl+K` / `Cmd+K` keydown to toggle `searchOpen`.
+- Pass `windows`, `openWindow`, `focusWindow`, `tileAllWindows`, `cascadeWindows` as props.
+- Render `<GlobalSearch>` inside the booted section.
 
-## App 2: Data Center (LatticeCore)
-
-**File:** `src/components/os/DataCenterApp.tsx`
-
-A visual server infrastructure management dashboard:
-
-- **Rack visualization** -- a grid of 4x4 server racks rendered as styled rectangles, each containing 6 server units. Color-coded by status: green (online), amber (high load), red (critical), gray (offline).
-- **Live metrics per node** -- temperature (with heat gradient coloring), CPU load bar, memory usage, and uptime counter. Values fluctuate with simulated intervals.
-- **Node detail panel** -- click any server unit to open a detail sidebar showing: hostname, prime coordinate, OS version, running processes list, network connections, and a mini sparkline of load history.
-- **Aggregate stats header** -- total nodes online, average temperature, total compute capacity, and network throughput across the data center.
-- **Alert feed** -- a bottom panel showing recent alerts (node overheating, failover triggered, maintenance scheduled) with timestamps and severity badges.
-- **Controls** -- buttons to "Restart Node", "Migrate Workload", and "Run Diagnostics" (trigger animations and status changes).
-- **Map view toggle** -- switch between rack grid view and a geographic-style topology map showing node locations on a stylized lattice diagram.
+**Integration in `Taskbar.tsx`:**
+- Add a small search icon button next to the PRIME menu that triggers the search (accepts an `onSearch` callback prop).
 
 ---
 
-## App 3: Task Manager (PrimeBoard) -- Optional
+## Feature 2: Keyboard Accessibility
 
-**File:** `src/components/os/PrimeBoardApp.tsx`
+**Changes to `src/components/os/OSWindow.tsx`:**
+- Add `role="dialog"` and `aria-label={win.title}` to the window container.
+- Add `aria-label` attributes to minimize, maximize, and close buttons.
+- Make title bar buttons `tabIndex={0}` (already buttons, so mostly semantic additions).
+- Add keyboard handler on the window: `Escape` closes focused window (only if the window itself has focus, not a child input).
 
-A Kanban-style task/operation tracker:
+**Changes to `src/components/os/Taskbar.tsx`:**
+- Add `aria-label` to PRIME menu button and notification bell.
+- Ensure all app buttons in the menu have `role="menuitem"`.
 
-- **Three columns**: Queued, Computing, Complete -- each styled as a scrollable lane.
-- **Task cards** with operation name, priority badge (P0/P1/P2), assigned node, and estimated completion time.
-- **Drag and drop** between columns using mouse events (no external library needed -- use onDragStart/onDrop handlers).
-- **Auto-generated tasks** -- new "lattice operations" appear in the Queued column every 10-15 seconds with randomized names like "Fold sector 7 manifold", "Recalibrate Q3 core 41".
-- **Auto-completion** -- tasks in Computing column have a progress timer; after their duration elapses they auto-move to Complete.
-- **Add task button** -- manually create a new task with a name input.
+**Changes to `src/components/os/Desktop.tsx`:**
+- Add global keyboard listener for:
+  - `Ctrl+K` / `Cmd+K` -- open global search (handled by GlobalSearch integration above).
+  - `Alt+Tab` -- cycle focus between open windows (call `focusWindow` on the next window in the list).
+  - `Ctrl+W` -- close the currently focused window.
 
----
-
-## App 4: Media Viewer (PrimeGallery) -- Optional
-
-**File:** `src/components/os/PrimeGalleryApp.tsx`
-
-A viewer for procedurally generated geometric visualizations:
-
-- **Gallery grid** -- thumbnails of generated SVG art pieces (Adinkra symbols, prime spirals, lattice projections, Fibonacci patterns).
-- **Full viewer** -- click a thumbnail to view it full-size with title, description, and coordinate metadata.
-- **Live generation** -- each piece is an SVG rendered with randomized parameters so it looks different on each visit.
-- **Categories sidebar** -- filter by type: Adinkra, Fractals, Lattice Maps, Prime Spirals.
+**Changes to `src/components/os/DesktopContextMenu.tsx`:**
+- Add keyboard shortcut hints next to context menu items (e.g., "Ctrl+K" next to a hypothetical search entry).
 
 ---
 
-## Wiring and Registration
+## Feature 3: Quick Tour Modal
 
-### `src/types/os.ts`
-Add to `AppType` union:
-```
-'browser' | 'datacenter' | 'board' | 'gallery'
-```
-(Only the ones being built.)
+**New File:** `src/components/os/QuickTour.tsx`
 
-### `src/components/os/Desktop.tsx`
-- Import new app components.
-- Add cases to the `renderApp` switch.
+A multi-step onboarding modal shown on first OS launch:
 
-### `src/components/os/Taskbar.tsx`
-- Add entries to `allApps` array:
-  - Browser: `Globe` icon, title "PrimeBrowser"
-  - Data Center: `Server` icon, title "LatticeCore"
-  - Board: `Kanban` icon (or `LayoutList`), title "PrimeBoard"
-  - Gallery: `Image` icon, title "PrimeGallery"
+- Uses `localStorage` key `prime-os-tour-completed` to track whether the tour has been shown.
+- Modal styled as a centered card with the PRIME OS aesthetic (border-primary, bg-card, font-mono).
+- **Steps** (navigable with Next/Back/Skip buttons):
+  1. **Welcome** -- "Welcome to PRIME OS" with logo and tagline. Brief intro to geometric computing.
+  2. **Desktop & Windows** -- Explains drag, resize, snap, maximize. Shows icon of window controls.
+  3. **Applications** -- Highlights key apps: Terminal, Browser, Data Center, Security Console, Chat, Editor, Gallery, Board.
+  4. **Global Search** -- "Press Ctrl+K to find anything" with a visual of the search palette.
+  5. **Get Started** -- "Your lattice awaits" with a "Launch Terminal" button that closes the tour and opens the terminal.
+- Each step has a dot indicator showing progress (step 1 of 5, etc.).
+- "Skip Tour" link on every step. "Don't show again" checkbox on the last step.
+- Animated transitions between steps using framer-motion.
 
-### `src/components/os/terminal/commands.ts`
-- Add entries to `APP_MAP`: `open browser`, `open datacenter`, `open board`, `open gallery`.
-- Update `HELP_TEXT`.
-
-### `src/hooks/useWindowManager.ts`
-- Default sizes: browser 850x550, datacenter 800x550, board 750x500, gallery 700x480.
-
-### `src/components/os/DesktopIcons.tsx`
-- Add icons for the new apps to the desktop icon grid.
+**Integration in `Desktop.tsx`:**
+- Import `QuickTour`.
+- Add state `showTour` initialized from `localStorage` check.
+- Render `<QuickTour>` after boot completes, before the terminal auto-opens.
+- When tour completes or is skipped, set `localStorage` and close.
 
 ---
+
+## Files Summary
+
+| File | Action |
+|------|--------|
+| `src/components/os/GlobalSearch.tsx` | Create -- command palette component |
+| `src/components/os/QuickTour.tsx` | Create -- multi-step tour modal |
+| `src/components/os/Desktop.tsx` | Edit -- integrate search, tour, global keyboard shortcuts |
+| `src/components/os/Taskbar.tsx` | Edit -- add search button, aria labels |
+| `src/components/os/OSWindow.tsx` | Edit -- add aria attributes, keyboard close |
+| `src/components/os/DesktopContextMenu.tsx` | Edit -- add shortcut hints |
 
 ## Technical Notes
 
-- All data simulated with `useState` + `setInterval` -- no backend.
-- Browser tab/history system uses a simple stack array per tab in state.
-- Data Center rack grid uses CSS Grid with inline style coloring for temperature gradients.
-- Kanban drag-and-drop uses native HTML5 drag events (no library needed).
-- SVG gallery pieces generated with parameterized path functions.
-- Styling follows existing conventions: `font-mono`, `font-display`, CSS custom properties for colors.
-- No new dependencies required.
-
+- No new dependencies needed. `cmdk` and `framer-motion` are already installed.
+- The command palette reuses the existing `Command*` UI components from `src/components/ui/command.tsx`, keeping the design system consistent.
+- Tour state is persisted in `localStorage` so it only shows once per browser.
+- All keyboard shortcuts use `useEffect` with `keydown` listeners and proper cleanup.
+- Alt+Tab cycling is implemented by finding the index of the currently focused window and advancing to the next non-minimized window.
