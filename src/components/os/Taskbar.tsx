@@ -5,6 +5,7 @@ import { Terminal, FolderTree, Activity, Cpu, Brain, Network, Code, HardDrive, D
 import { startOfMonth, endOfMonth, eachDayOfInterval, getDay, isToday, format } from 'date-fns';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import WorkspaceSwitcher from '@/components/os/WorkspaceSwitcher';
+import VoiceControlIndicator from '@/components/os/VoiceControlIndicator';
 
 interface TaskbarProps {
   windows: WindowState[];
@@ -18,6 +19,8 @@ interface TaskbarProps {
   activeWorkspace: number;
   onSwitchWorkspace: (ws: number) => void;
   windowCountsByWorkspace: number[];
+  voiceState?: { isListening: boolean; lastCommand: string; supported: boolean };
+  onToggleVoice?: () => void;
 }
 
 const allApps: { app: AppType; title: string; icon: React.ReactNode; label: string }[] = [
@@ -64,7 +67,7 @@ const allApps: { app: AppType; title: string; icon: React.ReactNode; label: stri
   { app: 'settings', title: 'Settings', icon: <Settings size={18} />, label: 'Settings' },
 ];
 
-export default function Taskbar({ windows, onOpenApp, onFocusWindow, notifications = [], onDismissNotification, onSearch, onOpenAbout, onLock, activeWorkspace, onSwitchWorkspace, windowCountsByWorkspace }: TaskbarProps) {
+export default function Taskbar({ windows, onOpenApp, onFocusWindow, notifications = [], onDismissNotification, onSearch, onOpenAbout, onLock, activeWorkspace, onSwitchWorkspace, windowCountsByWorkspace, voiceState, onToggleVoice }: TaskbarProps) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
 
@@ -157,6 +160,16 @@ export default function Taskbar({ windows, onOpenApp, onFocusWindow, notificatio
       </div>
 
       <div className="ml-auto flex items-center gap-3 shrink-0">
+        {/* Voice Control */}
+        {voiceState && onToggleVoice && (
+          <VoiceControlIndicator
+            isListening={voiceState.isListening}
+            lastCommand={voiceState.lastCommand}
+            supported={voiceState.supported}
+            onToggle={onToggleVoice}
+          />
+        )}
+
         {/* Lock button */}
         {onLock && (
           <button onClick={onLock} aria-label="Lock (Ctrl+L)" className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors" title="Lock (Ctrl+L)">

@@ -2,6 +2,10 @@ import { useState, useCallback, useEffect, useMemo } from 'react';
 import { AnimatePresence } from 'framer-motion';
 import { useWindowManager } from '@/hooks/useWindowManager';
 import { useNotifications } from '@/hooks/useNotifications';
+import { useIdleTimeout } from '@/hooks/useIdleTimeout';
+import { useVoiceControl } from '@/hooks/useVoiceControl';
+import { supabase } from '@/integrations/supabase/client';
+import type { User } from '@supabase/supabase-js';
 import LockScreen from '@/components/os/LockScreen';
 import BootSequence from '@/components/os/BootSequence';
 import Taskbar from '@/components/os/Taskbar';
@@ -55,12 +59,44 @@ import DesktopContextMenu from '@/components/os/DesktopContextMenu';
 import NotificationSystem from '@/components/os/NotificationSystem';
 import { AppType } from '@/types/os';
 
+// App name map for voice control
+const APP_NAME_MAP: Record<string, { app: AppType; title: string }> = {
+  'terminal': { app: 'terminal', title: 'Prime Shell (psh)' },
+  'shell': { app: 'terminal', title: 'Prime Shell (psh)' },
+  'files': { app: 'files', title: 'Prime File System' },
+  'settings': { app: 'settings', title: 'Settings' },
+  'browser': { app: 'browser', title: 'PrimeBrowser' },
+  'chat': { app: 'chat', title: 'PrimeChat' },
+  'calendar': { app: 'calendar', title: 'Prime Calendar' },
+  'mail': { app: 'mail', title: 'PrimeMail' },
+  'docs': { app: 'docs', title: 'PrimeDocs' },
+  'editor': { app: 'editor', title: 'PrimeEdit' },
+  'music': { app: 'audio', title: 'PrimeAudio' },
+  'audio': { app: 'audio', title: 'PrimeAudio' },
+  'gallery': { app: 'gallery', title: 'PrimeGallery' },
+  'maps': { app: 'maps', title: 'PrimeMaps' },
+  'hyper': { app: 'hypersphere', title: 'Hyper AI' },
+  'ai': { app: 'hypersphere', title: 'Hyper AI' },
+  'security': { app: 'security', title: 'Lattice Shield' },
+  'monitor': { app: 'monitor', title: 'System Monitor' },
+  'video': { app: 'videocall', title: 'PrimeLink' },
+  'social': { app: 'social', title: 'PrimeSocial' },
+  'board': { app: 'board', title: 'PrimeBoard' },
+  'canvas': { app: 'canvas', title: 'PrimeCanvas' },
+  'vault': { app: 'vault', title: 'PrimeVault' },
+};
+
 export default function Desktop() {
   const [locked, setLocked] = useState(true);
   const [booted, setBooted] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [showTour, setShowTour] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
+  const [user, setUser] = useState<User | null>(null);
+  const [voiceEnabled, setVoiceEnabled] = useState(() => {
+    try { return localStorage.getItem('prime-os-voice-enabled') === 'true'; } catch { return false; }
+  });
+
   const {
     windows, openWindow, closeWindow, minimizeWindow, focusWindow, moveWindow, resizeWindow,
     maximizeWindow, snapWindow, tileAllWindows, cascadeWindows,
@@ -72,6 +108,96 @@ export default function Desktop() {
   const { notifications, dismissNotification, events, toggleEvent, updateEventMessage, addEvent, removeEvent } = useNotifications(activeApps);
 
   const handleUnlock = useCallback(() => setLocked(false), []);
+  const handleLock = useCallback(() => setLocked(true), []);
+
+  // Auth state listener
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null);
+      if (session?.user) {
+        const meta = session.user.user_metadata;
+        const name = meta?.full_name || meta?.name || '';
+        const avatar = meta?.avatar_url || meta?.picture || '';
+        if (name) {
+          try {
+            const existing = JSON.parse(localStorage.getItem('prime-os-profile') || '{}');
+            localStorage.setItem('prime-os-profile', JSON.stringify({ ...existing, name, avatar }));
+          } catch {}
+        }
+      }
+    });
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user ?? null);
+    });
+    return () => subscription.unsubscribe();
+  }, []);
+
+  // Auto-lock idle timeout
+  const autoLockSettings = useMemo(() => {
+    try {
+      const s = localStorage.getItem('prime-os-lock-settings');
+      if (s) {
+        const parsed = JSON.parse(s);
+        return { enabled: !!parsed.autoLock, timeout: (parsed.autoLockTimeout || 5) * 60 * 1000 };
+      }
+    } catch {}
+    return { enabled: false, timeout: 5 * 60 * 1000 };
+  }, [locked]); // re-read when lock state changes
+
+  useIdleTimeout({
+    timeout: autoLockSettings.timeout,
+    onIdle: handleLock,
+    enabled: autoLockSettings.enabled && booted && !locked,
+  });
+
+  // Voice control
+  const handleVoiceCommand = useCallback((cmd: { action: string; argument?: string }) => {
+    switch (cmd.action) {
+      case 'open': {
+        const match = APP_NAME_MAP[cmd.argument?.toLowerCase() || ''];
+        if (match) openWindow(match.app, match.title);
+        break;
+      }
+      case 'close': {
+        const match = APP_NAME_MAP[cmd.argument?.toLowerCase() || ''];
+        if (match) {
+          const win = windows.find(w => w.app === match.app);
+          if (win) closeWindow(win.id);
+        }
+        break;
+      }
+      case 'lock': handleLock(); break;
+      case 'search': setSearchOpen(true); break;
+      case 'switchWorkspace': {
+        const n = parseInt(cmd.argument || '1');
+        if (n >= 1 && n <= 4) switchWorkspace(n);
+        break;
+      }
+      case 'minimize': {
+        const focused = visibleWindows.find(w => w.isFocused);
+        if (focused) minimizeWindow(focused.id);
+        break;
+      }
+      case 'maximize': {
+        const focused = visibleWindows.find(w => w.isFocused);
+        if (focused) maximizeWindow(focused.id);
+        break;
+      }
+    }
+  }, [windows, visibleWindows, openWindow, closeWindow, handleLock, switchWorkspace, minimizeWindow, maximizeWindow]);
+
+  const voice = useVoiceControl({
+    enabled: voiceEnabled && booted && !locked,
+    onCommand: handleVoiceCommand,
+  });
+
+  const toggleVoice = useCallback(() => {
+    setVoiceEnabled(prev => {
+      const next = !prev;
+      localStorage.setItem('prime-os-voice-enabled', String(next));
+      return next;
+    });
+  }, []);
 
   const handleBootComplete = useCallback(() => {
     setBooted(true);
@@ -88,54 +214,17 @@ export default function Desktop() {
     setTimeout(() => openWindow('terminal', 'Prime Shell (psh)'), 200);
   }, [openWindow]);
 
-  const handleLock = useCallback(() => setLocked(true), []);
-
   // Global keyboard shortcuts
   useEffect(() => {
     if (!booted) return;
     const handler = (e: KeyboardEvent) => {
-      // Ctrl+K — global search
-      if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
-        e.preventDefault();
-        setSearchOpen(prev => !prev);
-        return;
-      }
-      // Ctrl+L — lock screen
-      if ((e.ctrlKey || e.metaKey) && e.key === 'l') {
-        e.preventDefault();
-        handleLock();
-        return;
-      }
-      // Ctrl+1-4 — switch workspaces
-      if ((e.ctrlKey || e.metaKey) && ['1', '2', '3', '4'].includes(e.key)) {
-        e.preventDefault();
-        switchWorkspace(parseInt(e.key));
-        return;
-      }
-      // Clipboard shortcuts — let browser handle
+      if ((e.ctrlKey || e.metaKey) && e.key === 'k') { e.preventDefault(); setSearchOpen(prev => !prev); return; }
+      if ((e.ctrlKey || e.metaKey) && e.key === 'l') { e.preventDefault(); handleLock(); return; }
+      if ((e.ctrlKey || e.metaKey) && ['1', '2', '3', '4'].includes(e.key)) { e.preventDefault(); switchWorkspace(parseInt(e.key)); return; }
       if ((e.ctrlKey || e.metaKey) && ['c', 'v', 'a', 'x'].includes(e.key)) return;
-      // Ctrl+W — close focused window
-      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key === 'w') {
-        e.preventDefault();
-        const focused = visibleWindows.find(w => w.isFocused);
-        if (focused) closeWindow(focused.id);
-        return;
-      }
-      // Ctrl+M — minimize focused window
-      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key === 'm') {
-        e.preventDefault();
-        const focused = visibleWindows.find(w => w.isFocused);
-        if (focused) minimizeWindow(focused.id);
-        return;
-      }
-      // Ctrl+Shift+M — maximize/restore
-      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'M') {
-        e.preventDefault();
-        const focused = visibleWindows.find(w => w.isFocused);
-        if (focused) maximizeWindow(focused.id);
-        return;
-      }
-      // Alt+Tab — cycle windows
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key === 'w') { e.preventDefault(); const f = visibleWindows.find(w => w.isFocused); if (f) closeWindow(f.id); return; }
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key === 'm') { e.preventDefault(); const f = visibleWindows.find(w => w.isFocused); if (f) minimizeWindow(f.id); return; }
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'M') { e.preventDefault(); const f = visibleWindows.find(w => w.isFocused); if (f) maximizeWindow(f.id); return; }
       if (e.altKey && e.key === 'Tab') {
         e.preventDefault();
         const nonMin = visibleWindows.filter(w => !w.isMinimized);
@@ -166,7 +255,7 @@ export default function Desktop() {
       case 'foldmem': return <FoldMemApp />;
       case 'storage': return <PrimeStorageApp />;
       case 'energy': return <EnergyMonitorApp />;
-      case 'settings': return <SettingsApp notifEvents={events} onToggleEvent={toggleEvent} onUpdateMessage={updateEventMessage} onAddEvent={addEvent} onRemoveEvent={removeEvent} onLock={handleLock} />;
+      case 'settings': return <SettingsApp notifEvents={events} onToggleEvent={toggleEvent} onUpdateMessage={updateEventMessage} onAddEvent={addEvent} onRemoveEvent={removeEvent} onLock={handleLock} user={user} />;
       case 'monitor': return <SystemMonitorApp />;
       case 'editor': return <TextEditorApp />;
       case 'chat': return <PrimeChatApp />;
@@ -203,10 +292,7 @@ export default function Desktop() {
 
   return (
     <div className="h-screen w-screen overflow-hidden bg-background prime-grid scan-lines relative">
-      {/* Lock Screen */}
-      {locked && <LockScreen onUnlock={handleUnlock} />}
-
-      {/* Boot Sequence */}
+      {locked && <LockScreen onUnlock={handleUnlock} user={user} />}
       {!locked && <BootSequence onComplete={handleBootComplete} />}
 
       {booted && !locked && (
@@ -225,7 +311,6 @@ export default function Desktop() {
                 <p className="font-mono text-[9px] text-muted-foreground/30">fold: 11D → 4D</p>
               </div>
 
-              {/* Desktop Widgets */}
               <DesktopWidgets />
 
               <AnimatePresence>
@@ -261,6 +346,8 @@ export default function Desktop() {
             activeWorkspace={activeWorkspace}
             onSwitchWorkspace={switchWorkspace}
             windowCountsByWorkspace={getWindowCountsByWorkspace()}
+            voiceState={{ isListening: voice.isListening, lastCommand: voice.lastCommand, supported: voice.supported }}
+            onToggleVoice={toggleVoice}
           />
 
           <GlobalSearch
