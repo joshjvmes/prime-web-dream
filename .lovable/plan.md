@@ -1,120 +1,76 @@
 
-# AI Memory, Context, and Identity System for Hyper
+# Sports Betting Feed Integration
 
 ## Overview
 
-Give Hyper persistent memory, user identity awareness, and session context so it seamlessly knows who the user is, what they've done, and what they care about -- across sessions and devices. This transforms Hyper from a stateless chatbot into a personalized AI companion.
+Integrate live sports odds from The Odds API into PrimeBets. A new backend function fetches real sporting events and automatically creates prediction markets. Users can bet on real games using OS tokens through the existing AMM system.
 
-## What Changes
+---
 
-### 1. User Context Injection (Frontend -> Backend)
+## Changes
 
-**File: `src/components/os/HypersphereApp.tsx`**
+### 1. Store the API Key as a Secret
 
-Before sending messages to hyper-chat, gather and inject a context payload:
+The Odds API key (`7c5de5e58923688fb050e0ebcaa39e56`) will be stored as a backend secret called `ODDS_API_KEY` so it stays server-side only.
 
-- **Profile**: Display name, title, bio (from `profiles` table or localStorage)
-- **Wallet snapshot**: OS/IX balances (from localStorage cache or quick fetch)
-- **Active apps**: Which windows are currently open (from window manager state)
-- **Current workspace**: Which workspace the user is on
-- **Permissions**: What Hyper is allowed to do
-- **Session stats**: How long they've been active, number of messages this session
+### 2. Database Migration -- Add Sports Metadata to `bet_markets`
 
-Send this as a `context` field alongside `messages` in the request body.
+Add new columns to the existing `bet_markets` table to track API-sourced events:
 
-### 2. Persistent AI Memory (New Database Table)
+| Column | Type | Purpose |
+|--------|------|---------|
+| `source` | text (default 'user') | Distinguishes user-created vs API-fed markets |
+| `external_id` | text (nullable, unique) | The Odds API event ID to prevent duplicates |
+| `sport_key` | text (nullable) | e.g. 'basketball_nba', 'soccer_epl' |
+| `sport_title` | text (nullable) | e.g. 'NBA', 'EPL' |
+| `home_team` | text (nullable) | Home team name |
+| `away_team` | text (nullable) | Away team name |
+| `commence_time` | timestamptz (nullable) | When the game starts |
+| `odds_data` | jsonb (nullable) | Raw bookmaker odds for reference display |
 
-**New table: `ai_memories`**
+Also update the INSERT RLS policy on `bet_markets` to allow the service role to insert system-generated markets (the edge function uses service role key, so this works automatically).
 
-| Column | Type | Description |
-|--------|------|-------------|
-| id | uuid | Primary key |
-| user_id | uuid | Owner |
-| category | text | 'preference', 'fact', 'instruction', 'summary' |
-| content | text | The memory content |
-| created_at | timestamptz | When stored |
-| updated_at | timestamptz | Last updated |
+### 3. New Edge Function: `sports-odds`
 
-RLS: Users can only read/write their own memories.
+**File: `supabase/functions/sports-odds/index.ts`**
 
-Hyper gets a new tool `save_memory` to store important facts about the user (e.g., "Operator prefers concise responses", "Operator's favorite app is Terminal", "Operator is working on a trading strategy"). Also a `recall_memories` tool that searches stored memories.
+Two actions:
 
-### 3. Conversation History Persistence
+- **`fetch-odds`**: Calls The Odds API for upcoming events, then upserts markets into `bet_markets` with:
+  - `question`: "Will {home_team} beat {away_team}?"
+  - `category`: 'sports'
+  - `source`: 'sports_api'
+  - `external_id`: event ID (prevents duplicates)
+  - `creator_id`: system UUID (`00000000-0000-0000-0000-000000000000`)
+  - `creation_cost`: 0
+  - `expiry`: set to `commence_time`
+  - `odds_data`: bookmaker odds JSON
+  - If a market with that `external_id` already exists, update `odds_data` only
 
-**New table: `ai_conversations`**
+- **`refresh-odds`**: Frontend-callable endpoint that triggers fetch-odds with a 5-minute rate limit (tracked via a simple timestamp check against the most recent sports market's `created_at`)
 
-| Column | Type | Description |
-|--------|------|-------------|
-| id | uuid | Primary key |
-| user_id | uuid | Owner |
-| role | text | 'user' or 'assistant' |
-| content | text | Message text |
-| created_at | timestamptz | When sent |
+### 4. Frontend Updates: `PrimeBetsApp.tsx`
 
-RLS: Users can only read/write their own conversations.
+- Add `'sports'` to the `CATEGORIES` array
+- Add a "Refresh Sports" button that calls the `sports-odds` edge function
+- For sports-sourced markets, show enhanced cards with:
+  - Sport badge (e.g. "NBA", "Soccer")
+  - Team matchup display: "{home_team} vs {away_team}"
+  - Commence time countdown (e.g. "Starts in 3h")
+  - Bookmaker reference odds alongside the pool YES/NO odds
+  - A small "LIVE" indicator
+- In the market detail view, show bookmaker odds comparison when `odds_data` is present
+- Sports markets hide the "Resolve" buttons (admin-only resolution)
 
-On each exchange, save the user message and Hyper's response. On session start, load the last N messages as conversation history so Hyper remembers what was discussed previously.
+### 5. Config Update
 
-### 4. Backend: Context-Aware System Prompt
-
-**File: `supabase/functions/hyper-chat/index.ts`**
-
-- Accept `context` object from frontend
-- Load user's memories from `ai_memories` table (last 20 entries)
-- Load recent conversation history from `ai_conversations` (last 10 messages from prior sessions)
-- Inject all of this into the system prompt as structured context blocks:
-
-```text
-[OPERATOR PROFILE]
-Name: {name} | Title: {title} | Bio: {bio}
-
-[WALLET]
-OS: {balance} | IX: {balance}
-
-[MEMORIES]
-- Operator prefers detailed technical reports
-- Operator is building a trading bot
-- ...
-
-[RECENT HISTORY]
-(last 10 messages from previous sessions)
+Register the new function in `supabase/config.toml`:
+```
+[functions.sports-odds]
+verify_jwt = false
 ```
 
-- Add two new tools: `save_memory` and `recall_memories`
-
-### 5. New Hyper Tools
-
-| Tool | Description | Parameters |
-|------|-------------|------------|
-| `save_memory` | Store a fact/preference about the operator for future reference | `category`, `content` |
-| `recall_memories` | Search stored memories by keyword | `query` |
-
-When Hyper detects the user sharing a preference, fact, or instruction, it proactively saves it. When it needs context, it can recall memories.
-
-### 6. Session Context from Frontend
-
-**File: `src/components/os/HypersphereApp.tsx`**
-
-Build and send context object on each message:
-
-```typescript
-const context = {
-  profile: { name, title, bio },
-  permissions: { canPost, canEmail, canWallet },
-  sessionMessages: messages.length,
-  openApps: windows.filter(w => !w.isMinimized).map(w => w.app),
-  workspace: currentWorkspace,
-};
-```
-
-This requires accepting optional props for open windows and workspace from the parent Desktop component.
-
-### 7. Conversation Persistence in Frontend
-
-- On mount, load last 20 messages from `ai_conversations` for the signed-in user
-- Display them in the chat (with a "Previous session" divider)
-- After each exchange, save both user and assistant messages to the table
-- For guests (not signed in), keep current in-memory-only behavior
+---
 
 ## Technical Details
 
@@ -122,51 +78,42 @@ This requires accepting optional props for open windows and workspace from the p
 
 | File | Change |
 |------|--------|
-| `supabase/functions/hyper-chat/index.ts` | Accept context, load memories + history, inject into system prompt, add save_memory/recall_memories tools |
-| `src/components/os/HypersphereApp.tsx` | Build context payload, load/save conversation history, accept window/workspace props |
-| `src/components/os/Desktop.tsx` | Pass open windows and workspace to HypersphereApp |
-| Database migration | Create `ai_memories` and `ai_conversations` tables with RLS |
+| Database migration | Add 8 new columns to `bet_markets` |
+| `supabase/functions/sports-odds/index.ts` | New edge function to fetch and sync odds |
+| `src/components/os/PrimeBetsApp.tsx` | Sports category, enhanced cards, refresh button, odds display |
+| `supabase/config.toml` | Register new function |
 
-### Database Migration
+### BetMarket Interface Update
 
-```sql
-CREATE TABLE ai_memories (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id uuid NOT NULL,
-  category text NOT NULL DEFAULT 'fact',
-  content text NOT NULL,
-  created_at timestamptz NOT NULL DEFAULT now(),
-  updated_at timestamptz NOT NULL DEFAULT now()
-);
+The `BetMarket` TypeScript interface will be extended with the new optional fields:
 
-ALTER TABLE ai_memories ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Users can read own memories" ON ai_memories FOR SELECT USING (auth.uid() = user_id);
-CREATE POLICY "Users can insert own memories" ON ai_memories FOR INSERT WITH CHECK (auth.uid() = user_id);
-CREATE POLICY "Users can update own memories" ON ai_memories FOR UPDATE USING (auth.uid() = user_id);
-CREATE POLICY "Users can delete own memories" ON ai_memories FOR DELETE USING (auth.uid() = user_id);
-
-CREATE TABLE ai_conversations (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id uuid NOT NULL,
-  role text NOT NULL,
-  content text NOT NULL,
-  created_at timestamptz NOT NULL DEFAULT now()
-);
-
-ALTER TABLE ai_conversations ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Users can read own conversations" ON ai_conversations FOR SELECT USING (auth.uid() = user_id);
-CREATE POLICY "Users can insert own conversations" ON ai_conversations FOR INSERT WITH CHECK (auth.uid() = user_id);
-CREATE POLICY "Users can delete own conversations" ON ai_conversations FOR DELETE USING (auth.uid() = user_id);
+```text
+source?: string
+external_id?: string
+sport_key?: string
+sport_title?: string
+home_team?: string
+away_team?: string
+commence_time?: string
+odds_data?: { bookmakers: Array<{ title: string, markets: Array<{ outcomes: Array<{ name: string, price: number }> }> }> }
 ```
 
-### Memory Management
+### Odds Display Logic
 
-- Memories are capped at 50 per user; oldest auto-pruned when saving new ones
-- Conversation history is trimmed to last 100 messages per user (older deleted on save)
-- The system prompt receives at most 20 memories and 10 prior-session messages to stay within token limits
+American odds from bookmakers are converted to implied probability for display:
+- Negative odds (favorite): probability = |odds| / (|odds| + 100)
+- Positive odds (underdog): probability = 100 / (odds + 100)
 
-### Auth Flow
+These are shown as "Book: 65%" alongside the pool-based "Pool: 58%" for reference.
 
-- Signed-in users: Full memory + history persistence
-- Guests: In-memory only, no persistence (current behavior preserved)
-- The hyper-chat edge function extracts the user from the auth header to load their memories server-side
+### How Sports Markets Work
+
+1. Edge function fetches events and creates markets with home team as YES side
+2. Users bet YES (home wins) or NO (away wins) using OS tokens
+3. The AMM pool determines payout ratios independently of bookmaker odds
+4. Markets auto-expire at commence time (no new bets after game starts)
+5. Resolution is manual (admin/creator resolves after the game ends)
+
+### Rate Limiting
+
+The refresh endpoint checks if the newest sports market was created less than 5 minutes ago. If so, it skips the API call and returns existing markets to conserve API quota.
