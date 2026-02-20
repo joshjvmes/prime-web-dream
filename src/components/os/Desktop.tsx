@@ -7,6 +7,7 @@ import Taskbar from '@/components/os/Taskbar';
 import OSWindow from '@/components/os/OSWindow';
 import GlobalSearch from '@/components/os/GlobalSearch';
 import QuickTour from '@/components/os/QuickTour';
+import AboutModal from '@/components/os/AboutModal';
 import TerminalApp from '@/components/os/TerminalApp';
 import FilesApp from '@/components/os/FilesApp';
 import ProcessesApp from '@/components/os/ProcessesApp';
@@ -42,6 +43,8 @@ import PrimeSignalsApp from '@/components/os/PrimeSignalsApp';
 import PrimeStreamApp from '@/components/os/PrimeStreamApp';
 import PrimeVaultApp from '@/components/os/PrimeVaultApp';
 import PrimeLinkApp from '@/components/os/PrimeLinkApp';
+import PrimeMailApp from '@/components/os/PrimeMailApp';
+import PrimeSocialApp from '@/components/os/PrimeSocialApp';
 import DesktopContextMenu from '@/components/os/DesktopContextMenu';
 import NotificationSystem from '@/components/os/NotificationSystem';
 import { AppType } from '@/types/os';
@@ -51,6 +54,7 @@ export default function Desktop() {
   const [booted, setBooted] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [showTour, setShowTour] = useState(false);
+  const [aboutOpen, setAboutOpen] = useState(false);
   const { windows, openWindow, closeWindow, minimizeWindow, focusWindow, moveWindow, resizeWindow, maximizeWindow, snapWindow, tileAllWindows, cascadeWindows } = useWindowManager();
   const activeApps = useMemo(() => windows.filter(w => !w.isMinimized).map(w => w.app), [windows]);
   const { notifications, dismissNotification, events, toggleEvent, updateEventMessage, addEvent, removeEvent } = useNotifications(activeApps);
@@ -88,10 +92,24 @@ export default function Desktop() {
         return; // let browser handle natively
       }
       // Ctrl+W — close focused window
-      if ((e.ctrlKey || e.metaKey) && e.key === 'w') {
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key === 'w') {
         e.preventDefault();
         const focused = windows.find(w => w.isFocused);
         if (focused) closeWindow(focused.id);
+        return;
+      }
+      // Ctrl+M — minimize focused window
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key === 'm') {
+        e.preventDefault();
+        const focused = windows.find(w => w.isFocused);
+        if (focused) minimizeWindow(focused.id);
+        return;
+      }
+      // Ctrl+Shift+M — maximize/restore focused window
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'M') {
+        e.preventDefault();
+        const focused = windows.find(w => w.isFocused);
+        if (focused) maximizeWindow(focused.id);
         return;
       }
       // Alt+Tab — cycle windows
@@ -106,7 +124,7 @@ export default function Desktop() {
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [booted, windows, closeWindow, focusWindow]);
+  }, [booted, windows, closeWindow, focusWindow, minimizeWindow, maximizeWindow]);
 
   const closeWindowByApp = useCallback((app: string) => {
     const win = windows.find(w => w.app === app);
@@ -150,6 +168,8 @@ export default function Desktop() {
       case 'stream': return <PrimeStreamApp />;
       case 'vault': return <PrimeVaultApp />;
       case 'videocall': return <PrimeLinkApp />;
+      case 'mail': return <PrimeMailApp />;
+      case 'social': return <PrimeSocialApp />;
       default: return <div className="p-4 text-muted-foreground font-mono text-xs">App not found</div>;
     }
   };
@@ -206,6 +226,7 @@ export default function Desktop() {
             notifications={notifications}
             onDismissNotification={dismissNotification}
             onSearch={() => setSearchOpen(true)}
+            onOpenAbout={() => setAboutOpen(true)}
           />
 
           <GlobalSearch
@@ -221,6 +242,8 @@ export default function Desktop() {
           {showTour && (
             <QuickTour onComplete={handleTourComplete} onOpenTerminal={handleTourOpenTerminal} />
           )}
+
+          <AboutModal open={aboutOpen} onOpenChange={setAboutOpen} />
         </>
       )}
     </div>

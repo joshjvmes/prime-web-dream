@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { NotificationEvent } from '@/hooks/useNotifications';
-import { Trash2, Plus, Bell, BellOff, Monitor, Keyboard, Mouse, Volume2, Info } from 'lucide-react';
+import { Trash2, Plus, Bell, BellOff, Monitor, Keyboard, Mouse, Volume2, Info, User } from 'lucide-react';
 
 interface SettingsState {
   scanLines: boolean;
@@ -55,9 +55,10 @@ function applyTheme(theme: 'cyan' | 'violet' | 'amber') {
   root.style.setProperty('--border', t.border);
 }
 
-type Panel = 'display' | 'keyboard' | 'mouse' | 'audio' | 'notifications' | 'about';
+type Panel = 'profile' | 'display' | 'keyboard' | 'mouse' | 'audio' | 'notifications' | 'about';
 
 const PANELS: { id: Panel; label: string; icon: React.ReactNode }[] = [
+  { id: 'profile', label: 'Profile', icon: <User size={14} /> },
   { id: 'display', label: 'Display', icon: <Monitor size={14} /> },
   { id: 'keyboard', label: 'Keyboard', icon: <Keyboard size={14} /> },
   { id: 'mouse', label: 'Mouse', icon: <Mouse size={14} /> },
@@ -67,7 +68,13 @@ const PANELS: { id: Panel; label: string; icon: React.ReactNode }[] = [
 ];
 
 export default function SettingsApp({ notifEvents = [], onToggleEvent, onUpdateMessage, onAddEvent, onRemoveEvent }: SettingsAppProps) {
-  const [activePanel, setActivePanel] = useState<Panel>('display');
+  const [activePanel, setActivePanel] = useState<Panel>('profile');
+  const [profileName, setProfileName] = useState(() => {
+    try { const p = localStorage.getItem('prime-os-profile'); return p ? JSON.parse(p).name || '' : ''; } catch { return ''; }
+  });
+  const [profileTitle, setProfileTitle] = useState(() => {
+    try { const p = localStorage.getItem('prime-os-profile'); return p ? JSON.parse(p).title || '' : ''; } catch { return ''; }
+  });
   const [settings, setSettings] = useState<SettingsState>(() => {
     try {
       const saved = localStorage.getItem('prime-os-settings');
@@ -125,8 +132,39 @@ export default function SettingsApp({ notifEvents = [], onToggleEvent, onUpdateM
     <h3 className="font-display text-[10px] tracking-wider uppercase text-muted-foreground mb-2 mt-3 first:mt-0">{children}</h3>
   );
 
+  const saveProfile = (name: string, title: string) => {
+    localStorage.setItem('prime-os-profile', JSON.stringify({ name, title }));
+  };
+
   const renderPanel = () => {
     switch (activePanel) {
+      case 'profile':
+        return (
+          <div className="space-y-1">
+            <SectionTitle>User Profile</SectionTitle>
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-12 h-12 rounded-full bg-primary/20 border border-primary/40 flex items-center justify-center">
+                <span className="font-display text-lg text-primary">{(profileName || 'O').charAt(0).toUpperCase()}</span>
+              </div>
+              <div>
+                <p className="text-foreground text-xs">{profileName || 'Operator'}</p>
+                <p className="text-muted-foreground/60 text-[10px]">{profileTitle || 'PRIME Operator'}</p>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <div>
+                <label className="font-body text-xs text-card-foreground block mb-1">Display Name</label>
+                <input value={profileName} onChange={e => { setProfileName(e.target.value); saveProfile(e.target.value, profileTitle); }}
+                  placeholder="Operator" className="w-full bg-background border border-border rounded px-2 py-1.5 text-xs text-foreground placeholder:text-muted-foreground/50" />
+              </div>
+              <div>
+                <label className="font-body text-xs text-card-foreground block mb-1">Title / Role</label>
+                <input value={profileTitle} onChange={e => { setProfileTitle(e.target.value); saveProfile(profileName, e.target.value); }}
+                  placeholder="Geometric Engineer" className="w-full bg-background border border-border rounded px-2 py-1.5 text-xs text-foreground placeholder:text-muted-foreground/50" />
+              </div>
+            </div>
+          </div>
+        );
       case 'display':
         return (
           <div className="space-y-1">
@@ -177,6 +215,8 @@ export default function SettingsApp({ notifEvents = [], onToggleEvent, onUpdateM
               {[
                 ['Ctrl+K', 'Global Search'],
                 ['Ctrl+W', 'Close Window'],
+                ['Ctrl+M', 'Minimize Window'],
+                ['Ctrl+Shift+M', 'Maximize / Restore'],
                 ['Alt+Tab', 'Cycle Windows'],
                 ['Escape', 'Close focused dialog'],
               ].map(([key, desc]) => (

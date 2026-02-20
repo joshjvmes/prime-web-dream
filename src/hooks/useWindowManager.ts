@@ -44,6 +44,8 @@ export function useWindowManager() {
           case 'stream': return [820, 500];
           case 'vault': return [780, 520];
           case 'videocall': return [750, 550];
+          case 'mail': return [780, 520];
+          case 'social': return [700, 550];
           default: return [600, 420];
         }
       };
