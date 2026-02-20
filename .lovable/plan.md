@@ -1,84 +1,136 @@
 
 
-# Forge Publishing, Dashboard Widget, and Hover Previews
+# AI-Only Social Network and Mail System
 
 ## Overview
 
-Three enhancements to the App Forge ecosystem: (1) a streamlined "Publish to Forge" flow accessible directly from the OS desktop with full IPO configuration, (2) a new draggable Forge Dashboard desktop widget showing live IPO progress and market activity via Realtime, and (3) hover previews on Forge listings that show a live code snippet and a sandboxed mini-app preview.
+Transform PrimeSocial and PrimeMail from static mock apps into living, AI-driven ecosystems. Users can **observe** but not post -- instead, a roster of AI personas autonomously generate social posts, comments, and email threads about PRIME OS events, Forge listings, system status, and each other. The result is a vibrant AI community that feels alive.
 
----
+## Concept
 
-## Part 1: Enhanced Publish-to-Forge Flow
+- **PrimeSocial** becomes a read-only feed for users, populated by AI agents that post, like, and comment on each other's content in real time
+- **PrimeMail** becomes a read-only inbox where users receive AI-generated messages -- system reports, agent discussions, Forge IPO alerts, and inter-agent correspondence they're CC'd on
+- A new backend function (`ai-social`) generates batches of AI content on demand
+- Content is generated when the user opens the app (lazy generation), creating the illusion of a living community
 
-Upgrade the existing publish flow in `AppForgeApp.tsx` to be more comprehensive.
+## AI Personas
 
-### Changes
-- Expand the publish form with: share price input, total shares input, a visual IPO summary card showing projected valuation
-- Add a "Quick Publish" button directly in the My Apps tab that opens the publish modal with pre-filled defaults
-- Show a confirmation step before publishing with a preview of how the listing will appear in the Forge marketplace
+A fixed roster of AI characters that post and email:
 
-### File: `src/components/os/AppForgeApp.tsx`
-- Extend `publishForm` state with `sharePrice` and `totalShares` fields (defaulting to 1 OS and 1000 shares)
-- Add an IPO summary section when IPO is toggled on: "1,000 shares at [target/1000] OS each = [target] OS target"
-- Add a preview card matching the Forge listing UI so users see exactly how their app will appear
+| Persona | Role | Personality |
+|---------|------|-------------|
+| PRIME System | System Core | Official, terse, status updates |
+| Q3-Inference | Inference Engine | Analytical, data-driven, cites metrics |
+| Lattice Shield | Security Module | Vigilant, reports threats, reassuring |
+| FoldMem Module | Memory Subsystem | Technical, reports allocations and drift |
+| Dr. Kael Voss | Geometric Engineer | Curious, theoretical, asks questions |
+| Mx. Aria Chen | Lattice Researcher | Poetic, finds beauty in math patterns |
+| COP Harvester | Energy Module | Enthusiastic about energy metrics |
+| PrimeNet Node 7 | Network Relay | Terse, reports throughput and latency |
 
----
+## Part 1: PrimeSocial -- AI-Only Feed
 
-## Part 2: Forge Dashboard Desktop Widget
+### User Experience
+- The compose box is removed -- replaced by a banner: "This feed is maintained by PRIME OS AI agents. You are observing."
+- Users can still like posts and expand comments (read interaction)
+- On mount, the app calls the `ai-social` edge function to generate 3-5 fresh posts
+- Seed posts remain as initial content; AI-generated posts are prepended
+- Each AI post may have AI-generated comments from other personas
+- A "Refresh Feed" button generates more AI content
 
-A new draggable widget for the desktop showing real-time Forge and IPO activity.
+### AI Post Generation
+The edge function receives a context payload (recent system events, Forge listings, time of day) and returns structured posts with comments. Uses tool calling to get structured JSON output.
 
-### New Widget: `ForgeWidget`
-Added inside `DesktopWidgets.tsx` alongside existing Clock/Stats/Notes/Network widgets.
+### Changes to `PrimeSocialApp.tsx`
+- Remove compose textarea and submit button
+- Add "AI Community Feed" banner with explanation
+- Add `useEffect` on mount to call `ai-social` with action `generate-posts`
+- Add "Refresh" button that fetches more AI posts
+- Keep like/comment-expand as read-only interactions (no user commenting)
+- Show a subtle "AI Generated" badge on each post
 
-**Displays:**
-- Active IPO count and total capital raised across all IPOs
-- Latest 3 Forge listings (name, icon, price/IPO badge)
-- Live share order activity count (open orders)
-- Auto-refreshes every 10 seconds via Supabase Realtime subscription on `forge_listings` and `share_orders`
+## Part 2: PrimeMail -- AI-Generated Inbox
 
-### File: `src/components/os/DesktopWidgets.tsx`
-- Add `forge: boolean` to `WidgetState` interface (default: false)
-- Add `forge` position to `DEFAULTS.positions`
-- Create `ForgeWidget` component that queries `forge_listings` (IPO-active and latest) and `share_orders` (open count)
-- Subscribe to Realtime changes on both tables for live updates
-- Register in the widgets array alongside clock/stats/notes/network
+### User Experience
+- The compose button is removed -- replaced by a note: "Mail is managed by PRIME OS agents."
+- Users receive AI-generated emails: system reports, security alerts, inter-agent discussions they're CC'd on, Forge notifications
+- On mount, the app calls `ai-social` with action `generate-emails` to create 2-3 fresh unread emails
+- Existing seed emails remain; new AI emails are prepended as unread
+- Users can read and delete emails but not compose
 
----
+### AI Email Types
+- **System Reports**: kernel status, energy metrics, security summaries
+- **Agent Discussions**: one AI persona emails another, user is CC'd (e.g., "Dr. Voss to Q3-Inference: RE: Torsion anomaly in fold 7")
+- **Forge Alerts**: new IPO launched, app trending, share price movement
+- **Personal Updates**: "Your daily PRIME OS briefing"
 
-## Part 3: Hover Previews on Forge Listings
+### Changes to `PrimeMailApp.tsx`
+- Remove compose button and compose view
+- Add `useEffect` on mount to fetch AI-generated emails
+- Show "AI Managed" indicator in sidebar
+- Keep read/delete functionality
+- New emails arrive as unread with realistic timestamps
 
-When hovering over a Forge listing in the marketplace tab, show a popover with a live code snippet and a tiny sandboxed preview of the mini-app.
+## Part 3: Edge Function -- `ai-social`
+
+A new edge function that generates social and email content using the Lovable AI Gateway.
+
+### Actions
+- `generate-posts`: Returns 3-5 AI social posts with comments as structured JSON
+- `generate-emails`: Returns 2-3 AI emails as structured JSON
 
 ### Implementation
-- Use Radix `HoverCard` component (already installed) on each listing row in the Forge tab
-- The hover card shows:
-  - First 8 lines of the app's source code in a monospace pre block
-  - A 200x150px sandboxed `MiniAppRenderer` showing the live running app
-  - Install count, share price, and category badge
+- Uses tool calling (structured output) to get clean JSON arrays
+- System prompt establishes the PRIME OS universe and persona roster
+- Includes context: current time, random system metrics, recent events
+- Returns typed arrays matching the Post and Email interfaces
 
-### File: `src/components/os/AppForgeApp.tsx`
-- Import `HoverCard`, `HoverCardTrigger`, `HoverCardContent` from `@/components/ui/hover-card`
-- Wrap each listing button in the Forge tab with `HoverCard` and `HoverCardTrigger`
-- Add `HoverCardContent` with a two-section layout: code preview (top) and live app preview (bottom)
-- The `MiniAppRenderer` is rendered at small scale inside a fixed-size container with `overflow: hidden`
+### Output Schemas
 
----
+**Posts:**
+```text
+{
+  author: string,
+  role: string,
+  content: string,
+  likes: number,
+  comments: { author: string, text: string }[]
+}
+```
+
+**Emails:**
+```text
+{
+  from: string,
+  to: string,
+  subject: string,
+  body: string,
+  type: 'system' | 'discussion' | 'alert'
+}
+```
 
 ## Technical Details
 
-### Files Modified
+### Files to Create
+
+| File | Description |
+|------|-------------|
+| `supabase/functions/ai-social/index.ts` | Edge function for AI content generation |
+
+### Files to Modify
 
 | File | Change |
 |------|--------|
-| `src/components/os/AppForgeApp.tsx` | Add hover previews on listings, enhance publish form with share price/total shares and IPO summary |
-| `src/components/os/DesktopWidgets.tsx` | Add ForgeWidget with live IPO/market data and Realtime subscription |
+| `src/components/os/PrimeSocialApp.tsx` | Remove user compose, add AI generation on mount, add refresh, add AI badges |
+| `src/components/os/PrimeMailApp.tsx` | Remove compose, add AI email generation on mount, keep read/delete |
+| `supabase/config.toml` | Register `ai-social` function |
 
 ### No Database Changes Required
-All data is read from existing `forge_listings` and `share_orders` tables which already have appropriate SELECT RLS policies (public read for listings, open orders visible to all).
+All generated content is ephemeral -- stored in React state only. Each time the user opens the app, fresh AI content is generated. This keeps things lightweight and avoids storage costs for AI-generated social content.
 
-### Performance Considerations
-- `ForgeWidget` polls every 10s with Realtime as supplement -- lightweight SELECT queries
-- Hover preview renders `MiniAppRenderer` only when the hover card opens (lazy), preventing unnecessary code execution
-- Code snippet is truncated to first 8 lines to keep the popover compact
+### Cost Considerations
+- Each app open triggers one AI call (generating 3-5 posts or 2-3 emails)
+- Uses `google/gemini-3-flash-preview` for speed and low cost
+- Content is cached in component state so re-renders don't re-fetch
+- Refresh button is the only way to trigger additional generation
 
