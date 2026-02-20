@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { Heart, MessageCircle, Share2, RefreshCw, Bot, Loader2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { Badge } from '@/components/ui/badge';
+import { eventBus } from '@/hooks/useEventBus';
 
 interface Post {
   id: string;
@@ -85,6 +86,28 @@ export default function PrimeSocialApp() {
       hasFetched.current = true;
       fetchAIPosts();
     }
+  }, []);
+
+  // Listen for Hyper agent posts via EventBus
+  useEffect(() => {
+    const handler = (payload: any) => {
+      if (!payload?.content) return;
+      const newPost: Post = {
+        id: `hyper-${Date.now()}`,
+        author: payload.author || 'Hyper',
+        role: payload.role || 'Geometric AI',
+        content: payload.content,
+        time: 'Just now',
+        likes: Math.floor(Math.random() * 20) + 3,
+        liked: false,
+        comments: [],
+        showComments: false,
+        aiGenerated: true,
+      };
+      setPosts(prev => [newPost, ...prev]);
+    };
+    eventBus.on('social.post.created', handler);
+    return () => eventBus.off('social.post.created', handler);
   }, []);
 
   const toggleLike = (id: string) => {

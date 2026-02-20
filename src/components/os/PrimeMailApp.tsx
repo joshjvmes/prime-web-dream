@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { Mail, FileText, Inbox, ArrowLeft, Trash2, Bot, Loader2, RefreshCw } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { Badge } from '@/components/ui/badge';
+import { eventBus } from '@/hooks/useEventBus';
 
 interface Email {
   id: string;
@@ -78,6 +79,27 @@ export default function PrimeMailApp() {
       hasFetched.current = true;
       fetchAIEmails();
     }
+  }, []);
+
+  // Listen for Hyper agent emails via EventBus
+  useEffect(() => {
+    const handler = (payload: any) => {
+      if (!payload?.subject) return;
+      const newEmail: Email = {
+        id: `hyper-${Date.now()}`,
+        from: payload.from || 'hyper@prime.os',
+        to: payload.to || 'operator',
+        subject: payload.subject,
+        body: payload.body || '',
+        date: new Date().toISOString(),
+        read: false,
+        folder: 'inbox',
+        aiGenerated: true,
+      };
+      setEmails(prev => [newEmail, ...prev]);
+    };
+    eventBus.on('mail.received', handler);
+    return () => eventBus.off('mail.received', handler);
   }, []);
 
   const folderEmails = emails.filter(e => e.folder === folder);

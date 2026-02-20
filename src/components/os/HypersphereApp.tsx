@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { Send, Coins } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
+import { eventBus } from '@/hooks/useEventBus';
 
 interface Message {
   id: string;
@@ -8,13 +9,15 @@ interface Message {
   text: string;
 }
 
-const GREETING = "Greetings, operator. I am Hyper — your geometric AI companion, powered by real intelligence. How may I assist your lattice operations?";
+const GREETING = "Greetings, operator. I am Hyper — your geometric AI companion, powered by real intelligence. I can also post to PrimeSocial and send emails through PrimeMail on your behalf. How may I assist your lattice operations?";
 
 const QUICK_ACTIONS = [
   { label: 'System Status', prompt: 'Give me a full PRIME OS system status report including all subsystems.' },
   { label: 'Run Diagnostics', prompt: 'Run a complete diagnostic check on all PRIME OS systems and report results.' },
   { label: 'Threat Scan', prompt: 'Perform a security threat scan across all 11 dimensions and report findings.' },
   { label: 'Energy Report', prompt: 'Generate a detailed energy harvesting report with COP metrics.' },
+  { label: 'Post Update', prompt: 'Post an update to PrimeSocial about the current state of all PRIME OS systems and any interesting metrics.' },
+  { label: 'Send Report', prompt: 'Send a detailed system status report email to the operator with current metrics across all subsystems.' },
 ];
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
@@ -91,6 +94,28 @@ export default function HypersphereApp() {
         return;
       }
 
+      const contentType = resp.headers.get('content-type') || '';
+
+      // Tool call response (JSON)
+      if (contentType.includes('application/json')) {
+        const data = await resp.json();
+        if (data.type === 'tool_call') {
+          // Emit EventBus event
+          if (data.tool === 'post_to_social') {
+            eventBus.emit('social.post.created', data.data);
+          } else if (data.tool === 'send_email') {
+            eventBus.emit('mail.received', data.data);
+          }
+          // Show confirmation in chat
+          setMessages(prev => [...prev, { id: assistantId, role: 'hyper', text: data.reply || '✅ Action completed.' }]);
+        } else {
+          setMessages(prev => [...prev, { id: assistantId, role: 'hyper', text: data.error || 'Unexpected response.' }]);
+        }
+        setThinking(false);
+        return;
+      }
+
+      // Streaming SSE response (normal chat)
       if (!resp.body) throw new Error('No response body');
 
       const reader = resp.body.getReader();
@@ -163,7 +188,6 @@ export default function HypersphereApp() {
         }
       }
 
-      // If no tokens arrived, add fallback
       if (!assistantSoFar) {
         setMessages(prev => [...prev, { id: assistantId, role: 'hyper', text: 'The lattice resonance is unclear. Please try again.' }]);
       }
