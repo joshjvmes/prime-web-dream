@@ -90,7 +90,7 @@ function SectionHeader({ tag, title, desc }: { tag: string; title: string; desc:
       initial={{ opacity: 0, y: 20 }}
       animate={inView ? { opacity: 1, y: 0 } : {}}
       transition={{ duration: 0.6 }}
-      className="text-center mb-16"
+      className="text-center mb-10"
     >
       <span className="inline-block font-display text-[10px] tracking-[0.3em] uppercase text-primary/70 border border-primary/20 rounded-full px-4 py-1.5 mb-4">
         {tag}
@@ -253,7 +253,7 @@ export default function LandingPage() {
       </section>
 
       {/* ─── Stats ─── */}
-      <section id="stats" className="relative py-16 md:py-24 px-4 border-y border-border/30">
+      <section id="stats" className="relative py-12 md:py-16 px-4 border-y border-border/30">
         <div className="max-w-5xl mx-auto">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-8 md:gap-12">
             {stats.map((s, i) => (
@@ -276,7 +276,7 @@ export default function LandingPage() {
       </section>
 
       {/* ─── Features ─── */}
-      <section id="features" className="relative py-20 md:py-32 px-4">
+      <section id="features" className="relative py-14 md:py-20 px-4">
         <div className="max-w-7xl mx-auto">
           <SectionHeader
             tag="Ecosystem"
@@ -292,7 +292,7 @@ export default function LandingPage() {
       </section>
 
       {/* ─── Architecture ─── */}
-      <section id="architecture" className="relative py-20 md:py-32 px-4 border-t border-border/30">
+      <section id="architecture" className="relative py-14 md:py-20 px-4 border-t border-border/30">
         <div className="max-w-5xl mx-auto">
           <SectionHeader
             tag="Architecture"
