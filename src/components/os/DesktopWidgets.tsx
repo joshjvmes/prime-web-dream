@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { X, GripHorizontal } from 'lucide-react';
+import { X, GripHorizontal, Rocket, TrendingUp, Store } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
 
 interface WidgetPos { x: number; y: number; }
 interface WidgetState {
@@ -7,12 +8,13 @@ interface WidgetState {
   stats: boolean;
   notes: boolean;
   network: boolean;
+  forge: boolean;
   positions: Record<string, WidgetPos>;
 }
 
 const DEFAULTS: WidgetState = {
-  clock: true, stats: true, notes: false, network: false,
-  positions: { clock: { x: 200, y: 80 }, stats: { x: 200, y: 220 }, notes: { x: 400, y: 80 }, network: { x: 400, y: 220 } },
+  clock: true, stats: true, notes: false, network: false, forge: false,
+  positions: { clock: { x: 200, y: 80 }, stats: { x: 200, y: 220 }, notes: { x: 400, y: 80 }, network: { x: 400, y: 220 }, forge: { x: 600, y: 80 } },
 };
 
 function loadState(): WidgetState {
@@ -169,6 +171,72 @@ function NetworkWidget() {
   );
 }
 
+// Forge Dashboard Widget
+function ForgeWidget() {
+  const [data, setData] = useState<{ ipoCount: number; totalRaised: number; openOrders: number; latest: { name: string; icon: string; price: number; ipo_active: boolean }[] }>({
+    ipoCount: 0, totalRaised: 0, openOrders: 0, latest: [],
+  });
+
+  const fetchData = useCallback(async () => {
+    const [{ data: listings }, { count: orderCount }] = await Promise.all([
+      supabase.from('forge_listings').select('name, icon, price, ipo_active, ipo_raised, ipo_target').eq('is_listed', true).order('created_at', { ascending: false }).limit(10),
+      supabase.from('share_orders').select('*', { count: 'exact', head: true }).eq('status', 'open'),
+    ]);
+    if (listings) {
+      const ipos = listings.filter((l: any) => l.ipo_active);
+      setData({
+        ipoCount: ipos.length,
+        totalRaised: ipos.reduce((s: number, l: any) => s + Number(l.ipo_raised || 0), 0),
+        openOrders: orderCount || 0,
+        latest: listings.slice(0, 3).map((l: any) => ({ name: l.name, icon: l.icon, price: l.price, ipo_active: l.ipo_active })),
+      });
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchData();
+    const interval = setInterval(fetchData, 10000);
+    const channel = supabase.channel('forge-widget')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'forge_listings' }, fetchData)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'share_orders' }, fetchData)
+      .subscribe();
+    return () => { clearInterval(interval); supabase.removeChannel(channel); };
+  }, [fetchData]);
+
+  return (
+    <div className="space-y-1.5 min-w-[160px]">
+      <div className="flex items-center justify-between">
+        <span className="text-[9px] text-muted-foreground">Active IPOs</span>
+        <span className="text-[9px] text-primary font-bold">{data.ipoCount}</span>
+      </div>
+      <div className="flex items-center justify-between">
+        <span className="text-[9px] text-muted-foreground">Capital Raised</span>
+        <span className="text-[9px] text-foreground">{data.totalRaised.toLocaleString()} OS</span>
+      </div>
+      <div className="flex items-center justify-between">
+        <span className="text-[9px] text-muted-foreground">Open Orders</span>
+        <span className="text-[9px] text-foreground">{data.openOrders}</span>
+      </div>
+      {data.latest.length > 0 && (
+        <div className="border-t border-border/30 pt-1 mt-1 space-y-0.5">
+          <span className="text-[8px] text-muted-foreground/50 uppercase tracking-wider">Latest</span>
+          {data.latest.map((l, i) => (
+            <div key={i} className="flex items-center gap-1 text-[9px]">
+              <span>{l.icon}</span>
+              <span className="text-foreground truncate flex-1">{l.name}</span>
+              {l.ipo_active ? (
+                <span className="px-1 rounded bg-primary/20 text-primary text-[7px] font-bold">IPO</span>
+              ) : (
+                <span className="text-muted-foreground">{l.price === 0 ? 'Free' : `${l.price} OS`}</span>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function DesktopWidgets() {
   const [state, setState] = useState<WidgetState>(loadState);
 
@@ -189,6 +257,7 @@ export default function DesktopWidgets() {
     { id: 'stats', title: 'System Stats', enabled: state.stats, content: <StatsWidget /> },
     { id: 'notes', title: 'Quick Notes', enabled: state.notes, content: <NotesWidget /> },
     { id: 'network', title: 'PrimeNet', enabled: state.network, content: <NetworkWidget /> },
+    { id: 'forge', title: 'Forge Market', enabled: state.forge, content: <ForgeWidget /> },
   ];
 
   return (
