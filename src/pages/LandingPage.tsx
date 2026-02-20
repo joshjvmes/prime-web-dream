@@ -177,13 +177,14 @@ export default function LandingPage() {
       </nav>
 
       {/* ─── Hero ─── */}
-      <section className="relative pt-32 pb-20 md:pt-44 md:pb-32 px-4">
+      <section className="relative pt-24 pb-12 md:pt-32 md:pb-20 px-4">
         <div className="max-w-5xl mx-auto text-center relative z-10">
           <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.8 }}>
-            <div className="inline-flex items-center gap-2 border border-primary/20 rounded-full px-4 py-1.5 mb-8">
+            <div className="inline-flex items-center gap-2 border border-primary/20 rounded-full px-4 py-1.5 mb-6">
               <span className="w-1.5 h-1.5 rounded-full bg-prime-green animate-pulse" />
               <span className="font-mono text-[10px] text-muted-foreground">v2.0.0 — Geometric Computing Kernel</span>
             </div>
+
 
             <h1 className="font-display text-4xl sm:text-5xl md:text-6xl lg:text-7xl tracking-wider uppercase text-foreground mb-6">
               <span className="text-primary glow-text">PRIME</span> OS
@@ -194,7 +195,7 @@ export default function LandingPage() {
               Ternary logic. 11-dimensional folding. Over-unity energy.
             </p>
 
-            <p className="font-mono text-xs text-muted-foreground/60 mb-10">
+            <p className="font-mono text-xs text-muted-foreground/60 mb-6">
               T3-649 Architecture • Qutrit Kernel • Fibonacci Waltz Scheduling
             </p>
           </motion.div>
@@ -226,7 +227,7 @@ export default function LandingPage() {
             initial={{ opacity: 0, y: 40 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.7, duration: 0.8 }}
-            className="mt-16 md:mt-20 max-w-3xl mx-auto"
+            className="mt-10 md:mt-14 max-w-3xl mx-auto"
           >
             <div className="rounded-lg border border-border bg-card/60 backdrop-blur-sm overflow-hidden shadow-[0_0_60px_hsl(var(--primary)/0.08)]">
               <div className="flex items-center gap-2 px-4 py-2.5 border-b border-border bg-card/80">
