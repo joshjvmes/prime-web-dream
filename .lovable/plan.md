@@ -1,224 +1,163 @@
 
 
-# Upgrade 6 Mockup Apps to Full Utility
+# Connect All Upgraded Apps to Hyper AI and PrimeAgent
 
 ## Overview
 
-Transform six mockup-level apps into fully functional utilities by adding real data feeds, database persistence, and browser APIs. The Polygon.io API key will be stored as a backend secret for real market data powering PrimeSignals and PrimeVault.
+Add 10 new AI tools to the `hyper-chat` edge function so Hyper can interact with PrimeSignals, PrimeVault, PrimeCanvas, PrimeBooking, PrimeComm, and PrimeAudio. Also upgrade PrimeAgent to recognize commands for all 6 apps.
 
 ---
 
-## 1. PrimeSignals -- Live Market Data
+## What Changes
 
-**Goal**: Replace hardcoded fake tickers with real stock/crypto prices from Polygon.io.
+### 1. Edge Function: `hyper-chat/index.ts`
 
-### Backend
+Add these new tool definitions to the existing `TOOLS` array:
 
-- Store `POLYGON_API_KEY` as a secret
-- New edge function: `market-data/index.ts`
-  - `get-tickers`: Fetches real-time grouped daily bars from Polygon (`/v2/aggs/grouped/locale/us/market/stocks/{date}`) for a curated watchlist (AAPL, TSLA, NVDA, AMZN, MSFT, GOOG, META, AMD)
-  - `get-snapshot`: Fetches ticker snapshots (`/v2/snapshot/locale/us/markets/stocks/tickers`) for live price + change data
-  - `get-chart`: Fetches aggregate bars (`/v2/aggs/ticker/{ticker}/range/1/hour/{from}/{to}`) for individual stock charts
-  - 5-minute client-side cache to avoid hitting API limits
-- Register in `config.toml` with `verify_jwt = false`
+| Tool | Description | Execution |
+|------|-------------|-----------|
+| `get_market_data` | Fetch live stock prices for given tickers | Server-side: calls `market-data` edge function |
+| `get_stock_chart` | Get historical price chart for a ticker | Server-side: calls `market-data` edge function |
+| `check_portfolio` | View the user's vault holdings with live prices | Server-side: reads `vault_holdings` + calls `market-data` |
+| `trade_stock` | Buy or sell a stock in the vault | Server-side: inserts/updates `vault_holdings` and `vault_transactions`, charges wallet |
+| `create_booking` | Book a resource with conflict detection | Server-side: calls `check_booking_conflict`, inserts into `bookings` |
+| `list_bookings` | List upcoming bookings | Server-side: reads `bookings` table |
+| `cancel_booking` | Cancel one of the user's bookings | Server-side: deletes from `bookings` |
+| `send_message` | Send a DM to another user via PrimeComm | Server-side: inserts into `chat_messages` |
+| `list_conversations` | List recent DM conversations | Server-side: reads `chat_messages` grouped by channel |
+| `control_audio` | Play, pause, skip, or change volume on PrimeAudio | Client-side: returns tool call for frontend EventBus |
 
-### Frontend Changes (`PrimeSignalsApp.tsx`)
+Update the system prompt to tell Hyper about these new capabilities:
+- Market data analysis and stock price lookup
+- Portfolio management (view holdings, buy/sell real stocks)
+- Resource booking with conflict awareness
+- Direct messaging to other users
+- Music/ambient audio control
 
-- Replace `TICKER_BASE` with live data fetched on mount via the edge function
-- Replace random ticker interval with periodic refresh (every 60s) from the API
-- Signal detail chart uses real historical bars instead of `generateSignalChart()`
-- Add a "LIVE" badge when data is fresh, "DELAYED" when cached
-- Keep the existing signals system (entry/target/stop) but overlay real price data
-- Add loading skeleton while fetching
+Add server-side execution functions for each tool, following the existing pattern used by `executeFinancialTool`.
 
----
+### 2. Frontend: `HypersphereApp.tsx`
 
-## 2. PrimeVault -- Persistent Portfolio
+Add client-side handling for the new tool call responses:
 
-**Goal**: Save holdings to the database and pull live prices from the same market-data function.
+- `get_market_data` / `get_stock_chart` / `check_portfolio`: Display the data inline in the chat as formatted text (the edge function returns the reply string)
+- `trade_stock`: Emit `trade.executed` event, show confirmation
+- `create_booking` / `cancel_booking`: Emit new `booking.created` / `booking.cancelled` events
+- `list_bookings` / `list_conversations`: Display data inline
+- `send_message`: Emit `social.post.created` or similar event
+- `control_audio`: Emit a new `audio.control` EventBus event that PrimeAudio listens to
 
-### Database Migration
+Add new permission toggle: **Booking** (controls create/cancel booking)
 
-New table: `vault_holdings`
+Update `AgentAction` type to include new action types.
 
-| Column | Type | Purpose |
-|--------|------|---------|
-| id | uuid (PK) | |
-| user_id | uuid | Owner |
-| symbol | text | Ticker symbol |
-| name | text | Display name |
-| category | text | Asset category |
-| quantity | numeric | Shares held |
-| avg_cost | numeric | Average cost basis |
-| created_at | timestamptz | |
-| updated_at | timestamptz | |
+### 3. Frontend: `PrimeAgentApp.tsx`
 
-RLS: Users can CRUD own holdings only.
+Expand the keyword parser and quick commands:
 
-New table: `vault_transactions`
+New quick commands:
+- "Check Markets" -- opens PrimeSignals, fetches live ticker summary
+- "My Portfolio" -- opens PrimeVault, shows holdings
+- "Book Resource" -- opens PrimeBooking
+- "Play Music" -- opens PrimeAudio, starts playback
+- "Send Message" -- opens PrimeComm
 
-| Column | Type | Purpose |
-|--------|------|---------|
-| id | uuid (PK) | |
-| user_id | uuid | Owner |
-| symbol | text | Ticker |
-| tx_type | text | 'buy' or 'sell' |
-| quantity | numeric | |
-| price | numeric | Execution price |
-| created_at | timestamptz | |
+Add app titles for the 6 new apps to `APP_TITLES`:
+```text
+signals: 'PrimeSignals', vault: 'PrimeVault', canvas: 'PrimeCanvas',
+booking: 'PrimeBooking', comm: 'PrimeComm', audio: 'PrimeAudio'
+```
 
-RLS: Users can insert and read own transactions.
+Add keyword detection for market/stock/price/portfolio/booking/schedule/music/draw/message/chat.
 
-### Frontend Changes (`PrimeVaultApp.tsx`)
+### 4. Frontend: `PrimeAudioApp.tsx`
 
-- Load holdings from `vault_holdings` table on mount (fall back to hardcoded data for guests)
-- Fetch live prices from the `market-data` edge function for current holdings
-- "Buy" and "Sell" buttons on the holdings tab that update the database
-- Transactions tab reads from `vault_transactions` instead of hardcoded array
-- Performance chart uses real historical data from Polygon aggregates
-- Allocation pie chart computed from live data
-- Use `useCloudStorage` pattern for guest fallback
+Add an EventBus listener for `audio.control` events so Hyper can remotely control playback:
 
----
+```text
+eventBus.on('audio.control', ({ action, track, volume }) => { ... })
+```
 
-## 3. PrimeCanvas -- Cloud Save
+Supported actions: play, pause, skip, set-volume, play-track (by name).
 
-**Goal**: Save and load drawings to/from cloud storage.
+### 5. EventBus: `useEventBus.ts`
 
-### Backend
-
-- Use existing `user-files` storage bucket for canvas images
-- Use `user_data` table (key: `canvas-saves`) to store save metadata (name, thumbnail path, created_at)
-
-### Frontend Changes (`PrimeCanvasApp.tsx`)
-
-- "Save" button: exports canvas to PNG blob, uploads to `user-files` bucket under `canvas/{userId}/{timestamp}.png`, saves metadata to `user_data`
-- "Load" button: opens a modal listing saved canvases with thumbnails, click to load
-- "Gallery" panel replaces the static Layers panel (layers were non-functional)
-- Auto-save every 2 minutes if changes detected (debounced)
-- Guest users: saves to localStorage as base64 (existing pattern)
-- Show save status indicator ("Saved" / "Unsaved changes")
-
----
-
-## 4. PrimeBooking -- Database-Backed Scheduling
-
-**Goal**: Persist bookings and add conflict detection.
-
-### Database Migration
-
-New table: `bookings`
-
-| Column | Type | Purpose |
-|--------|------|---------|
-| id | uuid (PK) | |
-| user_id | uuid | Creator |
-| resource | text | Resource name |
-| start_time | timestamptz | Booking start |
-| end_time | timestamptz | Booking end |
-| purpose | text | Description |
-| priority | text | low/medium/high |
-| created_at | timestamptz | |
-
-RLS: All authenticated users can view all bookings (shared resource visibility). Users can insert, update, and delete own bookings.
-
-Add a database function `check_booking_conflict` that checks for overlapping bookings on the same resource.
-
-### Frontend Changes (`PrimeBookingApp.tsx`)
-
-- Load bookings from database on mount
-- Create booking writes to database with conflict check
-- Cancel booking deletes from database
-- Real-time subscription: `ALTER PUBLICATION supabase_realtime ADD TABLE public.bookings` so all users see updates live
-- Show conflict warning when creating overlapping bookings
-- Add "Booked by: [username]" display using profiles table
-- Guest fallback to localStorage
-
----
-
-## 5. PrimeComm -- Real Messaging
-
-**Goal**: Enable real user-to-user messaging using the existing `chat_messages` infrastructure.
-
-### Frontend Changes (`PrimeCommApp.tsx`)
-
-- Replace hardcoded `CONTACTS` with real users from `profiles` table
-- Replace hardcoded `THREADS` with messages from `chat_messages` table (using channel = `dm-{sortedUserIds}`)
-- Message input box at the bottom of conversations that inserts into `chat_messages`
-- Real-time subscription on `chat_messages` for live message delivery
-- "Calls" tab: keep as decorative (VoIP is out of scope) but show call history from a simple log
-- Contact list shows online status from `chat_presence` table
-- Unread message count badges on contacts
-- Guest mode: show demo data with a "Sign in to message" prompt
-
----
-
-## 6. PrimeAudio -- Procedural Synth Engine
-
-**Goal**: Generate real audio using the Web Audio API instead of silent visual-only playback.
-
-### Frontend Changes (`PrimeAudioApp.tsx`)
-
-- Create an `AudioContext` on first play interaction
-- Each track generates a unique procedural soundscape using oscillators + filters:
-  - "Harmonic Fold": layered sine waves with slow LFO modulation
-  - "Qutrit Resonance": three detuned oscillators (qutrit = 3-state)
-  - "Geodesic Flow": filtered noise with resonant sweeps
-  - "Adinkra Pulse": rhythmic kick pattern with sub-bass
-  - "Fibonacci Drift": arpeggiated sequence following Fibonacci intervals
-  - "Dimensional Echo": delay-feedback chain with reverb
-  - "Prime Spiral": frequency spiral through prime-numbered harmonics
-  - "Over-Unity Hum": deep drone with harmonic overtones
-- Volume slider controls `GainNode`
-- Progress bar reflects actual playback position
-- Waveform visualization driven by `AnalyserNode` (real FFT data instead of Math.sin)
-- Equalizer bars show real frequency spectrum data
-- Play/pause actually starts/stops audio
-- Track skip crossfades between soundscapes
+Add new event types:
+```text
+'booking.created', 'booking.cancelled', 'audio.control', 'market.checked'
+```
 
 ---
 
 ## Technical Details
 
-### Files to Create
+### New Tool Definitions (added to TOOLS array in hyper-chat)
 
-| File | Purpose |
-|------|---------|
-| `supabase/functions/market-data/index.ts` | Polygon.io proxy for live market data |
-| Database migration | `vault_holdings`, `vault_transactions`, `bookings` tables |
+**get_market_data**
+- Parameters: `symbols` (string, comma-separated tickers, optional -- defaults to watchlist)
+- Server execution: calls `market-data?action=get-tickers&symbols=...`
+- Returns formatted price table as reply
+
+**get_stock_chart**
+- Parameters: `ticker` (string), `days` (number, default 7)
+- Server execution: calls `market-data?action=get-chart&ticker=...&from=...&to=...`
+- Returns summary with high/low/trend as reply
+
+**check_portfolio**
+- Parameters: none
+- Server execution: reads `vault_holdings` for user, fetches live prices from `market-data`
+- Returns portfolio summary with P/L as reply
+
+**trade_stock**
+- Parameters: `symbol` (string), `action` ("buy"|"sell"), `quantity` (number)
+- Server execution: fetches current price from `market-data`, charges/credits wallet via `prime-bank`, upserts `vault_holdings`, inserts `vault_transactions`
+- Returns trade confirmation as reply
+
+**create_booking**
+- Parameters: `resource` (string), `start` (ISO datetime), `duration_minutes` (number), `purpose` (string)
+- Server execution: calls `check_booking_conflict` RPC, inserts into `bookings`
+- Returns confirmation or conflict warning
+
+**list_bookings**
+- Parameters: `upcoming_only` (boolean, default true)
+- Server execution: reads `bookings` ordered by start_time
+- Returns formatted list
+
+**cancel_booking**
+- Parameters: `booking_id` (string) or `resource` + `date` for fuzzy match
+- Server execution: deletes from `bookings` (only user's own)
+- Returns confirmation
+
+**send_message**
+- Parameters: `to_name` (string), `message` (string)
+- Server execution: looks up user in `profiles`, inserts into `chat_messages` with channel `dm-{sorted_ids}`
+- Returns confirmation
+
+**list_conversations**
+- Parameters: none
+- Server execution: reads recent `chat_messages` for user, grouped by channel
+- Returns formatted conversation list
+
+**control_audio**
+- Parameters: `action` ("play"|"pause"|"skip"|"volume"), `track_name` (string, optional), `volume` (number, optional)
+- Client-side tool: returned to frontend, which emits EventBus event
+- PrimeAudio listens and responds
 
 ### Files to Modify
 
 | File | Change |
-|------|---------|
-| `src/components/os/PrimeSignalsApp.tsx` | Live tickers, real charts, API integration |
-| `src/components/os/PrimeVaultApp.tsx` | DB persistence, live prices, buy/sell |
-| `src/components/os/PrimeCanvasApp.tsx` | Cloud save/load, gallery panel |
-| `src/components/os/PrimeBookingApp.tsx` | DB CRUD, realtime, conflict detection |
-| `src/components/os/PrimeCommApp.tsx` | Real messaging via chat_messages |
-| `src/components/os/PrimeAudioApp.tsx` | Web Audio API synth engine |
-| `supabase/config.toml` | Register market-data function |
-
-### Secret
-
-- `POLYGON_API_KEY`: stored as backend secret, used only in the `market-data` edge function
-
-### API Rate Limiting Strategy
-
-Polygon.io free tier allows 5 calls/minute. The edge function will:
-- Cache responses in-memory for 5 minutes
-- Batch ticker requests using grouped endpoints
-- Frontend polls every 60 seconds (not real-time WebSocket)
+|------|--------|
+| `supabase/functions/hyper-chat/index.ts` | Add 10 tool definitions, execution functions, update system prompt |
+| `src/components/os/HypersphereApp.tsx` | Handle new tool call responses, add permission toggle |
+| `src/components/os/PrimeAgentApp.tsx` | Add 6 apps to parser, new quick commands |
+| `src/components/os/PrimeAudioApp.tsx` | Add EventBus listener for remote control |
+| `src/hooks/useEventBus.ts` | Add new event types |
 
 ### Execution Order
 
-1. Store the Polygon API key as a secret
-2. Create database migration (3 new tables + RLS + realtime)
-3. Build the `market-data` edge function
-4. Update PrimeSignals (depends on market-data)
-5. Update PrimeVault (depends on market-data + new tables)
-6. Update PrimeCanvas (independent)
-7. Update PrimeBooking (depends on new tables)
-8. Update PrimeComm (uses existing tables)
-9. Update PrimeAudio (fully independent, no backend)
+1. Update `useEventBus.ts` with new event types
+2. Update `hyper-chat/index.ts` with all new tools and execution logic
+3. Update `HypersphereApp.tsx` to handle new tool responses
+4. Update `PrimeAgentApp.tsx` with expanded commands
+5. Update `PrimeAudioApp.tsx` with EventBus listener
 
