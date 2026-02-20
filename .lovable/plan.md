@@ -1,85 +1,135 @@
 
-# Global Search, Keyboard Accessibility, and Quick Tour
+
+# Cloud Hooks, Hypersphere AI Companion, and Deep Settings Panels
 
 ## Overview
 
-Add three features to PRIME OS: a global command palette for searching apps/files/windows, keyboard navigation improvements across all apps and dialogs, and a first-launch quick tour modal introducing the OS.
+Add three major features to PRIME OS: a Cloud Hooks management app, a Hypersphere AI companion widget, and a fully expanded Settings app with dedicated panels for Keyboard, Mouse, Display, and Audio/Video.
 
 ---
 
-## Feature 1: Global Search (Command Palette)
+## Feature 1: Cloud Hooks App (CloudHooksApp)
 
-**New File:** `src/components/os/GlobalSearch.tsx`
+**New File:** `src/components/os/CloudHooksApp.tsx`
 
-A Spotlight/command-palette overlay triggered by `Ctrl+K` (or `Cmd+K` on Mac):
+A webhook/event automation manager for the PRIME lattice:
 
-- Built on top of the existing `cmdk` library (already installed) using the `Command`, `CommandInput`, `CommandList`, `CommandGroup`, `CommandItem`, `CommandEmpty` components from `src/components/ui/command.tsx`.
-- Renders as a centered dialog overlay (using `CommandDialog` pattern) at `z-[300]` so it floats above all windows.
-- **Search categories:**
-  - **Applications** -- all 19 apps from the `allApps` array in Taskbar, searchable by label. Selecting one opens/focuses the app.
-  - **Open Windows** -- lists currently open windows. Selecting one focuses that window.
-  - **Quick Actions** -- "Tile All Windows", "Cascade Windows", "Open Settings", "Open Terminal".
-- Keyboard-navigable out of the box (cmdk handles arrow keys and Enter).
-- Escape closes the palette.
+- **Hook list panel** -- left sidebar listing configured hooks with status indicators (active/paused/error). Each hook has a name, trigger event, and target endpoint.
+- **Trigger events** -- selectable from system events: `node.online`, `node.offline`, `energy.cop.threshold`, `q3.inference.complete`, `foldmem.compact`, `primenet.route.change`, `security.alert`, `storage.region.full`.
+- **Hook editor** -- right panel to configure:
+  - Name, description
+  - Trigger event (dropdown)
+  - Target: `prime://` endpoint or simulated external URL
+  - Payload template (JSON editor textarea)
+  - Retry count and delay (sliders)
+  - Enabled toggle
+- **Execution log** -- bottom panel showing recent hook executions with timestamp, status (success/fail), response time, and payload preview. Auto-generates simulated executions every 8-12 seconds.
+- **Test button** -- fires a test execution with simulated response.
+- **Stats header** -- total hooks, active count, executions today, success rate percentage.
 
-**Integration in `Desktop.tsx`:**
-- Import `GlobalSearch` component.
-- Add state `searchOpen` with `useState(false)`.
-- Add a `useEffect` listening for `Ctrl+K` / `Cmd+K` keydown to toggle `searchOpen`.
-- Pass `windows`, `openWindow`, `focusWindow`, `tileAllWindows`, `cascadeWindows` as props.
-- Render `<GlobalSearch>` inside the booted section.
-
-**Integration in `Taskbar.tsx`:**
-- Add a small search icon button next to the PRIME menu that triggers the search (accepts an `onSearch` callback prop).
+Default window size: 800x520.
 
 ---
 
-## Feature 2: Keyboard Accessibility
+## Feature 2: Hypersphere AI Companion
 
-**Changes to `src/components/os/OSWindow.tsx`:**
-- Add `role="dialog"` and `aria-label={win.title}` to the window container.
-- Add `aria-label` attributes to minimize, maximize, and close buttons.
-- Make title bar buttons `tabIndex={0}` (already buttons, so mostly semantic additions).
-- Add keyboard handler on the window: `Escape` closes focused window (only if the window itself has focus, not a child input).
+**New File:** `src/components/os/HypersphereApp.tsx`
 
-**Changes to `src/components/os/Taskbar.tsx`:**
-- Add `aria-label` to PRIME menu button and notification bell.
-- Ensure all app buttons in the menu have `role="menuitem"`.
+An AI assistant themed as a sentient geometric entity living in the PRIME lattice:
 
-**Changes to `src/components/os/Desktop.tsx`:**
-- Add global keyboard listener for:
-  - `Ctrl+K` / `Cmd+K` -- open global search (handled by GlobalSearch integration above).
-  - `Alt+Tab` -- cycle focus between open windows (call `focusWindow` on the next window in the list).
-  - `Ctrl+W` -- close the currently focused window.
+- **Visual identity** -- animated SVG hypersphere at the top of the window: a rotating wireframe sphere with orbiting rings, rendered with CSS animations and SVG transforms. Pulses gently when idle, spins faster when "thinking."
+- **Chat interface** -- below the visualization, a chat-style message thread with input field.
+- **Personality** -- the AI responds as "Hyper," a geometric intelligence. It speaks in a mix of technical lattice jargon and helpful guidance. Responses are pre-scripted pattern-matched (no real AI backend needed):
+  - Greets the user on open: "Greetings, operator. I am Hyper -- your geometric companion. How may I assist your lattice operations?"
+  - Responds to keywords: "help" -> explains OS features, "energy" -> COP status, "network" -> PrimeNet health, "memory" -> FoldMem stats, "security" -> threat assessment, "hello/hi" -> friendly greeting.
+  - Default fallback: "Interesting query. Let me fold that through 11 dimensions... I'm unable to resolve that coordinate, but try asking about energy, network, memory, or security."
+- **Quick action buttons** -- row of chips below the input: "System Status", "Run Diagnostics", "Threat Scan", "Energy Report". Each triggers a multi-line formatted response.
+- **Thinking animation** -- when processing, shows "Folding through dimensions..." with animated dots and the hypersphere spins faster.
+- **Minimize to widget** -- when the window is open, a small floating orb appears in the bottom-right corner of the desktop (above the taskbar) that pulses. This is just the app icon behavior, no separate widget needed.
 
-**Changes to `src/components/os/DesktopContextMenu.tsx`:**
-- Add keyboard shortcut hints next to context menu items (e.g., "Ctrl+K" next to a hypothetical search entry).
+Default window size: 500x550.
 
 ---
 
-## Feature 3: Quick Tour Modal
+## Feature 3: Deep Settings Panels
 
-**New File:** `src/components/os/QuickTour.tsx`
+**Modified File:** `src/components/os/SettingsApp.tsx`
 
-A multi-step onboarding modal shown on first OS launch:
+Refactor into a tabbed/sidebar settings app with multiple panels:
 
-- Uses `localStorage` key `prime-os-tour-completed` to track whether the tour has been shown.
-- Modal styled as a centered card with the PRIME OS aesthetic (border-primary, bg-card, font-mono).
-- **Steps** (navigable with Next/Back/Skip buttons):
-  1. **Welcome** -- "Welcome to PRIME OS" with logo and tagline. Brief intro to geometric computing.
-  2. **Desktop & Windows** -- Explains drag, resize, snap, maximize. Shows icon of window controls.
-  3. **Applications** -- Highlights key apps: Terminal, Browser, Data Center, Security Console, Chat, Editor, Gallery, Board.
-  4. **Global Search** -- "Press Ctrl+K to find anything" with a visual of the search palette.
-  5. **Get Started** -- "Your lattice awaits" with a "Launch Terminal" button that closes the tour and opens the terminal.
-- Each step has a dot indicator showing progress (step 1 of 5, etc.).
-- "Skip Tour" link on every step. "Don't show again" checkbox on the last step.
-- Animated transitions between steps using framer-motion.
+### Navigation
+- Left sidebar with category icons: Display, Keyboard, Mouse, Audio, Notifications, About.
+- Active category highlighted. Click to switch the right-side panel.
 
-**Integration in `Desktop.tsx`:**
-- Import `QuickTour`.
-- Add state `showTour` initialized from `localStorage` check.
-- Render `<QuickTour>` after boot completes, before the terminal auto-opens.
-- When tour completes or is skipped, set `localStorage` and close.
+### Display Panel (replaces current Visual Effects + Accent Color)
+- Scan Lines toggle (existing)
+- Grid Background toggle (existing)
+- Accent Color picker (existing cyan/violet/amber)
+- **New:** Window opacity slider (0.7 to 1.0) -- controls default window backdrop opacity via CSS variable
+- **New:** Animation speed selector: Slow / Normal / Fast -- adjusts framer-motion transition durations via CSS variable
+- **New:** Font size selector: Compact / Default / Large -- adjusts base font scale
+
+### Keyboard Panel
+- **Shortcut reference table** -- read-only list of all global shortcuts:
+  - Ctrl+K: Global Search
+  - Ctrl+W: Close Window
+  - Alt+Tab: Cycle Windows
+  - Escape: Close focused dialog
+- **Key repeat rate** -- slider (simulated, stored in localStorage)
+- **Key repeat delay** -- slider (simulated)
+- **Keyboard layout** -- dropdown: QWERTY / Dvorak / Colemak (display only, stored in settings)
+- **Input method** -- dropdown: Standard / Geometric / Qutrit (cosmetic)
+
+### Mouse Panel
+- **Cursor speed** -- slider
+- **Double-click speed** -- slider
+- **Scroll direction** -- toggle: Natural / Standard
+- **Pointer precision** -- toggle
+- **Cursor theme** -- selector: Default / Crosshair / Lattice
+
+### Audio Panel
+- **Master volume** -- slider with percentage display
+- **System sounds** -- toggle (notification beeps, boot sound)
+- **Notification sound** -- toggle
+- **Alert volume** -- slider
+- **Sound theme** -- dropdown: Geometric / Minimal / Silent
+
+### Notifications Panel (existing, moved to its own tab)
+- Same notification events management UI currently in Settings
+
+### About Panel (existing, moved to its own tab)
+- Same system info currently displayed
+
+All settings persist to `localStorage` under `prime-os-settings`. The settings state interface expands to include all new fields with sensible defaults.
+
+---
+
+## System Registration
+
+### `src/types/os.ts`
+Add to `AppType` union: `'cloudhooks' | 'hypersphere'`
+
+### `src/components/os/Desktop.tsx`
+- Import `CloudHooksApp` and `HypersphereApp`.
+- Add cases to `renderApp` switch.
+
+### `src/components/os/Taskbar.tsx`
+- Add entries to `allApps`:
+  - CloudHooks: `Webhook` (or `Link2`) icon, label "Cloud Hooks"
+  - Hypersphere: `Orbit` icon, label "Hyper AI"
+
+### `src/components/os/DesktopIcons.tsx`
+- Add desktop icons for both new apps.
+
+### `src/components/os/terminal/commands.ts`
+- Add to `APP_MAP`: `cloudhooks` and `hypersphere` / `hyper`.
+- Update `HELP_TEXT`.
+
+### `src/hooks/useWindowManager.ts`
+- Add default sizes: cloudhooks 800x520, hypersphere 500x550.
+
+### `src/components/os/GlobalSearch.tsx`
+- New apps auto-appear since GlobalSearch reads from Taskbar's `allApps` array (or uses the same list).
 
 ---
 
@@ -87,17 +137,21 @@ A multi-step onboarding modal shown on first OS launch:
 
 | File | Action |
 |------|--------|
-| `src/components/os/GlobalSearch.tsx` | Create -- command palette component |
-| `src/components/os/QuickTour.tsx` | Create -- multi-step tour modal |
-| `src/components/os/Desktop.tsx` | Edit -- integrate search, tour, global keyboard shortcuts |
-| `src/components/os/Taskbar.tsx` | Edit -- add search button, aria labels |
-| `src/components/os/OSWindow.tsx` | Edit -- add aria attributes, keyboard close |
-| `src/components/os/DesktopContextMenu.tsx` | Edit -- add shortcut hints |
+| `src/components/os/CloudHooksApp.tsx` | Create |
+| `src/components/os/HypersphereApp.tsx` | Create |
+| `src/components/os/SettingsApp.tsx` | Rewrite -- tabbed layout with 6 panels |
+| `src/types/os.ts` | Edit -- add new AppType values |
+| `src/components/os/Desktop.tsx` | Edit -- import and wire new apps |
+| `src/components/os/Taskbar.tsx` | Edit -- add app entries |
+| `src/components/os/DesktopIcons.tsx` | Edit -- add icons |
+| `src/components/os/terminal/commands.ts` | Edit -- add APP_MAP entries |
+| `src/hooks/useWindowManager.ts` | Edit -- add default sizes |
 
 ## Technical Notes
 
-- No new dependencies needed. `cmdk` and `framer-motion` are already installed.
-- The command palette reuses the existing `Command*` UI components from `src/components/ui/command.tsx`, keeping the design system consistent.
-- Tour state is persisted in `localStorage` so it only shows once per browser.
-- All keyboard shortcuts use `useEffect` with `keydown` listeners and proper cleanup.
-- Alt+Tab cycling is implemented by finding the index of the currently focused window and advancing to the next non-minimized window.
+- No new dependencies. All simulated with useState/setInterval.
+- Hypersphere SVG uses CSS `@keyframes` for rotation -- no canvas needed.
+- Settings tabs use simple state-based panel switching, no router.
+- All new settings stored in the existing `prime-os-settings` localStorage key with expanded interface.
+- Cloud Hooks execution log auto-generates entries to feel alive.
+
