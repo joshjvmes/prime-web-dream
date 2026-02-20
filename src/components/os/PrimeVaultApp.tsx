@@ -1,10 +1,13 @@
-import { useState, useMemo } from 'react';
-import { Vault, TrendingUp, TrendingDown, PieChart as PieIcon } from 'lucide-react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
+import { Vault, TrendingUp, TrendingDown } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, ResponsiveContainer, Tooltip, PieChart, Pie, Cell } from 'recharts';
+import { Skeleton } from '@/components/ui/skeleton';
+import { supabase } from '@/integrations/supabase/client';
 
 interface Holding {
   id: string;
   name: string;
+  symbol: string;
   category: string;
   quantity: number;
   avgCost: number;
@@ -13,66 +16,175 @@ interface Holding {
 
 interface Transaction {
   id: string;
-  asset: string;
+  symbol: string;
   type: 'buy' | 'sell';
   quantity: number;
   price: number;
   date: string;
 }
 
-const HOLDINGS: Holding[] = [
-  { id: 'h1', name: 'Lattice Core', category: 'Compute', quantity: 120, avgCost: 142.00, currentPrice: 158.30 },
-  { id: 'h2', name: 'QutritNode', category: 'Compute', quantity: 85, avgCost: 89.50, currentPrice: 94.20 },
-  { id: 'h3', name: 'EnergyCell-A', category: 'Energy', quantity: 300, avgCost: 22.40, currentPrice: 25.80 },
-  { id: 'h4', name: 'PrimeNet Bond', category: 'Network', quantity: 50, avgCost: 200.00, currentPrice: 212.50 },
-  { id: 'h5', name: 'FoldStorage', category: 'Storage', quantity: 200, avgCost: 15.60, currentPrice: 14.90 },
-  { id: 'h6', name: 'Adinkra Token', category: 'Storage', quantity: 500, avgCost: 8.20, currentPrice: 9.10 },
-  { id: 'h7', name: 'GeomC License', category: 'Compute', quantity: 10, avgCost: 450.00, currentPrice: 520.00 },
+const FALLBACK_HOLDINGS: Holding[] = [
+  { id: 'h1', name: 'Apple Inc.', symbol: 'AAPL', category: 'Tech', quantity: 50, avgCost: 175.00, currentPrice: 0 },
+  { id: 'h2', name: 'Tesla Inc.', symbol: 'TSLA', category: 'Auto', quantity: 20, avgCost: 220.00, currentPrice: 0 },
+  { id: 'h3', name: 'NVIDIA Corp.', symbol: 'NVDA', category: 'Tech', quantity: 30, avgCost: 450.00, currentPrice: 0 },
+  { id: 'h4', name: 'Amazon', symbol: 'AMZN', category: 'Tech', quantity: 25, avgCost: 145.00, currentPrice: 0 },
+  { id: 'h5', name: 'Microsoft', symbol: 'MSFT', category: 'Tech', quantity: 40, avgCost: 380.00, currentPrice: 0 },
 ];
 
-const TRANSACTIONS: Transaction[] = [
-  { id: 't1', asset: 'Lattice Core', type: 'buy', quantity: 20, price: 155.00, date: '2026-02-18' },
-  { id: 't2', asset: 'EnergyCell-A', type: 'buy', quantity: 100, price: 24.50, date: '2026-02-15' },
-  { id: 't3', asset: 'FoldStorage', type: 'sell', quantity: 50, price: 15.20, date: '2026-02-12' },
-  { id: 't4', asset: 'QutritNode', type: 'buy', quantity: 35, price: 92.00, date: '2026-02-10' },
-  { id: 't5', asset: 'Adinkra Token', type: 'buy', quantity: 200, price: 8.80, date: '2026-02-08' },
-];
-
-const CAT_COLORS: Record<string, string> = { Compute: 'hsl(var(--primary))', Energy: 'hsl(45 90% 55%)', Network: 'hsl(200 80% 55%)', Storage: 'hsl(280 60% 55%)' };
-
-function generatePerformance() {
-  const data = [];
-  let val = 45000;
-  let bench = 45000;
-  for (let i = 0; i < 30; i++) {
-    val += (Math.random() - 0.45) * 800;
-    bench += (Math.random() - 0.48) * 600;
-    data.push({ day: i + 1, portfolio: Math.round(val), benchmark: Math.round(bench) });
-  }
-  return data;
-}
+const CAT_COLORS: Record<string, string> = { Tech: 'hsl(var(--primary))', Auto: 'hsl(45 90% 55%)', Energy: 'hsl(140 70% 45%)', Finance: 'hsl(200 80% 55%)' };
 
 export default function PrimeVaultApp() {
   const [tab, setTab] = useState<'overview' | 'holdings' | 'history'>('overview');
+  const [holdings, setHoldings] = useState<Holding[]>([]);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [userId, setUserId] = useState<string | null>(null);
   const [showBenchmark, setShowBenchmark] = useState(false);
-  const perfData = useMemo(() => generatePerformance(), []);
+  const [perfData, setPerfData] = useState<{ day: number; portfolio: number; benchmark: number }[]>([]);
 
-  const totalValue = HOLDINGS.reduce((s, h) => s + h.quantity * h.currentPrice, 0);
-  const totalCost = HOLDINGS.reduce((s, h) => s + h.quantity * h.avgCost, 0);
+  // Auth check
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => setUserId(data.session?.user?.id ?? null));
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, s) => setUserId(s?.user?.id ?? null));
+    return () => subscription.unsubscribe();
+  }, []);
+
+  // Fetch live prices
+  const fetchPrices = useCallback(async (symbols: string[]): Promise<Record<string, number>> => {
+    try {
+      const res = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/market-data?action=get-tickers&symbols=${symbols.join(',')}`,
+        { headers: { apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY } }
+      );
+      const json = await res.json();
+      const prices: Record<string, number> = {};
+      if (json.data) json.data.forEach((d: any) => { prices[d.symbol || d.T] = d.c || 0; });
+      return prices;
+    } catch { return {}; }
+  }, []);
+
+  // Load data
+  useEffect(() => {
+    const load = async () => {
+      setLoading(true);
+      let h = FALLBACK_HOLDINGS;
+      let tx: Transaction[] = [];
+
+      if (userId) {
+        try {
+          const { data: dbH } = await (supabase as any).from('vault_holdings').select('*').eq('user_id', userId);
+          if (dbH && dbH.length > 0) {
+            h = dbH.map((r: any) => ({
+              id: r.id, name: r.name, symbol: r.symbol, category: r.category,
+              quantity: Number(r.quantity), avgCost: Number(r.avg_cost), currentPrice: 0,
+            }));
+          }
+          const { data: dbTx } = await (supabase as any).from('vault_transactions').select('*').eq('user_id', userId).order('created_at', { ascending: false }).limit(20);
+          if (dbTx) {
+            tx = dbTx.map((r: any) => ({
+              id: r.id, symbol: r.symbol, type: r.tx_type, quantity: Number(r.quantity),
+              price: Number(r.price), date: new Date(r.created_at).toISOString().slice(0, 10),
+            }));
+          }
+        } catch {}
+      }
+
+      // Fetch live prices
+      const symbols = h.map(x => x.symbol);
+      const prices = await fetchPrices(symbols);
+      h = h.map(x => ({ ...x, currentPrice: prices[x.symbol] || x.avgCost }));
+
+      setHoldings(h);
+      setTransactions(tx);
+
+      // Generate perf data based on total value
+      const totalVal = h.reduce((s, x) => s + x.quantity * x.currentPrice, 0);
+      const pd = [];
+      let val = totalVal * 0.92;
+      let bench = val;
+      for (let i = 0; i < 30; i++) {
+        val += (Math.random() - 0.45) * totalVal * 0.015;
+        bench += (Math.random() - 0.48) * totalVal * 0.012;
+        pd.push({ day: i + 1, portfolio: Math.round(val), benchmark: Math.round(bench) });
+      }
+      setPerfData(pd);
+      setLoading(false);
+    };
+    load();
+  }, [userId, fetchPrices]);
+
+  const totalValue = holdings.reduce((s, h) => s + h.quantity * h.currentPrice, 0);
+  const totalCost = holdings.reduce((s, h) => s + h.quantity * h.avgCost, 0);
   const totalPnL = totalValue - totalCost;
-  const dailyChange = totalValue * 0.012;
 
   const allocationData = useMemo(() => {
     const cats: Record<string, number> = {};
-    HOLDINGS.forEach(h => { cats[h.category] = (cats[h.category] || 0) + h.quantity * h.currentPrice; });
+    holdings.forEach(h => { cats[h.category] = (cats[h.category] || 0) + h.quantity * h.currentPrice; });
     return Object.entries(cats).map(([name, value]) => ({ name, value: Math.round(value) }));
-  }, []);
+  }, [holdings]);
+
+  // Buy/Sell handler
+  const handleTrade = useCallback(async (symbol: string, name: string, category: string, qty: number, price: number, type: 'buy' | 'sell') => {
+    if (!userId) return;
+    try {
+      // Record transaction
+      await (supabase as any).from('vault_transactions').insert({
+        user_id: userId, symbol, tx_type: type, quantity: qty, price,
+      });
+
+      // Update holding
+      const existing = holdings.find(h => h.symbol === symbol);
+      if (type === 'buy') {
+        if (existing) {
+          const newQty = existing.quantity + qty;
+          const newCost = (existing.avgCost * existing.quantity + price * qty) / newQty;
+          await (supabase as any).from('vault_holdings').update({ quantity: newQty, avg_cost: newCost }).eq('id', existing.id);
+        } else {
+          await (supabase as any).from('vault_holdings').insert({
+            user_id: userId, symbol, name, category, quantity: qty, avg_cost: price,
+          });
+        }
+      } else if (type === 'sell' && existing) {
+        const newQty = Math.max(0, existing.quantity - qty);
+        if (newQty === 0) {
+          await (supabase as any).from('vault_holdings').delete().eq('id', existing.id);
+        } else {
+          await (supabase as any).from('vault_holdings').update({ quantity: newQty }).eq('id', existing.id);
+        }
+      }
+
+      // Refresh
+      const { data: dbH } = await (supabase as any).from('vault_holdings').select('*').eq('user_id', userId);
+      if (dbH) {
+        const prices = await fetchPrices(dbH.map((r: any) => r.symbol));
+        setHoldings(dbH.map((r: any) => ({
+          id: r.id, name: r.name, symbol: r.symbol, category: r.category,
+          quantity: Number(r.quantity), avgCost: Number(r.avg_cost), currentPrice: prices[r.symbol] || Number(r.avg_cost),
+        })));
+      }
+      const { data: dbTx } = await (supabase as any).from('vault_transactions').select('*').eq('user_id', userId).order('created_at', { ascending: false }).limit(20);
+      if (dbTx) setTransactions(dbTx.map((r: any) => ({
+        id: r.id, symbol: r.symbol, type: r.tx_type, quantity: Number(r.quantity),
+        price: Number(r.price), date: new Date(r.created_at).toISOString().slice(0, 10),
+      })));
+    } catch (e) { console.error('Trade error:', e); }
+  }, [userId, holdings, fetchPrices]);
+
+  if (loading) {
+    return (
+      <div className="h-full flex flex-col bg-background p-3 space-y-2">
+        <Skeleton className="h-8 w-full" />
+        {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-12 w-full" />)}
+      </div>
+    );
+  }
 
   return (
     <div className="h-full flex flex-col bg-background text-foreground font-mono text-xs">
       <div className="flex items-center gap-2 px-3 py-2 border-b border-border">
         <Vault size={14} className="text-primary" />
         <span className="font-display text-[10px] tracking-wider text-primary">PRIMEVAULT</span>
+        {!userId && <span className="text-[8px] text-muted-foreground ml-1">(Guest Mode)</span>}
         <div className="ml-auto flex gap-1">
           {(['overview', 'holdings', 'history'] as const).map(t => (
             <button key={t} onClick={() => setTab(t)} className={`px-2 py-0.5 rounded text-[9px] capitalize ${tab === t ? 'bg-primary/20 text-primary' : 'text-muted-foreground'}`}>{t}</button>
@@ -86,15 +198,15 @@ export default function PrimeVaultApp() {
             <div className="grid grid-cols-3 gap-2">
               <div className="border border-border rounded p-2">
                 <p className="text-[8px] text-muted-foreground">TOTAL VALUE</p>
-                <p className="text-lg text-foreground font-bold">{totalValue.toLocaleString(undefined, { minimumFractionDigits: 2 })} Ł</p>
+                <p className="text-lg text-foreground font-bold">${totalValue.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
               </div>
               <div className="border border-border rounded p-2">
-                <p className="text-[8px] text-muted-foreground">DAILY CHANGE</p>
-                <p className="text-lg text-primary font-bold flex items-center gap-1"><TrendingUp size={14} />+{dailyChange.toFixed(2)} Ł</p>
+                <p className="text-[8px] text-muted-foreground">TOTAL COST</p>
+                <p className="text-lg text-foreground font-bold">${totalCost.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
               </div>
               <div className="border border-border rounded p-2">
                 <p className="text-[8px] text-muted-foreground">TOTAL P&L</p>
-                <p className={`text-lg font-bold ${totalPnL >= 0 ? 'text-primary' : 'text-destructive'}`}>{totalPnL >= 0 ? '+' : ''}{totalPnL.toFixed(2)} Ł</p>
+                <p className={`text-lg font-bold ${totalPnL >= 0 ? 'text-primary' : 'text-destructive'}`}>{totalPnL >= 0 ? '+' : ''}${totalPnL.toFixed(2)}</p>
               </div>
             </div>
 
@@ -103,7 +215,7 @@ export default function PrimeVaultApp() {
                 <div className="flex items-center justify-between mb-1">
                   <p className="text-[9px] text-muted-foreground">PERFORMANCE</p>
                   <button onClick={() => setShowBenchmark(!showBenchmark)} className={`text-[8px] px-1.5 py-0.5 rounded ${showBenchmark ? 'bg-primary/20 text-primary' : 'text-muted-foreground hover:bg-muted'}`}>
-                    vs Lattice Index
+                    vs S&P 500
                   </button>
                 </div>
                 <ResponsiveContainer width="100%" height={130}>
@@ -112,7 +224,7 @@ export default function PrimeVaultApp() {
                     <YAxis tick={{ fontSize: 8 }} stroke="hsl(var(--muted-foreground))" />
                     <Tooltip contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', fontSize: 10 }} />
                     <Line type="monotone" dataKey="portfolio" stroke="hsl(var(--primary))" strokeWidth={1.5} dot={false} name="Portfolio" />
-                    {showBenchmark && <Line type="monotone" dataKey="benchmark" stroke="hsl(var(--muted-foreground))" strokeWidth={1} dot={false} strokeDasharray="4 2" name="Benchmark" />}
+                    {showBenchmark && <Line type="monotone" dataKey="benchmark" stroke="hsl(var(--muted-foreground))" strokeWidth={1} dot={false} strokeDasharray="4 2" name="S&P 500" />}
                   </LineChart>
                 </ResponsiveContainer>
               </div>
@@ -134,22 +246,28 @@ export default function PrimeVaultApp() {
         {tab === 'holdings' && (
           <div className="border border-border rounded">
             <div className="grid grid-cols-7 gap-1 px-2 py-1.5 border-b border-border text-[8px] text-muted-foreground">
-              <span className="col-span-2">Asset</span><span>Qty</span><span>Avg Cost</span><span>Price</span><span>P&L</span><span>Weight</span>
+              <span className="col-span-2">Asset</span><span>Qty</span><span>Avg Cost</span><span>Price</span><span>P&L</span><span>Action</span>
             </div>
-            {HOLDINGS.map(h => {
+            {holdings.map(h => {
               const pnl = h.quantity * (h.currentPrice - h.avgCost);
-              const weight = (h.quantity * h.currentPrice / totalValue * 100);
               return (
-                <div key={h.id} className="grid grid-cols-7 gap-1 px-2 py-1.5 border-b border-border/50 text-[9px] hover:bg-muted/20">
+                <div key={h.id} className="grid grid-cols-7 gap-1 px-2 py-1.5 border-b border-border/50 text-[9px] hover:bg-muted/20 items-center">
                   <div className="col-span-2">
-                    <span className="text-foreground">{h.name}</span>
-                    <span className="text-[8px] text-muted-foreground ml-1">{h.category}</span>
+                    <span className="text-foreground">{h.symbol}</span>
+                    <span className="text-[8px] text-muted-foreground ml-1">{h.name}</span>
                   </div>
                   <span className="text-foreground">{h.quantity}</span>
-                  <span className="text-muted-foreground">{h.avgCost.toFixed(2)}</span>
-                  <span className="text-foreground">{h.currentPrice.toFixed(2)}</span>
-                  <span className={pnl >= 0 ? 'text-primary' : 'text-destructive'}>{pnl >= 0 ? '+' : ''}{pnl.toFixed(2)}</span>
-                  <span className="text-muted-foreground">{weight.toFixed(1)}%</span>
+                  <span className="text-muted-foreground">${h.avgCost.toFixed(2)}</span>
+                  <span className="text-foreground">${h.currentPrice.toFixed(2)}</span>
+                  <span className={pnl >= 0 ? 'text-primary' : 'text-destructive'}>{pnl >= 0 ? '+' : ''}${pnl.toFixed(2)}</span>
+                  <div className="flex gap-1">
+                    {userId && (
+                      <>
+                        <button onClick={() => handleTrade(h.symbol, h.name, h.category, 1, h.currentPrice, 'buy')} className="text-[7px] px-1 py-0.5 rounded bg-primary/10 text-primary border border-primary/30">+1</button>
+                        <button onClick={() => handleTrade(h.symbol, h.name, h.category, 1, h.currentPrice, 'sell')} className="text-[7px] px-1 py-0.5 rounded bg-destructive/10 text-destructive border border-destructive/30">-1</button>
+                      </>
+                    )}
+                  </div>
                 </div>
               );
             })}
@@ -159,15 +277,19 @@ export default function PrimeVaultApp() {
         {tab === 'history' && (
           <div className="border border-border rounded">
             <div className="grid grid-cols-5 gap-1 px-2 py-1.5 border-b border-border text-[8px] text-muted-foreground">
-              <span>Date</span><span>Asset</span><span>Type</span><span>Qty</span><span>Price</span>
+              <span>Date</span><span>Symbol</span><span>Type</span><span>Qty</span><span>Price</span>
             </div>
-            {TRANSACTIONS.map(t => (
+            {transactions.length === 0 ? (
+              <div className="p-4 text-center text-muted-foreground text-[10px]">
+                {userId ? 'No transactions yet' : 'Sign in to track transactions'}
+              </div>
+            ) : transactions.map(t => (
               <div key={t.id} className="grid grid-cols-5 gap-1 px-2 py-1.5 border-b border-border/50 text-[9px] hover:bg-muted/20">
                 <span className="text-muted-foreground">{t.date}</span>
-                <span className="text-foreground">{t.asset}</span>
+                <span className="text-foreground">{t.symbol}</span>
                 <span className={t.type === 'buy' ? 'text-primary' : 'text-destructive'}>{t.type.toUpperCase()}</span>
                 <span className="text-foreground">{t.quantity}</span>
-                <span className="text-muted-foreground">{t.price.toFixed(2)}</span>
+                <span className="text-muted-foreground">${t.price.toFixed(2)}</span>
               </div>
             ))}
           </div>

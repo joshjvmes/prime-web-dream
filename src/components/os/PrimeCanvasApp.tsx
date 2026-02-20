@@ -1,6 +1,8 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
-import { Pencil, Minus, Square, Circle, Eraser, Undo, Redo, Grid3x3, Download, Trash2 } from 'lucide-react';
+import { Pencil, Minus, Square, Circle, Eraser, Undo, Redo, Grid3x3, Download, Trash2, Save, FolderOpen } from 'lucide-react';
 import { Slider } from '@/components/ui/slider';
+import { supabase } from '@/integrations/supabase/client';
+import { ScrollArea } from '@/components/ui/scroll-area';
 
 type Tool = 'pencil' | 'line' | 'rect' | 'circle' | 'eraser';
 
@@ -15,7 +17,12 @@ const COLORS = [
   'hsl(200, 80%, 55%)',
 ];
 
-const LAYERS = ['Background', 'Layer 1', 'Layer 2'];
+interface CanvasSave {
+  name: string;
+  path: string;
+  created_at: string;
+  url?: string;
+}
 
 function downloadFile(dataUrl: string, filename: string) {
   const a = document.createElement('a');
@@ -31,12 +38,45 @@ export default function PrimeCanvasApp() {
   const [tool, setTool] = useState<Tool>('pencil');
   const [color, setColor] = useState(COLORS[0]);
   const [brushSize, setBrushSize] = useState(3);
-  const [activeLayer, setActiveLayer] = useState(1);
   const [drawing, setDrawing] = useState(false);
   const [startPos, setStartPos] = useState<{ x: number; y: number } | null>(null);
   const [history, setHistory] = useState<ImageData[]>([]);
   const [historyIdx, setHistoryIdx] = useState(-1);
   const [canvasSize, setCanvasSize] = useState({ w: 0, h: 0 });
+  const [userId, setUserId] = useState<string | null>(null);
+  const [saves, setSaves] = useState<CanvasSave[]>([]);
+  const [showGallery, setShowGallery] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<'saved' | 'unsaved' | 'saving'>('saved');
+  const [dirty, setDirty] = useState(false);
+  const autoSaveTimer = useRef<ReturnType<typeof setTimeout>>();
+
+  // Auth
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => setUserId(data.session?.user?.id ?? null));
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, s) => setUserId(s?.user?.id ?? null));
+    return () => subscription.unsubscribe();
+  }, []);
+
+  // Load saved canvases list
+  const loadSaves = useCallback(async () => {
+    if (!userId) {
+      // Load from localStorage
+      try {
+        const local = localStorage.getItem('prime-canvas-saves');
+        if (local) setSaves(JSON.parse(local));
+      } catch {}
+      return;
+    }
+    try {
+      const { data } = await (supabase as any).from('user_data').select('value').eq('user_id', userId).eq('key', 'canvas-saves').maybeSingle();
+      if (data?.value) {
+        const list = typeof data.value === 'string' ? JSON.parse(data.value) : data.value;
+        setSaves(Array.isArray(list) ? list : []);
+      }
+    } catch {}
+  }, [userId]);
+
+  useEffect(() => { loadSaves(); }, [loadSaves]);
 
   const saveState = useCallback(() => {
     const ctx = canvasRef.current?.getContext('2d');
@@ -44,7 +84,87 @@ export default function PrimeCanvasApp() {
     const data = ctx.getImageData(0, 0, canvasRef.current.width, canvasRef.current.height);
     setHistory(prev => [...prev.slice(0, historyIdx + 1), data]);
     setHistoryIdx(prev => prev + 1);
+    setDirty(true);
+    setSaveStatus('unsaved');
   }, [historyIdx]);
+
+  // Auto-save every 2 minutes
+  useEffect(() => {
+    if (!dirty) return;
+    if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
+    autoSaveTimer.current = setTimeout(() => {
+      handleSave('Auto-save');
+    }, 120000);
+    return () => { if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current); };
+  }, [dirty]);
+
+  const handleSave = useCallback(async (name?: string) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const saveName = name || `Canvas ${new Date().toLocaleString()}`;
+    setSaveStatus('saving');
+
+    if (!userId) {
+      // Guest: save to localStorage
+      try {
+        const dataUrl = canvas.toDataURL('image/png');
+        const newSave: CanvasSave = { name: saveName, path: '', created_at: new Date().toISOString(), url: dataUrl };
+        const updated = [...saves, newSave].slice(-10);
+        localStorage.setItem('prime-canvas-saves', JSON.stringify(updated));
+        setSaves(updated);
+      } catch {}
+      setSaveStatus('saved');
+      setDirty(false);
+      return;
+    }
+
+    try {
+      const blob = await new Promise<Blob | null>(res => canvas.toBlob(res, 'image/png'));
+      if (!blob) return;
+      const ts = Date.now();
+      const path = `canvas/${userId}/${ts}.png`;
+
+      await supabase.storage.from('user-files').upload(path, blob, { contentType: 'image/png', upsert: false });
+
+      const newSave: CanvasSave = { name: saveName, path, created_at: new Date().toISOString() };
+      const updated = [...saves, newSave];
+      await (supabase as any).from('user_data').upsert(
+        { user_id: userId, key: 'canvas-saves', value: JSON.stringify(updated), updated_at: new Date().toISOString() },
+        { onConflict: 'user_id,key' }
+      );
+      setSaves(updated);
+    } catch (e) { console.error('Save failed:', e); }
+    setSaveStatus('saved');
+    setDirty(false);
+  }, [userId, saves]);
+
+  const handleLoad = useCallback(async (save: CanvasSave) => {
+    const canvas = canvasRef.current;
+    const ctx = canvas?.getContext('2d');
+    if (!canvas || !ctx) return;
+
+    let url = save.url;
+    if (!url && save.path && userId) {
+      const { data } = supabase.storage.from('user-files').getPublicUrl(save.path);
+      url = data?.publicUrl;
+      // For private buckets, use createSignedUrl
+      if (!url) {
+        const { data: signed } = await supabase.storage.from('user-files').createSignedUrl(save.path, 600);
+        url = signed?.signedUrl;
+      }
+    }
+    if (!url) return;
+
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      saveState();
+      setShowGallery(false);
+    };
+    img.src = url;
+  }, [userId, saveState]);
 
   const undo = useCallback(() => {
     if (historyIdx <= 0) return;
@@ -146,36 +266,6 @@ export default function PrimeCanvasApp() {
     saveState();
   };
 
-  const drawLattice = () => {
-    const ctx = canvasRef.current?.getContext('2d');
-    if (!ctx || !canvasRef.current) return;
-    const { width, height } = canvasRef.current;
-    ctx.strokeStyle = 'hsla(270, 80%, 60%, 0.3)';
-    ctx.lineWidth = 0.5;
-    for (let x = 0; x < width; x += 20) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, height); ctx.stroke(); }
-    for (let y = 0; y < height; y += 20) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(width, y); ctx.stroke(); }
-    saveState();
-  };
-
-  const drawPrimeSpiral = () => {
-    const ctx = canvasRef.current?.getContext('2d');
-    if (!ctx || !canvasRef.current) return;
-    const { width, height } = canvasRef.current;
-    const cx = width / 2, cy = height / 2;
-    ctx.strokeStyle = 'hsla(45, 90%, 55%, 0.6)';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    for (let i = 0; i < 500; i++) {
-      const angle = i * 0.3;
-      const r = i * 0.5;
-      const x = cx + r * Math.cos(angle);
-      const y = cy + r * Math.sin(angle);
-      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-    }
-    ctx.stroke();
-    saveState();
-  };
-
   const clearCanvas = () => {
     if (!confirm('Clear entire canvas?')) return;
     const canvas = canvasRef.current;
@@ -189,23 +279,10 @@ export default function PrimeCanvasApp() {
   const exportPng = () => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const ts = Date.now();
-    downloadFile(canvas.toDataURL('image/png'), `prime-canvas-${ts}.png`);
+    downloadFile(canvas.toDataURL('image/png'), `prime-canvas-${Date.now()}.png`);
   };
 
-  const exportSvg = () => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ts = Date.now();
-    const dataUrl = canvas.toDataURL('image/png');
-    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${canvas.width}" height="${canvas.height}">
-  <image href="${dataUrl}" width="${canvas.width}" height="${canvas.height}" />
-</svg>`;
-    const blob = new Blob([svg], { type: 'image/svg+xml' });
-    downloadFile(URL.createObjectURL(blob), `prime-canvas-${ts}.svg`);
-  };
-
-  const tools: { id: Tool; icon: React.ReactNode; label: string }[] = [
+  const tools_list: { id: Tool; icon: React.ReactNode; label: string }[] = [
     { id: 'pencil', icon: <Pencil size={14} />, label: 'Pencil' },
     { id: 'line', icon: <Minus size={14} />, label: 'Line' },
     { id: 'rect', icon: <Square size={14} />, label: 'Rect' },
@@ -217,13 +294,9 @@ export default function PrimeCanvasApp() {
     <div className="flex h-full bg-background font-mono text-xs">
       {/* Left toolbar */}
       <div className="w-10 border-r border-border flex flex-col items-center py-2 gap-1">
-        {tools.map(t => (
-          <button
-            key={t.id}
-            onClick={() => setTool(t.id)}
-            title={t.label}
-            className={`p-1.5 rounded transition-colors ${tool === t.id ? 'bg-primary/20 text-primary' : 'text-muted-foreground hover:bg-muted'}`}
-          >
+        {tools_list.map(t => (
+          <button key={t.id} onClick={() => setTool(t.id)} title={t.label}
+            className={`p-1.5 rounded transition-colors ${tool === t.id ? 'bg-primary/20 text-primary' : 'text-muted-foreground hover:bg-muted'}`}>
             {t.icon}
           </button>
         ))}
@@ -231,21 +304,19 @@ export default function PrimeCanvasApp() {
         <button onClick={undo} title="Undo" className="p-1.5 rounded text-muted-foreground hover:bg-muted"><Undo size={14} /></button>
         <button onClick={redo} title="Redo" className="p-1.5 rounded text-muted-foreground hover:bg-muted"><Redo size={14} /></button>
         <div className="border-t border-border my-1 w-6" />
-        <button onClick={clearCanvas} title="Clear Canvas" className="p-1.5 rounded text-muted-foreground hover:bg-muted hover:text-destructive"><Trash2 size={14} /></button>
+        <button onClick={clearCanvas} title="Clear" className="p-1.5 rounded text-muted-foreground hover:bg-muted hover:text-destructive"><Trash2 size={14} /></button>
+        <button onClick={() => handleSave()} title="Save to Cloud" className="p-1.5 rounded text-muted-foreground hover:bg-muted hover:text-primary"><Save size={14} /></button>
+        <button onClick={() => { setShowGallery(!showGallery); loadSaves(); }} title="Gallery" className="p-1.5 rounded text-muted-foreground hover:bg-muted"><FolderOpen size={14} /></button>
       </div>
 
       {/* Canvas area */}
       <div className="flex-1 flex flex-col">
-        {/* Top bar */}
         <div className="h-8 border-b border-border flex items-center px-3 gap-3">
           <div className="flex items-center gap-1">
             {COLORS.map(c => (
-              <button
-                key={c}
-                onClick={() => setColor(c)}
+              <button key={c} onClick={() => setColor(c)}
                 className={`w-4 h-4 rounded-sm border ${color === c ? 'border-primary ring-1 ring-primary' : 'border-border'}`}
-                style={{ backgroundColor: c }}
-              />
+                style={{ backgroundColor: c }} />
             ))}
           </div>
           <div className="flex items-center gap-2 ml-4">
@@ -254,58 +325,48 @@ export default function PrimeCanvasApp() {
             <span className="text-[9px] text-muted-foreground w-4">{brushSize}</span>
           </div>
           <div className="ml-auto flex items-center gap-1">
-            <button onClick={drawLattice} className="text-[9px] px-1.5 py-0.5 rounded border border-border text-muted-foreground hover:text-primary hover:border-primary/30 transition-colors">
-              <Grid3x3 size={10} className="inline mr-0.5" />Lattice
-            </button>
-            <button onClick={drawPrimeSpiral} className="text-[9px] px-1.5 py-0.5 rounded border border-border text-muted-foreground hover:text-primary hover:border-primary/30 transition-colors">
-              Spiral
-            </button>
-            <div className="w-px h-4 bg-border mx-1" />
-            <button onClick={exportPng} className="text-[9px] px-1.5 py-0.5 rounded border border-border text-muted-foreground hover:text-primary hover:border-primary/30 transition-colors flex items-center gap-0.5">
+            <span className={`text-[8px] px-1.5 py-0.5 rounded ${saveStatus === 'saved' ? 'text-primary' : saveStatus === 'saving' ? 'text-muted-foreground animate-pulse' : 'text-accent-foreground'}`}>
+              {saveStatus === 'saved' ? '● Saved' : saveStatus === 'saving' ? '● Saving...' : '○ Unsaved'}
+            </span>
+            <button onClick={exportPng} className="text-[9px] px-1.5 py-0.5 rounded border border-border text-muted-foreground hover:text-primary hover:border-primary/30 flex items-center gap-0.5">
               <Download size={9} />PNG
-            </button>
-            <button onClick={exportSvg} className="text-[9px] px-1.5 py-0.5 rounded border border-border text-muted-foreground hover:text-primary hover:border-primary/30 transition-colors flex items-center gap-0.5">
-              <Download size={9} />SVG
             </button>
           </div>
         </div>
 
-        {/* Canvas */}
         <div className="flex-1 relative overflow-hidden">
-          <canvas
-            ref={canvasRef}
-            className="absolute inset-0"
-            onMouseDown={handleDown}
-            onMouseMove={handleMove}
-            onMouseUp={handleUp}
-            onMouseLeave={() => { if (drawing) { setDrawing(false); saveState(); } }}
-          />
+          <canvas ref={canvasRef} className="absolute inset-0"
+            onMouseDown={handleDown} onMouseMove={handleMove} onMouseUp={handleUp}
+            onMouseLeave={() => { if (drawing) { setDrawing(false); saveState(); } }} />
         </div>
 
-        {/* Status bar */}
         <div className="h-5 border-t border-border flex items-center px-3 text-[9px] text-muted-foreground/60">
           <span>{canvasSize.w} × {canvasSize.h}</span>
           <span className="ml-auto">Tool: {tool} | Brush: {brushSize}px</span>
         </div>
       </div>
 
-      {/* Layers panel */}
-      <div className="w-32 border-l border-border flex flex-col">
-        <div className="p-2 border-b border-border">
-          <span className="font-display text-[9px] tracking-wider uppercase text-primary">Layers</span>
+      {/* Gallery panel */}
+      {showGallery && (
+        <div className="w-40 border-l border-border flex flex-col">
+          <div className="p-2 border-b border-border">
+            <span className="font-display text-[9px] tracking-wider uppercase text-primary">Gallery</span>
+          </div>
+          <ScrollArea className="flex-1">
+            <div className="p-1 space-y-1">
+              {saves.length === 0 ? (
+                <p className="text-[9px] text-muted-foreground p-2">No saves yet</p>
+              ) : saves.map((s, i) => (
+                <button key={i} onClick={() => handleLoad(s)}
+                  className="w-full text-left px-2 py-1.5 rounded hover:bg-muted/50 transition-colors">
+                  <div className="text-[10px] text-foreground truncate">{s.name}</div>
+                  <div className="text-[8px] text-muted-foreground">{new Date(s.created_at).toLocaleDateString()}</div>
+                </button>
+              ))}
+            </div>
+          </ScrollArea>
         </div>
-        <div className="p-1 flex flex-col gap-0.5">
-          {LAYERS.map((l, i) => (
-            <button
-              key={l}
-              onClick={() => setActiveLayer(i)}
-              className={`text-left text-[10px] px-2 py-1 rounded transition-colors ${activeLayer === i ? 'bg-primary/15 text-primary' : 'text-muted-foreground hover:bg-muted/50'}`}
-            >
-              {l}
-            </button>
-          ))}
-        </div>
-      </div>
+      )}
     </div>
   );
 }

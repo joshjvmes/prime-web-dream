@@ -212,6 +212,39 @@ export type Database = {
           },
         ]
       }
+      bookings: {
+        Row: {
+          created_at: string
+          end_time: string
+          id: string
+          priority: string
+          purpose: string
+          resource: string
+          start_time: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          end_time: string
+          id?: string
+          priority?: string
+          purpose?: string
+          resource: string
+          start_time: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          end_time?: string
+          id?: string
+          priority?: string
+          purpose?: string
+          resource?: string
+          start_time?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       calendar_events: {
         Row: {
           color: string
@@ -614,6 +647,72 @@ export type Database = {
         }
         Relationships: []
       }
+      vault_holdings: {
+        Row: {
+          avg_cost: number
+          category: string
+          created_at: string
+          id: string
+          name: string
+          quantity: number
+          symbol: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          avg_cost?: number
+          category?: string
+          created_at?: string
+          id?: string
+          name: string
+          quantity?: number
+          symbol: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          avg_cost?: number
+          category?: string
+          created_at?: string
+          id?: string
+          name?: string
+          quantity?: number
+          symbol?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      vault_transactions: {
+        Row: {
+          created_at: string
+          id: string
+          price: number
+          quantity: number
+          symbol: string
+          tx_type: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          price: number
+          quantity: number
+          symbol: string
+          tx_type: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          price?: number
+          quantity?: number
+          symbol?: string
+          tx_type?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       waitlist: {
         Row: {
           created_at: string
@@ -670,6 +769,15 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      check_booking_conflict: {
+        Args: {
+          p_end: string
+          p_exclude_id?: string
+          p_resource: string
+          p_start: string
+        }
+        Returns: boolean
+      }
       get_waitlist_count: { Args: never; Returns: number }
       has_role: {
         Args: {
