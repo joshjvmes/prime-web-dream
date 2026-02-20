@@ -1,12 +1,33 @@
 import { useState, useRef, useEffect } from 'react';
-import { Send, Coins } from 'lucide-react';
+import { Send, Coins, ChevronDown, ChevronUp, Share2, Mail, Activity } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { eventBus } from '@/hooks/useEventBus';
+import { Switch } from '@/components/ui/switch';
+import { Badge } from '@/components/ui/badge';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 
 interface Message {
   id: string;
   role: 'hyper' | 'user';
   text: string;
+}
+
+interface AgentAction {
+  type: 'post' | 'email';
+  summary: string;
+  timestamp: Date;
+}
+
+interface Permissions {
+  canPost: boolean;
+  canEmail: boolean;
+}
+
+function loadPermissions(): Permissions {
+  try {
+    const s = localStorage.getItem('prime-os-hyper-permissions');
+    return s ? JSON.parse(s) : { canPost: true, canEmail: true };
+  } catch { return { canPost: true, canEmail: true }; }
 }
 
 const GREETING = "Greetings, operator. I am Hyper — your geometric AI companion, powered by real intelligence. I can also post to PrimeSocial and send emails through PrimeMail on your behalf. How may I assist your lattice operations?";
@@ -30,12 +51,25 @@ export default function HypersphereApp() {
   const [input, setInput] = useState('');
   const [thinking, setThinking] = useState(false);
   const [osCharged, setOsCharged] = useState<number | null>(null);
+  const [agentActions, setAgentActions] = useState<AgentAction[]>([]);
+  const [permissions, setPermissions] = useState<Permissions>(loadPermissions);
+  const [activityOpen, setActivityOpen] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
   }, [messages, thinking]);
+
+  useEffect(() => {
+    localStorage.setItem('prime-os-hyper-permissions', JSON.stringify(permissions));
+  }, [permissions]);
+
+  const logAction = (type: 'post' | 'email', summary: string) => {
+    const action: AgentAction = { type, summary, timestamp: new Date() };
+    setAgentActions(prev => [action, ...prev].slice(0, 50));
+    eventBus.emit('agent.action.logged', action);
+  };
 
   const sendMessage = async (text: string) => {
     if (!text.trim() || thinking) return;
@@ -100,14 +134,23 @@ export default function HypersphereApp() {
       if (contentType.includes('application/json')) {
         const data = await resp.json();
         if (data.type === 'tool_call') {
-          // Emit EventBus event
           if (data.tool === 'post_to_social') {
-            eventBus.emit('social.post.created', data.data);
+            if (permissions.canPost) {
+              eventBus.emit('social.post.created', data.data);
+              logAction('post', data.data?.content?.substring(0, 80) || 'Social post');
+              setMessages(prev => [...prev, { id: assistantId, role: 'hyper', text: data.reply || '✅ Posted to PrimeSocial.' }]);
+            } else {
+              setMessages(prev => [...prev, { id: assistantId, role: 'hyper', text: '⚠️ Social posting is currently disabled by operator. Enable it in the permission toggles above.' }]);
+            }
           } else if (data.tool === 'send_email') {
-            eventBus.emit('mail.received', data.data);
+            if (permissions.canEmail) {
+              eventBus.emit('mail.received', data.data);
+              logAction('email', `To: ${data.data?.to || 'operator'} — ${data.data?.subject?.substring(0, 60) || 'Email'}`);
+              setMessages(prev => [...prev, { id: assistantId, role: 'hyper', text: data.reply || '✅ Email sent.' }]);
+            } else {
+              setMessages(prev => [...prev, { id: assistantId, role: 'hyper', text: '⚠️ Email sending is currently disabled by operator. Enable it in the permission toggles above.' }]);
+            }
           }
-          // Show confirmation in chat
-          setMessages(prev => [...prev, { id: assistantId, role: 'hyper', text: data.reply || '✅ Action completed.' }]);
         } else {
           setMessages(prev => [...prev, { id: assistantId, role: 'hyper', text: data.error || 'Unexpected response.' }]);
         }
@@ -203,8 +246,8 @@ export default function HypersphereApp() {
 
   return (
     <div className="h-full bg-background flex flex-col font-mono text-xs">
-      {/* Hypersphere Visualization */}
-      <div className="flex items-center justify-center py-4 border-b border-border bg-card/30">
+      {/* Hypersphere Visualization + Permission Toggles */}
+      <div className="flex items-center justify-center py-4 border-b border-border bg-card/30 relative">
         <svg width="100" height="100" viewBox="0 0 100 100" className="select-none">
           <ellipse cx="50" cy="50" rx="45" ry="20" fill="none" stroke="hsl(var(--primary))" strokeWidth="0.5" opacity="0.4">
             <animateTransform attributeName="transform" type="rotate" from="0 50 50" to="360 50 50" dur={thinking ? "2s" : "8s"} repeatCount="indefinite" />
@@ -226,6 +269,28 @@ export default function HypersphereApp() {
             <animate attributeName="opacity" values={thinking ? "0.8;1;0.8" : "0.3;0.5;0.3"} dur={thinking ? "0.8s" : "2s"} repeatCount="indefinite" />
           </circle>
         </svg>
+
+        {/* Permission Toggles */}
+        <div className="absolute right-2 top-2 flex flex-col gap-1.5">
+          <div className="flex items-center gap-1.5">
+            <Share2 size={9} className={permissions.canPost ? 'text-primary' : 'text-muted-foreground/40'} />
+            <span className="text-[8px] text-muted-foreground w-8">Social</span>
+            <Switch
+              checked={permissions.canPost}
+              onCheckedChange={v => setPermissions(p => ({ ...p, canPost: v }))}
+              className="h-3.5 w-7 data-[state=checked]:bg-primary data-[state=unchecked]:bg-muted"
+            />
+          </div>
+          <div className="flex items-center gap-1.5">
+            <Mail size={9} className={permissions.canEmail ? 'text-primary' : 'text-muted-foreground/40'} />
+            <span className="text-[8px] text-muted-foreground w-8">Mail</span>
+            <Switch
+              checked={permissions.canEmail}
+              onCheckedChange={v => setPermissions(p => ({ ...p, canEmail: v }))}
+              className="h-3.5 w-7 data-[state=checked]:bg-primary data-[state=unchecked]:bg-muted"
+            />
+          </div>
+        </div>
       </div>
 
       {/* Messages */}
@@ -255,6 +320,33 @@ export default function HypersphereApp() {
           </div>
         )}
       </div>
+
+      {/* Agent Activity Log */}
+      {agentActions.length > 0 && (
+        <Collapsible open={activityOpen} onOpenChange={setActivityOpen} className="border-t border-border/50">
+          <CollapsibleTrigger className="w-full flex items-center justify-between px-3 py-1.5 hover:bg-muted/20 transition-colors">
+            <div className="flex items-center gap-1.5">
+              <Activity size={10} className="text-primary" />
+              <span className="text-[9px] font-display tracking-wider uppercase text-primary/70">Agent Activity</span>
+              <Badge variant="outline" className="text-[7px] px-1 py-0 h-3.5 border-primary/30 text-primary/70">
+                {agentActions.length}
+              </Badge>
+            </div>
+            {activityOpen ? <ChevronDown size={10} className="text-muted-foreground/50" /> : <ChevronUp size={10} className="text-muted-foreground/50" />}
+          </CollapsibleTrigger>
+          <CollapsibleContent>
+            <div className="max-h-28 overflow-y-auto px-3 py-1 space-y-1">
+              {agentActions.slice(0, 10).map((a, i) => (
+                <div key={i} className="flex items-center gap-1.5 text-[9px]">
+                  {a.type === 'post' ? <Share2 size={8} className="text-primary/60 shrink-0" /> : <Mail size={8} className="text-primary/60 shrink-0" />}
+                  <span className="text-muted-foreground truncate flex-1">{a.summary}</span>
+                  <span className="text-muted-foreground/40 text-[7px] shrink-0">{a.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                </div>
+              ))}
+            </div>
+          </CollapsibleContent>
+        </Collapsible>
+      )}
 
       {/* Quick Actions */}
       <div className="px-3 py-1.5 flex gap-1.5 overflow-x-auto scrollbar-none border-t border-border/50">

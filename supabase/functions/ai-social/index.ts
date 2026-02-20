@@ -96,13 +96,67 @@ const EMAIL_TOOL = {
   }
 };
 
+const REPLY_TOOL = {
+  type: "function",
+  function: {
+    name: "create_replies",
+    description: "Generate 1-2 reply comments from PRIME OS AI personas reacting to a post.",
+    parameters: {
+      type: "object",
+      properties: {
+        replies: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              author: { type: "string", description: "Persona name (different from the post author)" },
+              text: { type: "string", description: "Reply comment, 1-2 sentences." }
+            },
+            required: ["author", "text"],
+            additionalProperties: false
+          }
+        }
+      },
+      required: ["replies"],
+      additionalProperties: false
+    }
+  }
+};
+
+const REPLY_EMAIL_TOOL = {
+  type: "function",
+  function: {
+    name: "create_reply_email",
+    description: "Generate a single reply email from a PRIME OS persona responding to an original email.",
+    parameters: {
+      type: "object",
+      properties: {
+        email: {
+          type: "object",
+          properties: {
+            from: { type: "string", description: "Sender email like persona@prime.os" },
+            to: { type: "string", description: "Recipient" },
+            subject: { type: "string", description: "Reply subject, typically Re: original subject" },
+            body: { type: "string", description: "Reply body, 3-6 lines" }
+          },
+          required: ["from", "to", "subject", "body"],
+          additionalProperties: false
+        }
+      },
+      required: ["email"],
+      additionalProperties: false
+    }
+  }
+};
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    const { action } = await req.json();
+    const reqBody = await req.json();
+    const { action } = reqBody;
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
 
@@ -112,18 +166,34 @@ serve(async (req) => {
     let userPrompt: string;
     let tools: any[];
     let toolChoice: any;
+    let resultKey: string;
 
     if (action === "generate-posts") {
       userPrompt = `${timeContext} Generate 3-5 fresh social posts from different PRIME OS personas. Make them about recent system events, discoveries, metrics, or inter-module conversations. Each post should feel unique to its persona's personality. Include 0-2 comments from OTHER personas on some posts.`;
       tools = [POST_TOOL];
       toolChoice = { type: "function", function: { name: "create_social_posts" } };
+      resultKey = "posts";
     } else if (action === "generate-emails") {
       userPrompt = `${timeContext} Generate 2-3 emails for the operator's inbox. Mix types: a system report with metrics, an inter-agent discussion the operator is CC'd on, or a Forge marketplace alert. Use realistic @prime.os email addresses.`;
       tools = [EMAIL_TOOL];
       toolChoice = { type: "function", function: { name: "create_emails" } };
+      resultKey = "emails";
+    } else if (action === "generate-replies") {
+      const { postContent, postAuthor } = reqBody;
+      userPrompt = `${timeContext} A post was just made by "${postAuthor}" on PrimeSocial:\n\n"${postContent}"\n\nGenerate 1-2 short reply comments from OTHER PRIME OS personas (not ${postAuthor}) reacting to this post. The replies should be in-character, referencing relevant system concepts. Keep each reply to 1-2 sentences.`;
+      tools = [REPLY_TOOL];
+      toolChoice = { type: "function", function: { name: "create_replies" } };
+      resultKey = "replies";
+    } else if (action === "generate-reply-email") {
+      const { originalEmail } = reqBody;
+      const recipientName = (originalEmail?.to || "operator").split("@")[0];
+      userPrompt = `${timeContext} An email was just sent:\nFrom: ${originalEmail?.from}\nTo: ${originalEmail?.to}\nSubject: ${originalEmail?.subject}\nBody: ${originalEmail?.body}\n\nGenerate a single reply email from the recipient "${recipientName}" (or the most relevant PRIME OS persona) responding to this email. The reply should be in-character, thoughtful, and reference specific details from the original. Use a Re: subject line.`;
+      tools = [REPLY_EMAIL_TOOL];
+      toolChoice = { type: "function", function: { name: "create_reply_email" } };
+      resultKey = "email";
     } else {
       return new Response(
-        JSON.stringify({ error: "Invalid action. Use 'generate-posts' or 'generate-emails'." }),
+        JSON.stringify({ error: "Invalid action." }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }

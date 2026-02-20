@@ -81,7 +81,7 @@ export default function PrimeMailApp() {
     }
   }, []);
 
-  // Listen for Hyper agent emails via EventBus
+  // Listen for Hyper agent emails via EventBus + trigger cross-agent reply
   useEffect(() => {
     const handler = (payload: any) => {
       if (!payload?.subject) return;
@@ -97,6 +97,45 @@ export default function PrimeMailApp() {
         aiGenerated: true,
       };
       setEmails(prev => [newEmail, ...prev]);
+
+      // Cross-agent: generate a reply email from recipient persona after delay
+      setTimeout(async () => {
+        try {
+          const { data, error } = await supabase.functions.invoke('ai-social', {
+            body: {
+              action: 'generate-reply-email',
+              originalEmail: {
+                from: payload.from || 'hyper@prime.os',
+                to: payload.to || 'operator',
+                subject: payload.subject,
+                body: payload.body || '',
+              },
+            },
+          });
+          if (!error && data?.email) {
+            const replyEmail: Email = {
+              id: `reply-${Date.now()}`,
+              from: data.email.from,
+              to: data.email.to || 'operator',
+              subject: data.email.subject,
+              body: data.email.body,
+              date: new Date().toISOString(),
+              read: false,
+              folder: 'inbox',
+              aiGenerated: true,
+            };
+            setEmails(prev => [replyEmail, ...prev]);
+            // Log cross-agent activity
+            eventBus.emit('agent.action.logged', {
+              type: 'email',
+              summary: `${data.email.from} replied to Hyper's email`,
+              timestamp: new Date(),
+            });
+          }
+        } catch (e) {
+          console.error('Failed to generate cross-agent email reply:', e);
+        }
+      }, 4000);
     };
     eventBus.on('mail.received', handler);
     return () => eventBus.off('mail.received', handler);

@@ -13,6 +13,7 @@ export const EVENT_TYPES = [
   'clipboard.copied',
   'social.post.created',
   'mail.received',
+  'agent.action.logged',
 ] as const;
 
 export type EventType = typeof EVENT_TYPES[number];

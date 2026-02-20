@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { X, GripHorizontal, Rocket, TrendingUp, Store } from 'lucide-react';
+import { X, GripHorizontal, Rocket, TrendingUp, Store, Activity, Share2, Mail } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
+import { eventBus } from '@/hooks/useEventBus';
 
 interface WidgetPos { x: number; y: number; }
 interface WidgetState {
@@ -9,12 +10,13 @@ interface WidgetState {
   notes: boolean;
   network: boolean;
   forge: boolean;
+  agentLog: boolean;
   positions: Record<string, WidgetPos>;
 }
 
 const DEFAULTS: WidgetState = {
-  clock: true, stats: true, notes: false, network: false, forge: false,
-  positions: { clock: { x: 200, y: 80 }, stats: { x: 200, y: 220 }, notes: { x: 400, y: 80 }, network: { x: 400, y: 220 }, forge: { x: 600, y: 80 } },
+  clock: true, stats: true, notes: false, network: false, forge: false, agentLog: false,
+  positions: { clock: { x: 200, y: 80 }, stats: { x: 200, y: 220 }, notes: { x: 400, y: 80 }, network: { x: 400, y: 220 }, forge: { x: 600, y: 80 }, agentLog: { x: 600, y: 220 } },
 };
 
 function loadState(): WidgetState {
@@ -86,7 +88,6 @@ function ClockWidget() {
   );
 }
 
-// System Stats Widget
 function StatsWidget() {
   const [cpu, setCpu] = useState(42);
   const [mem, setMem] = useState(55);
@@ -120,7 +121,6 @@ function StatsWidget() {
   );
 }
 
-// Quick Notes Widget
 function NotesWidget() {
   const [text, setText] = useState(() => {
     try { return localStorage.getItem('prime-os-widget-notes') || ''; } catch { return ''; }
@@ -138,7 +138,6 @@ function NotesWidget() {
   );
 }
 
-// Network Widget
 function NetworkWidget() {
   const [nodes, setNodes] = useState(6);
   const [latency, setLatency] = useState(0.3);
@@ -171,7 +170,6 @@ function NetworkWidget() {
   );
 }
 
-// Forge Dashboard Widget
 function ForgeWidget() {
   const [data, setData] = useState<{ ipoCount: number; totalRaised: number; openOrders: number; latest: { name: string; icon: string; price: number; ipo_active: boolean }[] }>({
     ipoCount: 0, totalRaised: 0, openOrders: 0, latest: [],
@@ -237,6 +235,49 @@ function ForgeWidget() {
   );
 }
 
+// Agent Activity Log Widget
+function AgentLogWidget() {
+  const [actions, setActions] = useState<{ type: string; summary: string; timestamp: Date }[]>([]);
+
+  useEffect(() => {
+    const handler = (payload: any) => {
+      if (!payload) return;
+      setActions(prev => [
+        { type: payload.type || 'post', summary: payload.summary || 'Agent action', timestamp: new Date(payload.timestamp || Date.now()) },
+        ...prev,
+      ].slice(0, 20));
+    };
+    eventBus.on('agent.action.logged', handler);
+    return () => eventBus.off('agent.action.logged', handler);
+  }, []);
+
+  if (actions.length === 0) {
+    return (
+      <div className="min-w-[160px] text-center">
+        <p className="text-[9px] text-muted-foreground/50">No agent activity yet</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-1 min-w-[180px] max-h-32 overflow-y-auto">
+      <div className="flex items-center justify-between mb-1">
+        <span className="text-[8px] text-muted-foreground/50 uppercase tracking-wider">Recent</span>
+        <span className="text-[7px] bg-primary/20 text-primary px-1 rounded">{actions.length}</span>
+      </div>
+      {actions.slice(0, 5).map((a, i) => (
+        <div key={i} className="flex items-center gap-1.5 text-[9px]">
+          {a.type === 'post' ? <Share2 size={8} className="text-primary/60 shrink-0" /> : <Mail size={8} className="text-primary/60 shrink-0" />}
+          <span className="text-muted-foreground truncate flex-1">{a.summary}</span>
+          <span className="text-muted-foreground/40 text-[7px] shrink-0">
+            {a.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export default function DesktopWidgets() {
   const [state, setState] = useState<WidgetState>(loadState);
 
@@ -258,6 +299,7 @@ export default function DesktopWidgets() {
     { id: 'notes', title: 'Quick Notes', enabled: state.notes, content: <NotesWidget /> },
     { id: 'network', title: 'PrimeNet', enabled: state.network, content: <NetworkWidget /> },
     { id: 'forge', title: 'Forge Market', enabled: state.forge, content: <ForgeWidget /> },
+    { id: 'agentLog', title: 'Agent Activity', enabled: state.agentLog, content: <AgentLogWidget /> },
   ];
 
   return (
