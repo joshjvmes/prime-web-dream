@@ -65,6 +65,7 @@ import AdminConsoleApp from '@/components/os/AdminConsoleApp';
 import PrimeJournalApp from '@/components/os/PrimeJournalApp';
 import PrimeWalletApp from '@/components/os/PrimeWalletApp';
 import MiniAppsApp from '@/components/os/MiniAppsApp';
+import AppForgeApp from '@/components/os/AppForgeApp';
 import DesktopContextMenu from '@/components/os/DesktopContextMenu';
 import NotificationSystem from '@/components/os/NotificationSystem';
 import { AppType } from '@/types/os';
@@ -99,6 +100,7 @@ const APP_NAME_MAP: Record<string, { app: AppType; title: string }> = {
   'journal': { app: 'journal', title: 'PrimeJournal' },
   'wallet': { app: 'wallet', title: 'PrimeWallet' },
   'miniapps': { app: 'miniapps', title: 'Mini Apps' },
+  'forge': { app: 'forge', title: 'App Forge' },
 };
 
 export default function Desktop() {
@@ -378,6 +380,7 @@ export default function Desktop() {
       case 'journal': return <PrimeJournalApp />;
       case 'wallet': return <PrimeWalletApp />;
       case 'miniapps': return <MiniAppsApp />;
+      case 'forge': return <AppForgeApp />;
       default: return <div className="p-4 text-muted-foreground font-mono text-xs">App not found</div>;
     }
   };

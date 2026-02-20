@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Terminal, FolderTree, Activity, Cpu, Brain, Network, Code, HardDrive, Database, Zap, Settings, Globe, Server, LayoutList, Image, Link2, Orbit, CalendarDays, BookOpen, Table, Workflow, Paintbrush, Smartphone, Map, Package, Music, Dices, TrendingUp, Radio, Vault, Video, Bot, Cog, CalendarCheck, Wifi, Monitor, FileText, MessageSquare, Shield, Mail, Users, ChevronDown, ChevronRight, Gamepad2, ShieldCheck, PenLine, Wallet, Blocks } from 'lucide-react';
+import { Terminal, FolderTree, Activity, Cpu, Brain, Network, Code, HardDrive, Database, Zap, Settings, Globe, Server, LayoutList, Image, Link2, Orbit, CalendarDays, BookOpen, Table, Workflow, Paintbrush, Smartphone, Map, Package, Music, Dices, TrendingUp, Radio, Vault, Video, Bot, Cog, CalendarCheck, Wifi, Monitor, FileText, MessageSquare, Shield, Mail, Users, ChevronDown, ChevronRight, Gamepad2, ShieldCheck, PenLine, Wallet, Blocks, Store } from 'lucide-react';
 import { AppType } from '@/types/os';
 
 interface DesktopIconsProps {
@@ -28,6 +28,7 @@ const categories: { name: string; apps: AppEntry[] }[] = [
       { app: 'agent', title: 'PrimeAgent', icon: <Bot size={22} />, label: 'Agent' },
       { app: 'geomc', title: 'GeomC Compiler', icon: <Code size={22} />, label: 'GeomC' },
       { app: 'miniapps', title: 'Mini Apps', icon: <Blocks size={22} />, label: 'Mini Apps' },
+      { app: 'forge', title: 'App Forge', icon: <Store size={22} />, label: 'App Forge' },
     ],
   },
   {
