@@ -1,9 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { Users, ListChecks, MessageSquare, BarChart3, ShieldCheck, Trash2, Search, Download, Plus, Minus } from 'lucide-react';
+import { Users, ListChecks, MessageSquare, BarChart3, ShieldCheck, Trash2, Search, Download, Plus, Minus, Activity } from 'lucide-react';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 
-type Tab = 'users' | 'waitlist' | 'chat' | 'stats';
+type Tab = 'users' | 'waitlist' | 'chat' | 'stats' | 'activity';
 
 interface AdminUser {
   id: string;
@@ -41,6 +41,14 @@ interface Stats {
   messages: number;
 }
 
+interface PresenceUser {
+  id: string;
+  username: string;
+  channel: string;
+  last_seen: string;
+  user_id: string;
+}
+
 async function adminAction(action: string, method = 'GET', body?: object) {
   const { data: { session } } = await supabase.auth.getSession();
   if (!session) throw new Error('Not authenticated');
@@ -69,6 +77,7 @@ export default function AdminConsoleApp() {
   const [waitlist, setWaitlist] = useState<WaitlistEntry[]>([]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [stats, setStats] = useState<Stats | null>(null);
+  const [presenceUsers, setPresenceUsers] = useState<PresenceUser[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [search, setSearch] = useState('');
@@ -82,6 +91,11 @@ export default function AdminConsoleApp() {
         case 'waitlist': setWaitlist(await adminAction('waitlist')); break;
         case 'chat': setMessages(await adminAction('messages')); break;
         case 'stats': setStats(await adminAction('stats')); break;
+        case 'activity': {
+          const { data } = await supabase.from('chat_presence').select('*').order('last_seen', { ascending: false });
+          setPresenceUsers(data || []);
+          break;
+        }
       }
     } catch (e: any) {
       setError(e.message);
@@ -91,6 +105,21 @@ export default function AdminConsoleApp() {
   }, [tab]);
 
   useEffect(() => { load(); }, [load]);
+
+  // Real-time presence subscription for activity tab
+  useEffect(() => {
+    if (tab !== 'activity') return;
+
+    const channel = supabase
+      .channel('admin-presence-watch')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'chat_presence' }, () => {
+        supabase.from('chat_presence').select('*').order('last_seen', { ascending: false })
+          .then(({ data }) => setPresenceUsers(data || []));
+      })
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, [tab]);
 
   const assignRole = async (userId: string, role: string) => {
     try {
@@ -135,8 +164,21 @@ export default function AdminConsoleApp() {
     return `${(bytes / 1048576).toFixed(1)} MB`;
   };
 
+  const getTimeAgo = (dateStr: string) => {
+    const diff = Date.now() - new Date(dateStr).getTime();
+    const mins = Math.floor(diff / 60000);
+    if (mins < 1) return 'just now';
+    if (mins < 60) return `${mins}m ago`;
+    const hours = Math.floor(mins / 60);
+    if (hours < 24) return `${hours}h ago`;
+    return `${Math.floor(hours / 24)}d ago`;
+  };
+
+  const isOnline = (dateStr: string) => Date.now() - new Date(dateStr).getTime() < 5 * 60 * 1000;
+
   const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
     { id: 'users', label: 'Users', icon: <Users size={14} /> },
+    { id: 'activity', label: 'Activity', icon: <Activity size={14} /> },
     { id: 'waitlist', label: 'Waitlist', icon: <ListChecks size={14} /> },
     { id: 'chat', label: 'Chat Mod', icon: <MessageSquare size={14} /> },
     { id: 'stats', label: 'Stats', icon: <BarChart3 size={14} /> },
@@ -146,6 +188,8 @@ export default function AdminConsoleApp() {
     (u.display_name || '').toLowerCase().includes(search.toLowerCase()) ||
     u.email.toLowerCase().includes(search.toLowerCase())
   );
+
+  const onlineCount = presenceUsers.filter(p => isOnline(p.last_seen)).length;
 
   return (
     <div className="h-full flex flex-col bg-card/50 text-foreground font-mono text-xs overflow-hidden">
@@ -163,6 +207,9 @@ export default function AdminConsoleApp() {
               tab === t.id ? 'border-primary text-primary bg-primary/5' : 'border-transparent text-muted-foreground hover:text-foreground'
             }`}>
             {t.icon} {t.label}
+            {t.id === 'activity' && onlineCount > 0 && (
+              <span className="ml-1 w-4 h-4 rounded-full bg-emerald-500/20 text-emerald-400 text-[8px] flex items-center justify-center">{onlineCount}</span>
+            )}
           </button>
         ))}
       </div>
@@ -222,6 +269,43 @@ export default function AdminConsoleApp() {
                       </div>
                     </div>
                   ))}
+                </div>
+              </div>
+            )}
+
+            {tab === 'activity' && (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                    <span className="text-[10px] text-foreground">{onlineCount} online now</span>
+                  </div>
+                  <button onClick={load} className="text-[9px] text-muted-foreground hover:text-foreground px-2 py-1 rounded border border-border">Refresh</button>
+                </div>
+                <div className="space-y-1">
+                  {presenceUsers.map(p => {
+                    const online = isOnline(p.last_seen);
+                    return (
+                      <div key={p.id} className="flex items-center gap-3 p-2 rounded border border-border/50 hover:bg-muted/20">
+                        <div className="relative">
+                          <div className="w-8 h-8 rounded-full bg-primary/20 border border-primary/30 flex items-center justify-center">
+                            <span className="font-display text-[10px] text-primary">{(p.username || 'U').charAt(0).toUpperCase()}</span>
+                          </div>
+                          <span className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-card ${online ? 'bg-emerald-400' : 'bg-muted-foreground/40'}`} />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-foreground text-xs truncate">{p.username}</p>
+                          <p className="text-[9px] text-muted-foreground">#{p.channel}</p>
+                        </div>
+                        <div className="text-right">
+                          <span className={`text-[9px] ${online ? 'text-emerald-400' : 'text-muted-foreground/50'}`}>
+                            {online ? 'Online' : getTimeAgo(p.last_seen)}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {presenceUsers.length === 0 && <p className="text-center text-muted-foreground py-8">No activity data</p>}
                 </div>
               </div>
             )}

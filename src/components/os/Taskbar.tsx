@@ -181,6 +181,13 @@ export default function Taskbar({ windows, onOpenApp, onFocusWindow, notificatio
           </button>
         )}
 
+        {/* Admin Console shortcut */}
+        {isAdmin && (
+          <button onClick={() => onOpenApp('admin', 'Admin Console')} aria-label="Admin Console" className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors" title="Admin Console">
+            <ShieldCheck size={13} />
+          </button>
+        )}
+
         {/* Lock button */}
         {onLock && (
           <button onClick={onLock} aria-label="Lock (Ctrl+L)" className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors" title="Lock (Ctrl+L)">
