@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { AppType, WindowState } from '@/types/os';
 import { OSNotification } from '@/hooks/useNotifications';
-import { Terminal, FolderTree, Activity, Cpu, Brain, Network, Code, HardDrive, Database, Zap, Settings, ChevronUp, Bell, X, Monitor, FileText, MessageSquare, Shield, Globe, Server, LayoutList, Image, Search } from 'lucide-react';
+import { Terminal, FolderTree, Activity, Cpu, Brain, Network, Code, HardDrive, Database, Zap, Settings, ChevronUp, Bell, X, Monitor, FileText, MessageSquare, Shield, Globe, Server, LayoutList, Image, Search, Link2, Orbit } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 
 interface TaskbarProps {
@@ -32,6 +32,8 @@ const allApps: { app: AppType; title: string; icon: React.ReactNode; label: stri
   { app: 'datacenter', title: 'LatticeCore', icon: <Server size={18} />, label: 'Data Center' },
   { app: 'board', title: 'PrimeBoard', icon: <LayoutList size={18} />, label: 'Board' },
   { app: 'gallery', title: 'PrimeGallery', icon: <Image size={18} />, label: 'Gallery' },
+  { app: 'cloudhooks', title: 'Cloud Hooks', icon: <Link2 size={18} />, label: 'Cloud Hooks' },
+  { app: 'hypersphere', title: 'Hyper AI', icon: <Orbit size={18} />, label: 'Hyper AI' },
   { app: 'settings', title: 'Settings', icon: <Settings size={18} />, label: 'Settings' },
 ];
 

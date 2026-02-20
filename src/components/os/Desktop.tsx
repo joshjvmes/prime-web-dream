@@ -26,6 +26,8 @@ import PrimeBrowserApp from '@/components/os/PrimeBrowserApp';
 import DataCenterApp from '@/components/os/DataCenterApp';
 import PrimeBoardApp from '@/components/os/PrimeBoardApp';
 import PrimeGalleryApp from '@/components/os/PrimeGalleryApp';
+import CloudHooksApp from '@/components/os/CloudHooksApp';
+import HypersphereApp from '@/components/os/HypersphereApp';
 import DesktopContextMenu from '@/components/os/DesktopContextMenu';
 import NotificationSystem from '@/components/os/NotificationSystem';
 import { AppType } from '@/types/os';
@@ -112,6 +114,8 @@ export default function Desktop() {
       case 'datacenter': return <DataCenterApp />;
       case 'board': return <PrimeBoardApp />;
       case 'gallery': return <PrimeGalleryApp />;
+      case 'cloudhooks': return <CloudHooksApp />;
+      case 'hypersphere': return <HypersphereApp />;
       default: return <div className="p-4 text-muted-foreground font-mono text-xs">App not found</div>;
     }
   };

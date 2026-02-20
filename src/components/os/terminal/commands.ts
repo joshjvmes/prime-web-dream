@@ -102,6 +102,10 @@ const APP_MAP: Record<string, { app: string; title: string }> = {
   datacenter: { app: 'datacenter', title: 'LatticeCore' },
   board: { app: 'board', title: 'PrimeBoard' },
   gallery: { app: 'gallery', title: 'PrimeGallery' },
+  cloudhooks: { app: 'cloudhooks', title: 'Cloud Hooks' },
+  hooks: { app: 'cloudhooks', title: 'Cloud Hooks' },
+  hypersphere: { app: 'hypersphere', title: 'Hyper AI' },
+  hyper: { app: 'hypersphere', title: 'Hyper AI' },
 };
 
 // Boot timestamp for uptime

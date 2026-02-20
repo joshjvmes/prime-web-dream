@@ -28,6 +28,8 @@ export function useWindowManager() {
           case 'datacenter': return [800, 550];
           case 'board': return [750, 500];
           case 'gallery': return [700, 480];
+          case 'cloudhooks': return [800, 520];
+          case 'hypersphere': return [500, 550];
           default: return [600, 420];
         }
       };

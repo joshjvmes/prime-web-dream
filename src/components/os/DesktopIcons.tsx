@@ -1,4 +1,4 @@
-import { Terminal, FolderTree, Activity, Cpu, Brain, Network, Code, HardDrive, Database, Zap, Settings, Globe, Server, LayoutList, Image } from 'lucide-react';
+import { Terminal, FolderTree, Activity, Cpu, Brain, Network, Code, HardDrive, Database, Zap, Settings, Globe, Server, LayoutList, Image, Link2, Orbit } from 'lucide-react';
 import { AppType } from '@/types/os';
 
 interface DesktopIconsProps {
@@ -21,6 +21,8 @@ const icons: { app: AppType; title: string; icon: React.ReactNode; label: string
   { app: 'datacenter', title: 'LatticeCore', icon: <Server size={28} />, label: 'Data Center' },
   { app: 'board', title: 'PrimeBoard', icon: <LayoutList size={28} />, label: 'Board' },
   { app: 'gallery', title: 'PrimeGallery', icon: <Image size={28} />, label: 'Gallery' },
+  { app: 'cloudhooks', title: 'Cloud Hooks', icon: <Link2 size={28} />, label: 'Cloud Hooks' },
+  { app: 'hypersphere', title: 'Hyper AI', icon: <Orbit size={28} />, label: 'Hyper AI' },
 ];
 
 export default function DesktopIcons({ onOpenApp }: DesktopIconsProps) {
