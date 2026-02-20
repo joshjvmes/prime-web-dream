@@ -29,6 +29,11 @@ const QUICK_COMMANDS = [
   { label: 'Full System Check', icon: <Zap size={12} />, instruction: 'Run a full system diagnostics check' },
   { label: 'Secure All', icon: <Shield size={12} />, instruction: 'Lock down all security protocols' },
   { label: 'Check Wallet', icon: <Zap size={12} />, instruction: 'Check my wallet balance' },
+  { label: 'Check Markets', icon: <Zap size={12} />, instruction: 'Check current market data for top tickers' },
+  { label: 'My Portfolio', icon: <Zap size={12} />, instruction: 'Show my PrimeVault portfolio' },
+  { label: 'Book Resource', icon: <Rocket size={12} />, instruction: 'Book a quantum lab resource' },
+  { label: 'Play Music', icon: <Rocket size={12} />, instruction: 'Play some ambient music' },
+  { label: 'Send Message', icon: <Rocket size={12} />, instruction: 'Open PrimeComm to send a message' },
   { label: 'Launch Game', icon: <Rocket size={12} />, instruction: 'Launch a random arcade game' },
   { label: 'Create Mini-App', icon: <Rocket size={12} />, instruction: 'Create a new mini-app' },
   { label: 'Deploy Build', icon: <Rocket size={12} />, instruction: 'Deploy the latest build to production' },
@@ -40,6 +45,8 @@ const APP_TITLES: Record<string, string> = {
   monitor: 'System Monitor', storage: 'Prime Storage', datacenter: 'LatticeCore',
   wallet: 'PrimeWallet', arcade: 'PrimeArcade', miniapps: 'Mini Apps',
   journal: 'PrimeJournal', browser: 'PrimeBrowser', calendar: 'Prime Calendar',
+  signals: 'PrimeSignals', vault: 'PrimeVault', canvas: 'PrimeCanvas',
+  booking: 'PrimeBooking', comm: 'PrimeComm', audio: 'PrimeAudio',
 };
 
 function parseInstruction(input: string): AgentAction[] {
@@ -79,10 +86,42 @@ function parseInstruction(input: string): AgentAction[] {
       { id: id(), type: 'check-status', label: 'Checking OS & IX balances', status: 'pending' },
       { id: id(), type: 'report', label: 'Wallet status retrieved', status: 'pending' },
     );
-  } else if (lower.includes('game') || lower.includes('arcade') || lower.includes('play')) {
+  } else if (lower.includes('game') || lower.includes('arcade') || lower.includes('play game')) {
     actions.push(
       { id: id(), type: 'open-app', label: 'Open PrimeArcade', payload: { app: 'arcade', title: 'PrimeArcade' }, status: 'pending' },
       { id: id(), type: 'report', label: 'Arcade ready — earn OS tokens by playing!', status: 'pending' },
+    );
+  } else if (lower.includes('market') || lower.includes('stock') || lower.includes('price') || lower.includes('ticker')) {
+    actions.push(
+      { id: id(), type: 'open-app', label: 'Open PrimeSignals', payload: { app: 'signals', title: 'PrimeSignals' }, status: 'pending' },
+      { id: id(), type: 'check-status', label: 'Fetching live market data', status: 'pending' },
+      { id: id(), type: 'report', label: 'Market data loaded', status: 'pending' },
+    );
+  } else if (lower.includes('portfolio') || lower.includes('holdings') || lower.includes('vault') || lower.includes('investment')) {
+    actions.push(
+      { id: id(), type: 'open-app', label: 'Open PrimeVault', payload: { app: 'vault', title: 'PrimeVault' }, status: 'pending' },
+      { id: id(), type: 'check-status', label: 'Loading portfolio data', status: 'pending' },
+      { id: id(), type: 'report', label: 'Portfolio loaded', status: 'pending' },
+    );
+  } else if (lower.includes('book') || lower.includes('schedule') || lower.includes('reservation')) {
+    actions.push(
+      { id: id(), type: 'open-app', label: 'Open PrimeBooking', payload: { app: 'booking', title: 'PrimeBooking' }, status: 'pending' },
+      { id: id(), type: 'report', label: 'Booking system ready', status: 'pending' },
+    );
+  } else if (lower.includes('music') || lower.includes('audio') || lower.includes('play') || lower.includes('sound')) {
+    actions.push(
+      { id: id(), type: 'open-app', label: 'Open PrimeAudio', payload: { app: 'audio', title: 'PrimeAudio' }, status: 'pending' },
+      { id: id(), type: 'report', label: 'Audio player ready', status: 'pending' },
+    );
+  } else if (lower.includes('message') || lower.includes('chat') || lower.includes('dm') || lower.includes('comm')) {
+    actions.push(
+      { id: id(), type: 'open-app', label: 'Open PrimeComm', payload: { app: 'comm', title: 'PrimeComm' }, status: 'pending' },
+      { id: id(), type: 'report', label: 'Messaging ready', status: 'pending' },
+    );
+  } else if (lower.includes('draw') || lower.includes('canvas') || lower.includes('paint') || lower.includes('sketch')) {
+    actions.push(
+      { id: id(), type: 'open-app', label: 'Open PrimeCanvas', payload: { app: 'canvas', title: 'PrimeCanvas' }, status: 'pending' },
+      { id: id(), type: 'report', label: 'Canvas ready', status: 'pending' },
     );
   } else if (lower.includes('mini-app') || lower.includes('miniapp') || lower.includes('create app')) {
     actions.push(
