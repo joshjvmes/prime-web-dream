@@ -4,7 +4,7 @@ import { Progress } from '@/components/ui/progress';
 import { supabase } from '@/integrations/supabase/client';
 import { useCloudStorage } from '@/hooks/useCloudStorage';
 import { HomePage, DocsPage, NetStatusPage, Q3LabPage, EnergyGridPage, NotFoundPage } from './browser/PrimePages';
-import { WikiPage, ResearchPage, HandbookPage, ChangelogPage, StatusPage } from './browser/IntranetPages';
+import { WikiPage, ResearchPage, HandbookPage, ChangelogPage, StatusPage, HubPage, DynamicPage } from './browser/IntranetPages';
 
 interface Tab {
   id: string;
@@ -32,6 +32,7 @@ interface HistoryEntry {
 const DEFAULT_BOOKMARKS: Bookmark[] = [
   { label: 'Home', url: 'prime://home', addedAt: '' },
   { label: 'Docs', url: 'prime://docs', addedAt: '' },
+  { label: 'Hub', url: 'httpsp://hub', addedAt: '' },
   { label: 'Wiki', url: 'httpsp://wiki', addedAt: '' },
   { label: 'Research', url: 'httpsp://research', addedAt: '' },
   { label: 'Handbook', url: 'httpsp://handbook', addedAt: '' },
@@ -64,11 +65,12 @@ function pageSource(url: string) {
     'httpsp://handbook': `<prime-handbook sections="4" />\n`,
     'httpsp://changelog': `<prime-changelog />\n`,
     'httpsp://status': `<prime-status refresh="3s" />\n`,
+    'httpsp://hub': `<prime-hub />\n`,
   };
   return map[url] || `<!-- No source for ${url} -->`;
 }
 
-function renderInternalPage(url: string) {
+function renderInternalPage(url: string, onNavigate?: (url: string) => void) {
   switch (url) {
     case 'prime://home': return <HomePage />;
     case 'prime://docs': return <DocsPage />;
@@ -80,7 +82,13 @@ function renderInternalPage(url: string) {
     case 'httpsp://handbook': return <HandbookPage />;
     case 'httpsp://changelog': return <ChangelogPage />;
     case 'httpsp://status': return <StatusPage />;
-    default: return <NotFoundPage url={url} />;
+    case 'httpsp://hub': return <HubPage onNavigate={onNavigate} />;
+    default:
+      if (url.startsWith('httpsp://pages/')) {
+        const slug = url.replace('httpsp://pages/', '');
+        return <DynamicPage slug={slug} onNavigate={onNavigate} />;
+      }
+      return <NotFoundPage url={url} />;
   }
 }
 
@@ -88,7 +96,7 @@ const TITLE_MAP: Record<string, string> = {
   'prime://home': 'Home', 'prime://docs': 'Docs', 'prime://net-status': 'Net Status',
   'prime://q3-lab': 'Q3 Lab', 'prime://energy-grid': 'Energy Grid',
   'httpsp://wiki': 'Wiki', 'httpsp://research': 'Research', 'httpsp://handbook': 'Handbook',
-  'httpsp://changelog': 'Changelog', 'httpsp://status': 'Status',
+  'httpsp://changelog': 'Changelog', 'httpsp://status': 'Status', 'httpsp://hub': 'Hub',
 };
 
 // ─── Main Browser Component ───
@@ -129,6 +137,7 @@ export default function PrimeBrowserApp() {
 
   const titleForUrl = useCallback((url: string) => {
     if (TITLE_MAP[url]) return TITLE_MAP[url];
+    if (url.startsWith('httpsp://pages/')) return url.replace('httpsp://pages/', '');
     const tab = tabs.find(t => t.url === url);
     if (tab?.externalTitle) return tab.externalTitle;
     try { return new URL(url).hostname; } catch { return url.slice(0, 20); }
@@ -317,7 +326,7 @@ export default function PrimeBrowserApp() {
       return null;
     }
 
-    return renderInternalPage(activeTab.url);
+    return renderInternalPage(activeTab.url, navigate);
   };
 
   return (

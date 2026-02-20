@@ -1,7 +1,200 @@
 import { useState, useEffect } from 'react';
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@/components/ui/collapsible';
+import { useIntranetPages, IntranetPage } from '@/hooks/useIntranetPages';
+import { renderMarkdown } from '@/lib/renderMarkdown';
+import { Search, Plus, Edit3, Trash2, Globe, BookOpen } from 'lucide-react';
+import { ScrollArea } from '@/components/ui/scroll-area';
 
-// ─── httpsp:// Intranet Pages ───
+// ─── Dynamic Intranet Components ───
+
+export function HubPage({ onNavigate }: { onNavigate?: (url: string) => void }) {
+  const { pages, loaded } = useIntranetPages();
+  const [search, setSearch] = useState('');
+  const [showCreate, setShowCreate] = useState(false);
+  const [newTitle, setNewTitle] = useState('');
+  const [newSlug, setNewSlug] = useState('');
+  const [newContent, setNewContent] = useState('');
+  const { publishPage } = useIntranetPages();
+
+  const blogs = pages.filter(p => p.category === 'blog').sort((a, b) => b.publishedAt.localeCompare(a.publishedAt));
+  const userPages = pages.filter(p => p.category === 'page').sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+
+  const q = search.toLowerCase();
+  const filteredBlogs = q ? blogs.filter(p => p.title.toLowerCase().includes(q) || p.content.toLowerCase().includes(q)) : blogs;
+  const filteredPages = q ? userPages.filter(p => p.title.toLowerCase().includes(q) || p.content.toLowerCase().includes(q)) : userPages;
+
+  const handleCreate = () => {
+    if (!newTitle.trim() || !newSlug.trim()) return;
+    const slug = newSlug.trim().toLowerCase().replace(/[^a-z0-9-]/g, '-');
+    const userName = (() => { try { const p = localStorage.getItem('prime-os-profile'); if (p) return JSON.parse(p).name || 'Anonymous'; } catch {} return 'Anonymous'; })();
+    publishPage({
+      slug, title: newTitle, content: newContent || `# ${newTitle}\n\nContent here...`,
+      author: userName, category: 'page', publishedAt: new Date().toISOString(),
+    });
+    setNewTitle(''); setNewSlug(''); setNewContent(''); setShowCreate(false);
+  };
+
+  if (!loaded) return <div className="flex items-center justify-center h-full text-muted-foreground text-xs font-mono py-16">Loading…</div>;
+
+  return (
+    <div className="p-4 space-y-4">
+      <div className="border border-primary/20 rounded p-3 bg-primary/5 flex items-center justify-between">
+        <div>
+          <h1 className="font-display text-sm tracking-wider text-primary flex items-center gap-2">
+            <Globe size={14} /> Intranet Hub
+          </h1>
+          <p className="font-mono text-[9px] text-muted-foreground">{pages.length} published pages • httpsp://hub</p>
+        </div>
+        <button onClick={() => setShowCreate(!showCreate)} className="flex items-center gap-1 text-[9px] bg-primary/10 text-primary px-2 py-1 rounded hover:bg-primary/20">
+          <Plus size={10} /> New Page
+        </button>
+      </div>
+
+      {showCreate && (
+        <div className="border border-primary/30 rounded p-3 bg-primary/5 space-y-2">
+          <input value={newTitle} onChange={e => { setNewTitle(e.target.value); setNewSlug(e.target.value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')); }} placeholder="Page title..." className="w-full bg-muted/30 border border-border rounded px-2 py-1 text-[10px] outline-none focus:border-primary" />
+          <div className="flex items-center gap-1">
+            <span className="text-[9px] text-muted-foreground">httpsp://pages/</span>
+            <input value={newSlug} onChange={e => setNewSlug(e.target.value)} className="bg-muted/30 border border-border rounded px-1.5 py-0.5 text-[10px] w-40 outline-none focus:border-primary" />
+          </div>
+          <textarea value={newContent} onChange={e => setNewContent(e.target.value)} placeholder="Markdown content..." className="w-full bg-muted/30 border border-border rounded px-2 py-1 text-[10px] h-24 outline-none resize-none focus:border-primary font-mono" />
+          <div className="flex gap-2">
+            <button onClick={handleCreate} className="text-[9px] bg-primary text-primary-foreground px-3 py-1 rounded hover:bg-primary/90">Create</button>
+            <button onClick={() => setShowCreate(false)} className="text-[9px] text-muted-foreground hover:text-foreground">Cancel</button>
+          </div>
+        </div>
+      )}
+
+      <div className="flex items-center gap-1 border border-border rounded px-2 py-1">
+        <Search size={10} className="text-muted-foreground" />
+        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search all content..." className="bg-transparent text-[10px] w-full outline-none placeholder:text-muted-foreground/50" />
+      </div>
+
+      {/* Blog posts */}
+      {filteredBlogs.length > 0 && (
+        <div>
+          <h2 className="font-display text-xs tracking-wider text-primary mb-2 flex items-center gap-1.5">
+            <BookOpen size={12} /> Blog Posts
+          </h2>
+          <div className="space-y-1.5">
+            {filteredBlogs.map(p => (
+              <button key={p.slug} onClick={() => onNavigate?.(`httpsp://pages/${p.slug}`)} className="w-full text-left border border-border rounded p-2.5 hover:border-primary/30 transition-colors block">
+                {p.coverImage && <img src={p.coverImage} alt="" className="w-full h-20 object-cover rounded mb-1.5" />}
+                <h3 className="font-display text-xs text-foreground">{p.title}</h3>
+                <p className="font-mono text-[9px] text-muted-foreground/60">{p.author} • {new Date(p.publishedAt).toLocaleDateString()}</p>
+                <p className="font-mono text-[9px] text-muted-foreground mt-0.5 line-clamp-2">{p.content.replace(/[#*`\\[\\]!]/g, '').slice(0, 120)}…</p>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Pages */}
+      {filteredPages.length > 0 && (
+        <div>
+          <h2 className="font-display text-xs tracking-wider text-primary mb-2 flex items-center gap-1.5">
+            <Globe size={12} /> Pages
+          </h2>
+          <div className="grid grid-cols-2 gap-1.5">
+            {filteredPages.map(p => (
+              <button key={p.slug} onClick={() => onNavigate?.(`httpsp://pages/${p.slug}`)} className="text-left border border-border rounded p-2 hover:border-primary/30 transition-colors">
+                <h3 className="font-display text-[10px] text-foreground truncate">{p.title}</h3>
+                <p className="font-mono text-[8px] text-muted-foreground/50">{p.author} • {new Date(p.updatedAt).toLocaleDateString()}</p>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {filteredBlogs.length === 0 && filteredPages.length === 0 && (
+        <div className="text-center py-8 text-muted-foreground/50 text-[10px]">
+          {search ? 'No matching content' : 'No published content yet. Use PrimeDocs or Journal to publish pages.'}
+        </div>
+      )}
+
+      <div className="text-[9px] font-mono text-muted-foreground/50 pt-2 border-t border-border/30">
+        httpsp://hub — PRIME OS Intranet Content Hub
+      </div>
+    </div>
+  );
+}
+
+export function DynamicPage({ slug, onNavigate }: { slug: string; onNavigate?: (url: string) => void }) {
+  const { getPage, publishPage, deletePage, loaded } = useIntranetPages();
+  const [editing, setEditing] = useState(false);
+  const [editContent, setEditContent] = useState('');
+  const page = getPage(slug);
+
+  useEffect(() => {
+    if (page) setEditContent(page.content);
+  }, [page?.content]);
+
+  if (!loaded) return <div className="flex items-center justify-center h-full text-muted-foreground text-xs font-mono py-16">Loading…</div>;
+
+  if (!page) {
+    return (
+      <div className="flex flex-col items-center justify-center py-16 text-center px-4">
+        <p className="font-display text-2xl text-muted-foreground/30 mb-2">404</p>
+        <p className="font-display text-xs tracking-wider text-muted-foreground">Page not found</p>
+        <p className="font-mono text-[9px] text-muted-foreground/50 mt-1">httpsp://pages/{slug}</p>
+        <button onClick={() => onNavigate?.('httpsp://hub')} className="mt-3 text-[9px] text-primary hover:underline">← Back to Hub</button>
+      </div>
+    );
+  }
+
+  const saveEdit = () => {
+    publishPage({ ...page, content: editContent, updatedAt: new Date().toISOString() });
+    setEditing(false);
+  };
+
+  const handleDelete = () => {
+    if (confirm(`Delete "${page.title}"?`)) {
+      deletePage(slug);
+      onNavigate?.('httpsp://hub');
+    }
+  };
+
+  return (
+    <div className="p-4">
+      <div className="flex items-center justify-between mb-3">
+        <button onClick={() => onNavigate?.('httpsp://hub')} className="text-[9px] text-primary hover:underline">← Hub</button>
+        <div className="flex items-center gap-1">
+          <button onClick={() => setEditing(!editing)} className={`p-1 rounded hover:bg-muted ${editing ? 'text-primary' : 'text-muted-foreground'}`} title="Edit">
+            <Edit3 size={12} />
+          </button>
+          <button onClick={handleDelete} className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-destructive" title="Delete">
+            <Trash2 size={12} />
+          </button>
+        </div>
+      </div>
+
+      {page.coverImage && <img src={page.coverImage} alt="" className="w-full h-32 object-cover rounded mb-3 border border-border" />}
+
+      <div className="mb-2">
+        <span className="text-[8px] bg-primary/10 text-primary px-1.5 rounded uppercase">{page.category}</span>
+        <span className="text-[8px] text-muted-foreground/50 ml-2">{page.author} • {new Date(page.publishedAt).toLocaleDateString()}</span>
+      </div>
+
+      {editing ? (
+        <div className="space-y-2">
+          <textarea value={editContent} onChange={e => setEditContent(e.target.value)} className="w-full h-64 bg-muted/30 border border-border rounded p-3 text-[10px] font-mono outline-none resize-none focus:border-primary" />
+          <div className="flex gap-2">
+            <button onClick={saveEdit} className="text-[9px] bg-primary text-primary-foreground px-3 py-1 rounded hover:bg-primary/90">Save</button>
+            <button onClick={() => { setEditing(false); setEditContent(page.content); }} className="text-[9px] text-muted-foreground hover:text-foreground">Cancel</button>
+          </div>
+        </div>
+      ) : (
+        <div className="max-w-2xl">{renderMarkdown(page.content)}</div>
+      )}
+
+      <div className="text-[9px] font-mono text-muted-foreground/50 pt-3 mt-4 border-t border-border/30">
+        httpsp://pages/{slug} — Last updated: {new Date(page.updatedAt).toLocaleString()}
+      </div>
+    </div>
+  );
+}
+
+// ─── Existing httpsp:// Intranet Pages (unchanged) ───
 
 export function WikiPage() {
   const articles = [

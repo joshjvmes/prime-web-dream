@@ -1,7 +1,10 @@
 import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
-import { BookOpen, ZoomIn, ZoomOut, Search, Plus, Trash2, Download, Copy, Edit3, Eye } from 'lucide-react';
+import { BookOpen, ZoomIn, ZoomOut, Search, Plus, Trash2, Download, Copy, Edit3, Eye, Globe, Image as ImageIcon } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useCloudStorage } from '@/hooks/useCloudStorage';
+import { useIntranetPages } from '@/hooks/useIntranetPages';
+import { renderMarkdown } from '@/lib/renderMarkdown';
+import { supabase } from '@/integrations/supabase/client';
 
 interface Doc {
   id: string;
@@ -67,92 +70,23 @@ PRIME OS achieves over-unity energy harvesting by coupling to higher-dimensional
   },
 ];
 
-// --- Lightweight markdown renderer ---
-function renderMarkdown(md: string): React.ReactNode[] {
-  const lines = md.split('\n');
-  const elements: React.ReactNode[] = [];
-  let i = 0;
-
-  while (i < lines.length) {
-    const line = lines[i];
-
-    // Code block
-    if (line.startsWith('```')) {
-      const codeLines: string[] = [];
-      i++;
-      while (i < lines.length && !lines[i].startsWith('```')) { codeLines.push(lines[i]); i++; }
-      i++; // skip closing ```
-      elements.push(
-        <pre key={`code-${i}`} className="bg-card border border-border rounded p-3 mb-3 text-[10px] leading-relaxed overflow-x-auto">
-          <code className="text-primary/80">{codeLines.join('\n')}</code>
-        </pre>
-      );
-      continue;
-    }
-
-    // Table
-    if (line.includes('|') && line.trim().startsWith('|')) {
-      const tableRows: string[][] = [];
-      while (i < lines.length && lines[i].includes('|')) {
-        const row = lines[i].split('|').map(c => c.trim()).filter(Boolean);
-        // skip separator rows like |---|---|
-        if (!row.every(c => /^[-:]+$/.test(c))) tableRows.push(row);
-        i++;
-      }
-      if (tableRows.length > 0) {
-        elements.push(
-          <div key={`tbl-${i}`} className="border border-border rounded mb-3 overflow-hidden">
-            <table className="w-full text-[10px]">
-              <thead><tr className="bg-muted/30">
-                {tableRows[0].map((h, j) => <th key={j} className="text-left px-2 py-1 border-b border-border font-display text-primary">{h}</th>)}
-              </tr></thead>
-              <tbody>
-                {tableRows.slice(1).map((row, ri) => (
-                  <tr key={ri} className="hover:bg-muted/20">
-                    {row.map((cell, ci) => <td key={ci} className="px-2 py-1 border-b border-border/50 text-muted-foreground">{cell}</td>)}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        );
-      }
-      continue;
-    }
-
-    // Headings
-    if (line.startsWith('### ')) { elements.push(<h3 key={`h3-${i}`} className="font-display text-xs tracking-wider text-primary mt-3 mb-1.5">{line.slice(4)}</h3>); i++; continue; }
-    if (line.startsWith('## ')) { elements.push(<h2 key={`h2-${i}`} className="font-display text-sm tracking-wider text-primary mt-4 mb-2">{line.slice(3)}</h2>); i++; continue; }
-    if (line.startsWith('# ')) { elements.push(<h1 key={`h1-${i}`} className="font-display text-lg tracking-wide text-foreground mb-1">{line.slice(2)}</h1>); i++; continue; }
-
-    // Empty line
-    if (!line.trim()) { i++; continue; }
-
-    // Inline formatting for paragraph
-    const formatted = line
-      .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-      .replace(/\*(.+?)\*/g, '<em>$1</em>')
-      .replace(/`(.+?)`/g, '<code class="bg-muted px-1 rounded text-primary/80">$1</code>');
-    elements.push(<p key={`p-${i}`} className="text-muted-foreground leading-relaxed mb-3" dangerouslySetInnerHTML={{ __html: formatted }} />);
-    i++;
-  }
-  return elements;
-}
-
 export default function PrimeDocsApp() {
   const { save, load } = useCloudStorage();
+  const { publishPage } = useIntranetPages();
   const [docs, setDocs] = useState<Doc[]>(SAMPLE_DOCS);
   const [selectedId, setSelectedId] = useState(SAMPLE_DOCS[0].id);
   const [zoom, setZoom] = useState(100);
   const [searchText, setSearchText] = useState('');
   const [editMode, setEditMode] = useState(false);
   const [loaded, setLoaded] = useState(false);
+  const [showPublish, setShowPublish] = useState(false);
+  const [publishSlug, setPublishSlug] = useState('');
   const saveTimer = useRef<ReturnType<typeof setTimeout>>();
   const editorRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const selectedDoc = docs.find(d => d.id === selectedId) || docs[0];
 
-  // Load from cloud
   useEffect(() => {
     load<Doc[]>('docs-library').then(saved => {
       if (saved && saved.length > 0) setDocs(saved);
@@ -205,8 +139,48 @@ export default function PrimeDocsApp() {
     URL.revokeObjectURL(url);
   };
 
-  const copyToClipboard = () => {
-    navigator.clipboard.writeText(selectedDoc.content);
+  const copyToClipboard = () => { navigator.clipboard.writeText(selectedDoc.content); };
+
+  const startPublish = () => {
+    setPublishSlug(selectedDoc.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, ''));
+    setShowPublish(true);
+  };
+
+  const doPublish = () => {
+    if (!publishSlug.trim()) return;
+    const slug = publishSlug.trim().toLowerCase().replace(/[^a-z0-9-]/g, '-');
+    publishPage({
+      slug, title: selectedDoc.title, content: selectedDoc.content,
+      author: selectedDoc.author, category: 'page',
+      publishedAt: new Date().toISOString(),
+    });
+    setShowPublish(false);
+  };
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user) { alert('Sign in to upload images'); return; }
+      const path = `${session.user.id}/intranet/${Date.now()}-${file.name}`;
+      const { error } = await supabase.storage.from('user-files').upload(path, file);
+      if (error) throw error;
+      const { data: { publicUrl } } = supabase.storage.from('user-files').getPublicUrl(path);
+      const img = `![${file.name}](${publicUrl})`;
+      const ta = editorRef.current;
+      if (ta) {
+        const start = ta.selectionStart;
+        const before = selectedDoc.content.slice(0, start);
+        const after = selectedDoc.content.slice(ta.selectionEnd);
+        updateContent(before + img + after);
+      } else {
+        updateContent(selectedDoc.content + '\n' + img);
+      }
+    } catch (err) {
+      console.error('Image upload failed', err);
+    }
+    e.target.value = '';
   };
 
   const filteredDocs = useMemo(() => {
@@ -252,7 +226,6 @@ export default function PrimeDocsApp() {
       <div className="flex-1 flex flex-col">
         {/* Toolbar */}
         <div className="h-8 border-b border-border flex items-center px-3 gap-2">
-          {/* Editable title */}
           <input
             value={selectedDoc.title}
             onChange={e => renameDoc(e.target.value)}
@@ -262,6 +235,9 @@ export default function PrimeDocsApp() {
             <button onClick={() => setEditMode(!editMode)} className={`p-1 rounded hover:bg-muted ${editMode ? 'text-primary' : 'text-muted-foreground'}`} title={editMode ? 'Preview' : 'Edit'}>
               {editMode ? <Eye size={12} /> : <Edit3 size={12} />}
             </button>
+            <input ref={fileInputRef} type="file" accept=".png,.jpg,.jpeg,.svg,.webp" className="hidden" onChange={handleImageUpload} />
+            <button onClick={() => fileInputRef.current?.click()} className="p-1 rounded hover:bg-muted text-muted-foreground" title="Insert Image"><ImageIcon size={12} /></button>
+            <button onClick={startPublish} className="p-1 rounded hover:bg-muted text-muted-foreground" title="Publish to Intranet"><Globe size={12} /></button>
             <button onClick={copyToClipboard} className="p-1 rounded hover:bg-muted text-muted-foreground" title="Copy Markdown"><Copy size={12} /></button>
             <button onClick={exportMd} className="p-1 rounded hover:bg-muted text-muted-foreground" title="Export .md"><Download size={12} /></button>
             <button onClick={deleteDoc} className="p-1 rounded hover:bg-muted text-muted-foreground" title="Delete"><Trash2 size={12} /></button>
@@ -272,10 +248,20 @@ export default function PrimeDocsApp() {
           </div>
         </div>
 
-        {/* Content area — edit or preview */}
+        {/* Publish bar */}
+        {showPublish && (
+          <div className="px-3 py-2 border-b border-primary/30 bg-primary/5 flex items-center gap-2">
+            <span className="text-[9px] text-primary">Publish as:</span>
+            <span className="text-[9px] text-muted-foreground">httpsp://pages/</span>
+            <input value={publishSlug} onChange={e => setPublishSlug(e.target.value)} className="bg-muted/30 border border-border rounded px-1.5 py-0.5 text-[10px] w-40 outline-none focus:border-primary" />
+            <button onClick={doPublish} className="text-[9px] bg-primary text-primary-foreground px-2 py-0.5 rounded hover:bg-primary/90">Publish</button>
+            <button onClick={() => setShowPublish(false)} className="text-[9px] text-muted-foreground hover:text-foreground">Cancel</button>
+          </div>
+        )}
+
+        {/* Content area */}
         {editMode ? (
           <div className="flex flex-1 min-h-0">
-            {/* Editor pane */}
             <div className="flex-1 border-r border-border flex flex-col">
               <div className="px-2 py-1 border-b border-border text-[9px] text-muted-foreground/60 uppercase tracking-wider">Markdown</div>
               <textarea
@@ -287,21 +273,16 @@ export default function PrimeDocsApp() {
                 style={{ fontSize: `${zoom}%` }}
               />
             </div>
-            {/* Preview pane */}
             <div className="flex-1 flex flex-col">
               <div className="px-2 py-1 border-b border-border text-[9px] text-muted-foreground/60 uppercase tracking-wider">Preview</div>
               <ScrollArea className="flex-1">
-                <div className="p-6 max-w-2xl" style={{ fontSize: `${zoom}%` }}>
-                  {renderMarkdown(selectedDoc.content)}
-                </div>
+                <div className="p-6 max-w-2xl" style={{ fontSize: `${zoom}%` }}>{renderMarkdown(selectedDoc.content)}</div>
               </ScrollArea>
             </div>
           </div>
         ) : (
           <ScrollArea className="flex-1">
-            <div className="p-6 max-w-2xl mx-auto" style={{ fontSize: `${zoom}%` }}>
-              {renderMarkdown(selectedDoc.content)}
-            </div>
+            <div className="p-6 max-w-2xl mx-auto" style={{ fontSize: `${zoom}%` }}>{renderMarkdown(selectedDoc.content)}</div>
           </ScrollArea>
         )}
 
