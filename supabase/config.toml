@@ -17,3 +17,6 @@ verify_jwt = false
 
 [functions.sports-odds]
 verify_jwt = false
+
+[functions.market-data]
+verify_jwt = false

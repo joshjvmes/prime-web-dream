@@ -1,6 +1,8 @@
-import { useState, useEffect, useMemo } from 'react';
-import { TrendingUp, TrendingDown, ArrowUpRight, ArrowDownRight, Plus, Eye, BarChart3 } from 'lucide-react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
+import { TrendingUp, TrendingDown, ArrowUpRight, ArrowDownRight, Radio } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, ResponsiveContainer, ReferenceLine, Tooltip } from 'recharts';
+import { Skeleton } from '@/components/ui/skeleton';
+import { supabase } from '@/integrations/supabase/client';
 
 interface Signal {
   id: string;
@@ -14,70 +16,130 @@ interface Signal {
   timestamp: string;
 }
 
-interface TickerItem { symbol: string; price: number; change: number }
+interface TickerItem { symbol: string; price: number; change: number; open?: number }
 
-const SIGNALS: Signal[] = [
-  { id: 's1', symbol: 'LATT', direction: 'long', entry: 142.50, target: 168.00, stopLoss: 131.00, conviction: 'High', status: 'active', timestamp: '2h ago' },
-  { id: 's2', symbol: 'QBIT', direction: 'short', entry: 89.20, target: 72.00, stopLoss: 96.50, conviction: 'Medium', status: 'active', timestamp: '4h ago' },
-  { id: 's3', symbol: 'FOLD', direction: 'long', entry: 224.00, target: 260.00, stopLoss: 208.00, conviction: 'High', status: 'hit', timestamp: '1d ago' },
-  { id: 's4', symbol: 'NRGY', direction: 'long', entry: 56.80, target: 65.00, stopLoss: 52.00, conviction: 'Low', status: 'active', timestamp: '6h ago' },
-  { id: 's5', symbol: 'MESH', direction: 'short', entry: 312.00, target: 280.00, stopLoss: 330.00, conviction: 'Medium', status: 'stopped', timestamp: '2d ago' },
-  { id: 's6', symbol: 'GEOM', direction: 'long', entry: 78.40, target: 92.00, stopLoss: 71.00, conviction: 'High', status: 'active', timestamp: '30m ago' },
-];
+const WATCHLIST = ['AAPL', 'TSLA', 'NVDA', 'AMZN', 'MSFT', 'GOOG', 'META', 'AMD'];
 
-const TICKER_BASE: TickerItem[] = [
-  { symbol: 'LATT', price: 145.20, change: 1.9 },
-  { symbol: 'QBIT', price: 87.60, change: -1.8 },
-  { symbol: 'FOLD', price: 261.30, change: 3.2 },
-  { symbol: 'NRGY', price: 57.90, change: 1.1 },
-  { symbol: 'MESH', price: 318.40, change: 2.1 },
-  { symbol: 'GEOM', price: 80.10, change: 2.2 },
-  { symbol: 'PRIM', price: 1049.00, change: 0.8 },
-  { symbol: 'ADRK', price: 33.50, change: -0.5 },
-];
-
-function generateSignalChart(entry: number, target: number, stopLoss: number) {
-  const data = [];
-  let p = entry * 0.97;
-  for (let i = 0; i < 40; i++) {
-    p += (Math.random() - 0.45) * (entry * 0.01);
-    p = Math.max(stopLoss * 0.95, Math.min(target * 1.05, p));
-    data.push({ t: i, price: +p.toFixed(2) });
-  }
-  return data;
+// Generate signals based on live prices
+function generateSignals(tickers: TickerItem[]): Signal[] {
+  return tickers.slice(0, 6).map((t, i) => {
+    const dir = t.change >= 0 ? 'long' as const : 'short' as const;
+    const entry = t.price;
+    const spread = t.price * 0.05;
+    return {
+      id: `s${i}`,
+      symbol: t.symbol,
+      direction: dir,
+      entry: +entry.toFixed(2),
+      target: +(dir === 'long' ? entry + spread : entry - spread).toFixed(2),
+      stopLoss: +(dir === 'long' ? entry - spread * 0.6 : entry + spread * 0.6).toFixed(2),
+      conviction: Math.abs(t.change) > 2 ? 'High' : Math.abs(t.change) > 0.8 ? 'Medium' : 'Low',
+      status: 'active',
+      timestamp: 'Live',
+    };
+  });
 }
 
 const CONVICTION_COLORS: Record<string, string> = { High: 'bg-primary/20 text-primary', Medium: 'bg-accent text-accent-foreground', Low: 'bg-muted text-muted-foreground' };
 
 export default function PrimeSignalsApp() {
-  const [ticker, setTicker] = useState(TICKER_BASE);
+  const [ticker, setTicker] = useState<TickerItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [isCached, setIsCached] = useState(false);
   const [selectedSignal, setSelectedSignal] = useState<Signal | null>(null);
+  const [chartData, setChartData] = useState<{ t: string; price: number }[]>([]);
+  const [chartLoading, setChartLoading] = useState(false);
   const [view, setView] = useState<'signals' | 'analytics'>('signals');
 
-  useEffect(() => {
-    const id = setInterval(() => {
-      setTicker(prev => prev.map(t => {
-        const delta = (Math.random() - 0.5) * t.price * 0.002;
-        const newPrice = +(t.price + delta).toFixed(2);
-        return { ...t, price: newPrice, change: +((newPrice / (t.price / (1 + t.change / 100)) - 1) * 100).toFixed(2) };
-      }));
-    }, 2000);
-    return () => clearInterval(id);
+  const fetchTickers = useCallback(async () => {
+    try {
+      const { data, error } = await supabase.functions.invoke('market-data', {
+        body: null,
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      // Use URL params approach
+      const res = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/market-data?action=get-tickers&symbols=${WATCHLIST.join(',')}`,
+        { headers: { apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY } }
+      );
+      const json = await res.json();
+      if (json.data && Array.isArray(json.data)) {
+        const items: TickerItem[] = json.data.map((d: any) => ({
+          symbol: d.symbol || d.T,
+          price: d.c || d.close || 0,
+          change: d.c && d.o ? +((d.c - d.o) / d.o * 100).toFixed(2) : 0,
+          open: d.o || d.open || 0,
+        }));
+        setTicker(items.filter(i => i.price > 0));
+        setIsCached(json.cached || false);
+      }
+    } catch (e) {
+      console.error('Failed to fetch tickers:', e);
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
-  const chartData = useMemo(() => selectedSignal ? generateSignalChart(selectedSignal.entry, selectedSignal.target, selectedSignal.stopLoss) : [], [selectedSignal]);
+  useEffect(() => {
+    fetchTickers();
+    const id = setInterval(fetchTickers, 60000);
+    return () => clearInterval(id);
+  }, [fetchTickers]);
+
+  const fetchChart = useCallback(async (symbol: string) => {
+    setChartLoading(true);
+    try {
+      const to = new Date().toISOString().slice(0, 10);
+      const from = new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10);
+      const res = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/market-data?action=get-chart&ticker=${symbol}&from=${from}&to=${to}&timespan=hour`,
+        { headers: { apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY } }
+      );
+      const json = await res.json();
+      const results = json.data?.results || [];
+      setChartData(results.map((r: any, i: number) => ({
+        t: new Date(r.t).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit' }),
+        price: r.c,
+      })));
+    } catch {
+      setChartData([]);
+    } finally {
+      setChartLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (selectedSignal) fetchChart(selectedSignal.symbol);
+  }, [selectedSignal, fetchChart]);
+
+  const signals = useMemo(() => generateSignals(ticker), [ticker]);
 
   const stats = useMemo(() => {
-    const hit = SIGNALS.filter(s => s.status === 'hit').length;
-    const stopped = SIGNALS.filter(s => s.status === 'stopped').length;
-    const total = hit + stopped;
-    return { winRate: total ? ((hit / total) * 100).toFixed(0) : '—', avgReturn: '14.2', riskReward: '2.3', totalSignals: SIGNALS.length };
-  }, []);
+    const bullish = signals.filter(s => s.direction === 'long').length;
+    const bearish = signals.filter(s => s.direction === 'short').length;
+    const highConv = signals.filter(s => s.conviction === 'High').length;
+    return { bullish, bearish, highConv, total: signals.length };
+  }, [signals]);
+
+  if (loading) {
+    return (
+      <div className="h-full flex flex-col bg-background p-3 space-y-2">
+        <Skeleton className="h-6 w-full" />
+        <Skeleton className="h-4 w-3/4" />
+        {Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-14 w-full" />)}
+      </div>
+    );
+  }
 
   return (
     <div className="h-full flex flex-col bg-background text-foreground font-mono text-xs">
       {/* Ticker */}
       <div className="flex items-center gap-3 px-3 py-1 border-b border-border overflow-x-auto scrollbar-none">
+        <div className="flex items-center gap-1 shrink-0 mr-1">
+          <Radio size={8} className={isCached ? 'text-muted-foreground' : 'text-primary animate-pulse'} />
+          <span className="text-[7px] text-muted-foreground">{isCached ? 'CACHED' : 'LIVE'}</span>
+        </div>
         {ticker.map(t => (
           <div key={t.symbol} className="flex items-center gap-1 shrink-0">
             <span className="text-[9px] text-muted-foreground">{t.symbol}</span>
@@ -102,26 +164,10 @@ export default function PrimeSignalsApp() {
         {view === 'analytics' ? (
           <div className="p-3 space-y-3">
             <div className="grid grid-cols-4 gap-2">
-              <div className="border border-border rounded p-2 text-center"><p className="text-[8px] text-muted-foreground">WIN RATE</p><p className="text-lg text-primary font-bold">{stats.winRate}%</p></div>
-              <div className="border border-border rounded p-2 text-center"><p className="text-[8px] text-muted-foreground">AVG RETURN</p><p className="text-lg text-foreground font-bold">{stats.avgReturn}%</p></div>
-              <div className="border border-border rounded p-2 text-center"><p className="text-[8px] text-muted-foreground">RISK/REWARD</p><p className="text-lg text-foreground font-bold">{stats.riskReward}:1</p></div>
-              <div className="border border-border rounded p-2 text-center"><p className="text-[8px] text-muted-foreground">TOTAL SIGNALS</p><p className="text-lg text-foreground font-bold">{stats.totalSignals}</p></div>
-            </div>
-            <div className="border border-border rounded p-2">
-              <p className="text-[9px] text-muted-foreground mb-1">SIGNAL STATUS DISTRIBUTION</p>
-              <div className="flex gap-2 mt-2">
-                {['active', 'hit', 'stopped'].map(s => {
-                  const count = SIGNALS.filter(sig => sig.status === s).length;
-                  return (
-                    <div key={s} className="flex-1 text-center">
-                      <div className="h-16 flex items-end justify-center">
-                        <div className={`w-8 rounded-t ${s === 'hit' ? 'bg-primary' : s === 'stopped' ? 'bg-destructive' : 'bg-accent'}`} style={{ height: `${(count / SIGNALS.length) * 100}%` }} />
-                      </div>
-                      <p className="text-[8px] text-muted-foreground mt-1 capitalize">{s} ({count})</p>
-                    </div>
-                  );
-                })}
-              </div>
+              <div className="border border-border rounded p-2 text-center"><p className="text-[8px] text-muted-foreground">BULLISH</p><p className="text-lg text-primary font-bold">{stats.bullish}</p></div>
+              <div className="border border-border rounded p-2 text-center"><p className="text-[8px] text-muted-foreground">BEARISH</p><p className="text-lg text-destructive font-bold">{stats.bearish}</p></div>
+              <div className="border border-border rounded p-2 text-center"><p className="text-[8px] text-muted-foreground">HIGH CONV</p><p className="text-lg text-foreground font-bold">{stats.highConv}</p></div>
+              <div className="border border-border rounded p-2 text-center"><p className="text-[8px] text-muted-foreground">TOTAL</p><p className="text-lg text-foreground font-bold">{stats.total}</p></div>
             </div>
           </div>
         ) : selectedSignal ? (
@@ -135,17 +181,19 @@ export default function PrimeSignalsApp() {
               </span>
             </div>
             <div className="border border-border rounded p-2">
-              <ResponsiveContainer width="100%" height={150}>
-                <LineChart data={chartData}>
-                  <XAxis dataKey="t" tick={{ fontSize: 8 }} stroke="hsl(var(--muted-foreground))" />
-                  <YAxis domain={['auto', 'auto']} tick={{ fontSize: 8 }} stroke="hsl(var(--muted-foreground))" />
-                  <Tooltip contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', fontSize: 10 }} />
-                  <ReferenceLine y={selectedSignal.entry} stroke="hsl(var(--muted-foreground))" strokeDasharray="3 3" label={{ value: 'Entry', fontSize: 8, fill: 'hsl(var(--muted-foreground))' }} />
-                  <ReferenceLine y={selectedSignal.target} stroke="hsl(var(--primary))" strokeDasharray="3 3" label={{ value: 'Target', fontSize: 8, fill: 'hsl(var(--primary))' }} />
-                  <ReferenceLine y={selectedSignal.stopLoss} stroke="hsl(0 70% 50%)" strokeDasharray="3 3" label={{ value: 'Stop', fontSize: 8, fill: 'hsl(0 70% 50%)' }} />
-                  <Line type="monotone" dataKey="price" stroke="hsl(var(--foreground))" strokeWidth={1.5} dot={false} />
-                </LineChart>
-              </ResponsiveContainer>
+              {chartLoading ? <Skeleton className="h-[150px] w-full" /> : (
+                <ResponsiveContainer width="100%" height={150}>
+                  <LineChart data={chartData}>
+                    <XAxis dataKey="t" tick={{ fontSize: 7 }} stroke="hsl(var(--muted-foreground))" interval="preserveStartEnd" />
+                    <YAxis domain={['auto', 'auto']} tick={{ fontSize: 8 }} stroke="hsl(var(--muted-foreground))" />
+                    <Tooltip contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', fontSize: 10 }} />
+                    <ReferenceLine y={selectedSignal.entry} stroke="hsl(var(--muted-foreground))" strokeDasharray="3 3" label={{ value: 'Entry', fontSize: 8, fill: 'hsl(var(--muted-foreground))' }} />
+                    <ReferenceLine y={selectedSignal.target} stroke="hsl(var(--primary))" strokeDasharray="3 3" label={{ value: 'Target', fontSize: 8, fill: 'hsl(var(--primary))' }} />
+                    <ReferenceLine y={selectedSignal.stopLoss} stroke="hsl(0 70% 50%)" strokeDasharray="3 3" label={{ value: 'Stop', fontSize: 8, fill: 'hsl(0 70% 50%)' }} />
+                    <Line type="monotone" dataKey="price" stroke="hsl(var(--foreground))" strokeWidth={1.5} dot={false} />
+                  </LineChart>
+                </ResponsiveContainer>
+              )}
             </div>
             <div className="grid grid-cols-3 gap-2">
               <div className="border border-border rounded p-2"><p className="text-[8px] text-muted-foreground">ENTRY</p><p className="text-foreground">{selectedSignal.entry.toFixed(2)}</p></div>
@@ -155,7 +203,7 @@ export default function PrimeSignalsApp() {
           </div>
         ) : (
           <div className="p-2 space-y-1">
-            {SIGNALS.map(s => {
+            {signals.map(s => {
               const currentPrice = ticker.find(t => t.symbol === s.symbol)?.price ?? s.entry;
               const pnl = s.direction === 'long' ? ((currentPrice - s.entry) / s.entry) * 100 : ((s.entry - currentPrice) / s.entry) * 100;
               return (
@@ -166,14 +214,13 @@ export default function PrimeSignalsApp() {
                       {s.direction === 'long' ? <TrendingUp size={10} /> : <TrendingDown size={10} />}{s.direction.toUpperCase()}
                     </span>
                     <span className={`text-[8px] px-1.5 py-0.5 rounded ${CONVICTION_COLORS[s.conviction]}`}>{s.conviction}</span>
-                    <span className={`ml-auto text-[9px] ${s.status === 'hit' ? 'text-primary' : s.status === 'stopped' ? 'text-destructive' : 'text-muted-foreground'}`}>● {s.status}</span>
+                    <span className="ml-auto text-[9px] text-muted-foreground">● {s.status}</span>
                   </div>
                   <div className="flex items-center gap-4 mt-1 text-[9px] text-muted-foreground">
                     <span>Entry: {s.entry.toFixed(2)}</span>
                     <span>Target: <span className="text-primary">{s.target.toFixed(2)}</span></span>
                     <span>Stop: <span className="text-destructive">{s.stopLoss.toFixed(2)}</span></span>
-                    {s.status === 'active' && <span className={`ml-auto ${pnl >= 0 ? 'text-primary' : 'text-destructive'}`}>{pnl >= 0 ? '+' : ''}{pnl.toFixed(1)}%</span>}
-                    <span className="text-muted-foreground">{s.timestamp}</span>
+                    <span className={`ml-auto ${pnl >= 0 ? 'text-primary' : 'text-destructive'}`}>{pnl >= 0 ? '+' : ''}{pnl.toFixed(1)}%</span>
                   </div>
                 </button>
               );
