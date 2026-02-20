@@ -1,73 +1,60 @@
-# Welcome to your Lovable project
+# PRIME OS
 
-## Project info
+**Geometric Computing Interface** — Built by [Rocket Logic Global](https://rocketlogicglobal.com)
 
-**URL**: https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID
+PRIME OS is a browser-based operating system interface exploring geometric computation, ternary logic, and 11-dimensional folding architectures. It provides a fully interactive desktop environment with a suite of specialized applications.
 
-## How can I edit this code?
+---
 
-There are several ways of editing your application.
+## Features
 
-**Use Lovable**
+- **Desktop Environment** — Windowed multitasking with taskbar, context menus, global search, and notification system
+- **Terminal** — Command-line interface with pipes, modes, and app launching
+- **System Monitor** — Real-time CPU, memory, and process tracking
+- **SchemaForge** — Database schema design and visualization
+- **Q3 Inference** — Ternary logic inference engine
+- **Hypersphere** — 11D geometric visualization
+- **GeomC** — Geometric computation workbench
+- **FoldMem** — Dimensional folding memory explorer
+- **Energy Monitor** — Lattice energy flow tracking
+- **PrimeBets** — Prediction market platform
+- **PrimeSignals** — Trading signal analysis dashboard
+- **PrimeStream** — Live data pipeline monitor
+- **PrimeVault** — Portfolio and asset tracker
+- **PrimeLink** — Video calling interface
+- **PrimeBrowser / PrimeDocs / PrimeChat / PrimeComm** — Productivity suite
+- **Security Console / Cloud Hooks / Data Center** — Infrastructure tools
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and start prompting.
+---
 
-Changes made via Lovable will be committed automatically to this repo.
+## Tech Stack
 
-**Use your preferred IDE**
+- **React 18** + **TypeScript** + **Vite**
+- **Tailwind CSS** + **shadcn/ui**
+- **Recharts** for data visualization
+- **Framer Motion** for animations
+- **Lucide React** for iconography
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
+---
 
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
-
-Follow these steps:
+## Development
 
 ```sh
-# Step 1: Clone the repository using the project's Git URL.
+# Clone the repository
 git clone <YOUR_GIT_URL>
 
-# Step 2: Navigate to the project directory.
+# Navigate to the project
 cd <YOUR_PROJECT_NAME>
 
-# Step 3: Install the necessary dependencies.
-npm i
+# Install dependencies
+npm install
 
-# Step 4: Start the development server with auto-reloading and an instant preview.
+# Start the dev server
 npm run dev
 ```
 
-**Edit a file directly in GitHub**
+---
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+## License
 
-**Use GitHub Codespaces**
-
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
-
-## What technologies are used for this project?
-
-This project is built with:
-
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
-
-## How can I deploy this project?
-
-Simply open [Lovable](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and click on Share -> Publish.
-
-## Can I connect a custom domain to my Lovable project?
-
-Yes, you can!
-
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
-
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+© Rocket Logic Global. All rights reserved.
