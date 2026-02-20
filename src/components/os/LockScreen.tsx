@@ -1,6 +1,10 @@
 import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Lock, Unlock, ChevronUp } from 'lucide-react';
+import { Lock, Unlock, ChevronUp, LogIn, LogOut } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
+import { lovable } from '@/integrations/lovable/index';
+import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
+import type { User } from '@supabase/supabase-js';
 
 const SYNODIC_PERIOD = 29.53058867;
 const KNOWN_NEW_MOON = new Date(2000, 0, 6, 18, 14);
@@ -23,9 +27,10 @@ const WALLPAPERS: Record<string, string> = {
 
 interface LockScreenProps {
   onUnlock: () => void;
+  user?: User | null;
 }
 
-export default function LockScreen({ onUnlock }: LockScreenProps) {
+export default function LockScreen({ onUnlock, user }: LockScreenProps) {
   const [time, setTime] = useState('');
   const [date, setDate] = useState('');
   const [pinEnabled, setPinEnabled] = useState(false);
@@ -34,6 +39,10 @@ export default function LockScreen({ onUnlock }: LockScreenProps) {
   const [showPinInput, setShowPinInput] = useState(false);
   const [unlocking, setUnlocking] = useState(false);
   const [wallpaper, setWallpaper] = useState('lattice');
+  const [signingIn, setSigningIn] = useState(false);
+
+  const userName = user?.user_metadata?.full_name || user?.user_metadata?.name || '';
+  const avatarUrl = user?.user_metadata?.avatar_url || user?.user_metadata?.picture || '';
 
   useEffect(() => {
     try {
@@ -80,6 +89,21 @@ export default function LockScreen({ onUnlock }: LockScreenProps) {
     setTimeout(onUnlock, 600);
   }, [pinEnabled, showPinInput, pinInput, onUnlock]);
 
+  const handleGoogleSignIn = async () => {
+    setSigningIn(true);
+    try {
+      await lovable.auth.signInWithOAuth("google", {
+        redirect_uri: window.location.origin,
+      });
+    } catch {
+      setSigningIn(false);
+    }
+  };
+
+  const handleSignOut = async () => {
+    await supabase.auth.signOut();
+  };
+
   const moon = getMoonPhase(new Date());
 
   return (
@@ -107,6 +131,25 @@ export default function LockScreen({ onUnlock }: LockScreenProps) {
               </circle>
             </svg>
           </div>
+
+          {/* Signed-in user avatar */}
+          {user && (
+            <motion.div
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.1 }}
+              className="mb-4 flex flex-col items-center gap-2"
+              onClick={e => e.stopPropagation()}
+            >
+              <Avatar className="w-16 h-16 border-2 border-primary/30">
+                <AvatarImage src={avatarUrl} alt={userName} />
+                <AvatarFallback className="bg-primary/20 text-primary font-display text-xl">
+                  {(userName || 'U').charAt(0).toUpperCase()}
+                </AvatarFallback>
+              </Avatar>
+              <p className="text-xs text-foreground/70 font-body">{userName}</p>
+            </motion.div>
+          )}
 
           {/* Time & Date */}
           <motion.div
@@ -169,6 +212,34 @@ export default function LockScreen({ onUnlock }: LockScreenProps) {
                 </p>
                 <Unlock size={16} className="text-muted-foreground/30" />
               </div>
+            )}
+          </motion.div>
+
+          {/* Google Sign-In / Sign-Out */}
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 1, duration: 0.4 }}
+            className="mt-8 flex flex-col items-center gap-2"
+            onClick={e => e.stopPropagation()}
+          >
+            {user ? (
+              <button
+                onClick={handleSignOut}
+                className="flex items-center gap-2 px-4 py-2 rounded border border-border/50 text-muted-foreground/60 text-[10px] font-mono tracking-wider hover:text-foreground hover:border-border transition-colors"
+              >
+                <LogOut size={12} />
+                Sign Out
+              </button>
+            ) : (
+              <button
+                onClick={handleGoogleSignIn}
+                disabled={signingIn}
+                className="flex items-center gap-2 px-4 py-2 rounded border border-primary/30 text-primary/70 text-[10px] font-display tracking-wider hover:bg-primary/10 hover:text-primary transition-colors disabled:opacity-50"
+              >
+                <LogIn size={12} />
+                {signingIn ? 'Redirecting...' : 'Sign in with Google'}
+              </button>
             )}
           </motion.div>
         </motion.div>

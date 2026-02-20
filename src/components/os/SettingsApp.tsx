@@ -1,6 +1,9 @@
 import { useState, useEffect } from 'react';
 import { NotificationEvent } from '@/hooks/useNotifications';
-import { Trash2, Plus, Bell, BellOff, Monitor, Keyboard, Mouse, Volume2, Info, User, Lock, LayoutGrid } from 'lucide-react';
+import { Trash2, Plus, Bell, BellOff, Monitor, Keyboard, Mouse, Volume2, Info, User, Lock, LayoutGrid, Mic, LogOut } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
+import type { User as SupabaseUser } from '@supabase/supabase-js';
+import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 
 interface SettingsState {
   scanLines: boolean;
@@ -29,6 +32,8 @@ interface LockSettings {
   pinEnabled: boolean;
   pin: string;
   wallpaper: string;
+  autoLock: boolean;
+  autoLockTimeout: number;
 }
 
 interface WidgetToggles {
@@ -45,6 +50,7 @@ interface SettingsAppProps {
   onAddEvent?: (title: string, message: string) => void;
   onRemoveEvent?: (id: string) => void;
   onLock?: () => void;
+  user?: SupabaseUser | null;
 }
 
 const DEFAULTS: SettingsState = {
@@ -69,13 +75,14 @@ function applyTheme(theme: 'cyan' | 'violet' | 'amber') {
   root.style.setProperty('--border', t.border);
 }
 
-type Panel = 'profile' | 'display' | 'keyboard' | 'mouse' | 'audio' | 'notifications' | 'lock' | 'widgets' | 'about';
+type Panel = 'profile' | 'display' | 'keyboard' | 'mouse' | 'audio' | 'notifications' | 'lock' | 'widgets' | 'voice' | 'about';
 
 const PANELS: { id: Panel; label: string; icon: React.ReactNode }[] = [
   { id: 'profile', label: 'Profile', icon: <User size={14} /> },
   { id: 'display', label: 'Display', icon: <Monitor size={14} /> },
   { id: 'lock', label: 'Lock & Security', icon: <Lock size={14} /> },
   { id: 'widgets', label: 'Widgets', icon: <LayoutGrid size={14} /> },
+  { id: 'voice', label: 'Voice Control', icon: <Mic size={14} /> },
   { id: 'keyboard', label: 'Keyboard', icon: <Keyboard size={14} /> },
   { id: 'mouse', label: 'Mouse', icon: <Mouse size={14} /> },
   { id: 'audio', label: 'Audio', icon: <Volume2 size={14} /> },
@@ -83,7 +90,7 @@ const PANELS: { id: Panel; label: string; icon: React.ReactNode }[] = [
   { id: 'about', label: 'About', icon: <Info size={14} /> },
 ];
 
-export default function SettingsApp({ notifEvents = [], onToggleEvent, onUpdateMessage, onAddEvent, onRemoveEvent, onLock }: SettingsAppProps) {
+export default function SettingsApp({ notifEvents = [], onToggleEvent, onUpdateMessage, onAddEvent, onRemoveEvent, onLock, user }: SettingsAppProps) {
   const [activePanel, setActivePanel] = useState<Panel>('profile');
   const [profileName, setProfileName] = useState(() => {
     try { const p = localStorage.getItem('prime-os-profile'); return p ? JSON.parse(p).name || '' : ''; } catch { return ''; }
@@ -95,7 +102,7 @@ export default function SettingsApp({ notifEvents = [], onToggleEvent, onUpdateM
     try { const saved = localStorage.getItem('prime-os-settings'); return saved ? { ...DEFAULTS, ...JSON.parse(saved) } : DEFAULTS; } catch { return DEFAULTS; }
   });
   const [lockSettings, setLockSettings] = useState<LockSettings>(() => {
-    try { const s = localStorage.getItem('prime-os-lock-settings'); return s ? JSON.parse(s) : { pinEnabled: false, pin: '', wallpaper: 'lattice' }; } catch { return { pinEnabled: false, pin: '', wallpaper: 'lattice' }; }
+    try { const s = localStorage.getItem('prime-os-lock-settings'); return s ? { pinEnabled: false, pin: '', wallpaper: 'lattice', autoLock: false, autoLockTimeout: 5, ...JSON.parse(s) } : { pinEnabled: false, pin: '', wallpaper: 'lattice', autoLock: false, autoLockTimeout: 5 }; } catch { return { pinEnabled: false, pin: '', wallpaper: 'lattice', autoLock: false, autoLockTimeout: 5 }; }
   });
   const [widgetToggles, setWidgetToggles] = useState<WidgetToggles>(() => {
     try { const s = localStorage.getItem('prime-os-widgets'); return s ? JSON.parse(s) : { clock: true, stats: true, notes: false, network: false }; } catch { return { clock: true, stats: true, notes: false, network: false }; }
@@ -164,19 +171,44 @@ export default function SettingsApp({ notifEvents = [], onToggleEvent, onUpdateM
 
   const renderPanel = () => {
     switch (activePanel) {
-      case 'profile':
+      case 'profile': {
+        const googleName = user?.user_metadata?.full_name || user?.user_metadata?.name || '';
+        const googleEmail = user?.email || '';
+        const googleAvatar = user?.user_metadata?.avatar_url || user?.user_metadata?.picture || '';
         return (
           <div className="space-y-1">
             <SectionTitle>User Profile</SectionTitle>
             <div className="flex items-center gap-3 mb-4">
-              <div className="w-12 h-12 rounded-full bg-primary/20 border border-primary/40 flex items-center justify-center">
-                <span className="font-display text-lg text-primary">{(profileName || 'O').charAt(0).toUpperCase()}</span>
-              </div>
+              {user && googleAvatar ? (
+                <Avatar className="w-12 h-12 border border-primary/40">
+                  <AvatarImage src={googleAvatar} alt={googleName} />
+                  <AvatarFallback className="bg-primary/20 text-primary font-display text-lg">
+                    {(googleName || 'U').charAt(0).toUpperCase()}
+                  </AvatarFallback>
+                </Avatar>
+              ) : (
+                <div className="w-12 h-12 rounded-full bg-primary/20 border border-primary/40 flex items-center justify-center">
+                  <span className="font-display text-lg text-primary">{(profileName || 'O').charAt(0).toUpperCase()}</span>
+                </div>
+              )}
               <div>
-                <p className="text-foreground text-xs">{profileName || 'Operator'}</p>
+                <p className="text-foreground text-xs">{googleName || profileName || 'Operator'}</p>
                 <p className="text-muted-foreground/60 text-[10px]">{profileTitle || 'PRIME Operator'}</p>
+                {googleEmail && <p className="text-muted-foreground/40 text-[9px]">{googleEmail}</p>}
               </div>
             </div>
+            {user && (
+              <div className="mb-3 p-2 rounded border border-primary/20 bg-primary/5">
+                <p className="text-[10px] text-primary font-display tracking-wider">SIGNED IN WITH GOOGLE</p>
+                <button
+                  onClick={() => supabase.auth.signOut()}
+                  className="mt-2 flex items-center gap-1.5 px-3 py-1 rounded border border-destructive/30 text-destructive text-[10px] font-display tracking-wider hover:bg-destructive/10 transition-colors"
+                >
+                  <LogOut size={10} />
+                  Sign Out
+                </button>
+              </div>
+            )}
             <div className="space-y-2">
               <div>
                 <label className="font-body text-xs text-card-foreground block mb-1">Display Name</label>
@@ -191,6 +223,7 @@ export default function SettingsApp({ notifEvents = [], onToggleEvent, onUpdateM
             </div>
           </div>
         );
+      }
       case 'display':
         return (
           <div className="space-y-1">
@@ -242,6 +275,25 @@ export default function SettingsApp({ notifEvents = [], onToggleEvent, onUpdateM
                   placeholder="••••" className="w-32 bg-background border border-border rounded px-2 py-1.5 text-xs text-foreground font-mono tracking-widest" />
               </div>
             )}
+            <SectionTitle>Auto-Lock</SectionTitle>
+            <Toggle label="Auto-lock after inactivity" value={lockSettings.autoLock} onChange={v => setLockSettings(s => ({ ...s, autoLock: v }))} />
+            {lockSettings.autoLock && (
+              <div className="flex items-center justify-between py-1.5">
+                <span className="font-body text-xs text-card-foreground">Timeout</span>
+                <select
+                  value={lockSettings.autoLockTimeout}
+                  onChange={e => setLockSettings(s => ({ ...s, autoLockTimeout: Number(e.target.value) }))}
+                  className="bg-background border border-border rounded px-2 py-0.5 text-[10px] text-foreground"
+                >
+                  <option value={1}>1 min</option>
+                  <option value={2}>2 min</option>
+                  <option value={5}>5 min</option>
+                  <option value={10}>10 min</option>
+                  <option value={15}>15 min</option>
+                  <option value={30}>30 min</option>
+                </select>
+              </div>
+            )}
             <SectionTitle>Wallpaper</SectionTitle>
             <div className="flex gap-2 py-1">
               {['lattice', 'nebula', 'void'].map(wp => (
@@ -261,6 +313,43 @@ export default function SettingsApp({ notifEvents = [], onToggleEvent, onUpdateM
                 <span className="text-[10px] text-muted-foreground">Lock Screen</span>
                 <kbd className="px-1.5 py-0.5 rounded bg-muted text-[9px] text-foreground font-mono">Ctrl+L</kbd>
               </div>
+            </div>
+          </div>
+        );
+
+      case 'voice':
+        return (
+          <div className="space-y-1">
+            <SectionTitle>Voice Control</SectionTitle>
+            <p className="text-[10px] text-muted-foreground mb-3">
+              Control PRIME OS with your voice using the browser's built-in Speech Recognition. Works in Chrome and Edge.
+            </p>
+            <Toggle
+              label="Enable Voice Control"
+              value={localStorage.getItem('prime-os-voice-enabled') === 'true'}
+              onChange={v => {
+                localStorage.setItem('prime-os-voice-enabled', String(v));
+                window.dispatchEvent(new Event('storage'));
+              }}
+            />
+            <SectionTitle>Wake Words</SectionTitle>
+            <p className="text-[10px] text-muted-foreground">Say <span className="text-primary">"Prime"</span> or <span className="text-primary">"Computer"</span> before a command.</p>
+            <SectionTitle>Supported Commands</SectionTitle>
+            <div className="border border-border rounded overflow-hidden">
+              {[
+                ['"Open [app]"', 'Opens an application'],
+                ['"Close [app]"', 'Closes an application'],
+                ['"Lock screen"', 'Locks the OS'],
+                ['"Search"', 'Opens global search'],
+                ['"Switch workspace [1-4]"', 'Switches workspace'],
+                ['"Minimize"', 'Minimizes focused window'],
+                ['"Maximize"', 'Maximizes focused window'],
+              ].map(([cmd, desc]) => (
+                <div key={cmd} className="flex items-center justify-between px-2 py-1.5 border-b border-border/30 last:border-0">
+                  <span className="text-[10px] text-primary font-mono">{cmd}</span>
+                  <span className="text-[9px] text-muted-foreground">{desc}</span>
+                </div>
+              ))}
             </div>
           </div>
         );
