@@ -31,9 +31,14 @@ export default function Desktop() {
     setTimeout(() => openWindow('terminal', 'Prime Shell (psh)'), 300);
   }, [openWindow]);
 
+  const closeWindowByApp = useCallback((app: string) => {
+    const win = windows.find(w => w.app === app);
+    if (win) closeWindow(win.id);
+  }, [windows, closeWindow]);
+
   const renderApp = (app: AppType) => {
     switch (app) {
-      case 'terminal': return <TerminalApp />;
+      case 'terminal': return <TerminalApp onOpenApp={openWindow} onCloseApp={closeWindowByApp} />;
       case 'files': return <FilesApp />;
       case 'processes': return <ProcessesApp />;
       case 'sysinfo': return <SysInfoApp />;

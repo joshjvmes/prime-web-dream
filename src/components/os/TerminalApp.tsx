@@ -1,238 +1,215 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
+import { WELCOME, ALL_COMMANDS, type CommandContext } from './terminal/commands';
+import { executeWithPipesAndChains } from './terminal/pipes';
+import {
+  type TerminalMode, type ModeState, initialModeState, getPrompt,
+  enterQ3Train, handleQ3TrainInput,
+  enterDebug, generateDebugLine,
+  enterGeomcRepl, handleGeomcReplInput,
+  enterTrace, generateTraceLine,
+} from './terminal/modes';
 
-const WELCOME = [
-  'PRIME Shell (psh) v2.0.0',
-  'Geometric Computing Interface — Full Ecosystem',
-  'Type "help" for available commands.',
-  '',
-];
+interface TerminalAppProps {
+  onOpenApp?: (app: string, title: string) => void;
+  onCloseApp?: (id: string) => void;
+}
 
-const HELP_TEXT = [
-  'Available commands:',
-  '  help              — Show this help',
-  '  flow_to <tags>    — Navigate to semantic region',
-  '  fold_read <file>  — Read file from PFS',
-  '  qstat             — Show qutrit process states',
-  '  sysinfo           — Display system information',
-  '  prime_dist <a> <b>— Compute prime distance',
-  '  waltz <state>     — Apply Fibonacci Waltz',
-  '  q3 infer <data>   — Run Q3 inference engine',
-  '  netstat           — Show PrimeNet routing stats',
-  '  geomc <code>      — Compile with GeomC',
-  '  foldmem stats     — Show memory stats',
-  '  energy status     — Show energy harvesting status',
-  '  storage info      — Show Prime Storage capacity',
-  '  clear             — Clear terminal',
-  '  echo <text>       — Echo text',
-  '',
-];
-
-const SYSINFO = [
-  '┌─ PRIME OS System Information ─────────────┐',
-  '│ Kernel:    Qutrit Kernel (QK) v2.0         │',
-  '│ Arch:      T3-649 (649 qutrit cores)       │',
-  '│ Memory:    FoldMem 11D → 4D (Adinkra)      │',
-  '│ Scheduler: Fibonacci Waltz (FWS)           │',
-  '│ FileSystem: AFS (Semantic Prime FS)         │',
-  '│ Network:   PrimeNet Geometric Routing       │',
-  '│ Compiler:  GeomC (Geometric Folding)        │',
-  '│ ML Engine: Q3-Inference (Qutrit)            │',
-  '│ Storage:   Infinite Database (Folded)       │',
-  '│ Energy:    Over-Unity Harvesting (COP>1)    │',
-  '│ Logic:     Ternary (|0⟩, |1⟩, |2⟩)         │',
-  '│ Compress:  75% Adinkra folding ratio        │',
-  '└─────────────────────────────────────────────┘',
-  '',
-];
-
-export default function TerminalApp() {
+export default function TerminalApp({ onOpenApp, onCloseApp }: TerminalAppProps) {
   const [lines, setLines] = useState<string[]>([...WELCOME]);
   const [input, setInput] = useState('');
   const [history, setHistory] = useState<string[]>([]);
   const [histIdx, setHistIdx] = useState(-1);
+  const [envVars, setEnvVars] = useState<Record<string, string>>({});
+  const [modeState, setModeState] = useState<ModeState>({ ...initialModeState });
+  const [outputQueue, setOutputQueue] = useState<string[]>([]);
+  const [isStreaming, setIsStreaming] = useState(false);
+  const [tabSuggestions, setTabSuggestions] = useState<string[] | null>(null);
+
   const endRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  // Auto-scroll
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [lines]);
+  }, [lines, tabSuggestions]);
 
-  const processCommand = useCallback((cmd: string) => {
-    const parts = cmd.trim().split(/\s+/);
-    const command = parts[0]?.toLowerCase();
-    const args = parts.slice(1).join(' ');
+  // Typewriter output queue
+  useEffect(() => {
+    if (outputQueue.length === 0) {
+      if (isStreaming) setIsStreaming(false);
+      return;
+    }
+    setIsStreaming(true);
+    const timer = setTimeout(() => {
+      setLines(prev => [...prev, outputQueue[0]]);
+      setOutputQueue(prev => prev.slice(1));
+    }, 30);
+    return () => clearTimeout(timer);
+  }, [outputQueue, isStreaming]);
 
-    // Handle two-word commands
-    const twoWord = `${parts[0]?.toLowerCase()} ${parts[1]?.toLowerCase()}`;
+  // Cleanup streaming intervals on unmount
+  useEffect(() => {
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+    };
+  }, []);
 
-    switch (command) {
-      case 'help':
-        return HELP_TEXT;
-      case 'clear':
-        setLines([]);
-        return null;
-      case 'sysinfo':
-        return SYSINFO;
-      case 'echo':
-        return [args || ''];
-      case 'qstat':
-        return [
-          'QUTRIT PROCESS TABLE',
-          '─────────────────────────────────────────────',
-          'COORD          STATE    NAME           CPU',
-          '⟨2,3,5,...⟩    |1⟩ ◈    qk-scheduler   12%',
-          '⟨7,11,13,...⟩  |1⟩ ◈    pfs-daemon      4%',
-          '⟨17,19,23,...⟩ |2⟩ ◇    net-flow        0%',
-          '⟨29,31,37,...⟩ |0⟩ ◆    gc-evaporator   1%',
-          '⟨41,43,47,...⟩ |1⟩ ◈    gfo-handler     8%',
-          '⟨53,59,61,...⟩ |1⟩ ◈    q3-engine       6%',
-          '⟨67,71,73,...⟩ |2⟩ ◇    energy-harv     3%',
-          '',
-          'States: |0⟩=Past ◆  |1⟩=Present ◈  |2⟩=Future ◇',
-          '',
-        ];
-      case 'flow_to':
-        if (!args) return ['Usage: flow_to <semantic,tags>'];
-        return [
-          `▸ Computing prime coordinate for ⟨${args}⟩...`,
-          `▸ Geodesic found: 3 hops via prime lattice`,
-          `▸ Flowed to region: ${args}`,
-          '',
-        ];
-      case 'fold_read':
-        if (!args) return ['Usage: fold_read <file_tags>'];
-        return [
-          `▸ Resolving semantic coordinate ⟨${args}⟩...`,
-          `▸ Unfolding data from 11D → 4D...`,
-          `▸ Content (${Math.floor(Math.random() * 1000 + 100)} qutrits):`,
-          `  [geometric data stream — rendered in Prime C format]`,
-          '',
-        ];
-      case 'prime_dist':
-        return [
-          `▸ d(A, B) = ${(Math.random() * 100).toFixed(3)} prime units`,
-          `▸ Geodesic hops: ${Math.floor(Math.random() * 5 + 1)}`,
-          '',
-        ];
-      case 'waltz': {
-        const st = parseInt(parts[1]) || 0;
-        const next = (2 * 1 - st) % 3;
-        return [
-          `▸ Current state: |${st}⟩`,
-          `▸ Fibonacci Waltz: |ψ_next⟩ = 2·|ψ_curr⟩ − |ψ_prev⟩ (mod 3)`,
-          `▸ Next state: |${Math.abs(next)}⟩`,
-          '',
-        ];
+  // Start/stop streaming intervals for debug and trace modes
+  useEffect(() => {
+    if (modeState.mode === 'debug') {
+      intervalRef.current = setInterval(() => {
+        setLines(prev => [...prev, generateDebugLine(modeState.debugProcess)]);
+      }, 800);
+    } else if (modeState.mode === 'trace') {
+      intervalRef.current = setInterval(() => {
+        setLines(prev => [...prev, generateTraceLine()]);
+      }, 500);
+    } else {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
       }
-      case 'q3':
-        if (parts[1] === 'infer') {
-          const data = parts.slice(2).join(' ') || '42,17,89';
-          return [
-            `▸ Q3 Inference Engine v1.0`,
-            `▸ Input: [${data}]`,
-            `▸ Encoding to qutrits: ${data.split(',').map(v => `|${parseInt(v)%3}⟩`).join(' ')}`,
-            `▸ Mapping to 11D prime coordinates...`,
-            `▸ Flowing to attractor...`,
-            `▸ Classification: Geometric (confidence: ${(94 + Math.random()*5).toFixed(1)}%)`,
-            `▸ Time: ${(480 + Math.random()*50).toFixed(0)}μs | Ops: 3 (vs 9,664 FLOPs)`,
-            `▸ Energy reduction: 3,221×`,
-            '',
-          ];
-        }
-        return ['Usage: q3 infer <data>'];
-      case 'netstat':
-        return [
-          '┌─ PrimeNet Status ─────────────────────────┐',
-          '│ Routing:    O(1) Geodesic                  │',
-          '│ Nodes:      6 active                       │',
-          `│ Throughput: ${Math.floor(100 + Math.random()*200)} packets/s           │`,
-          '│ Decision↓:  99% vs Dijkstra                │',
-          '│ Speedup:    3.4× routing, 2.1× throughput  │',
-          '│ Latency:    0.3ms avg geodesic              │',
-          '└─────────────────────────────────────────────┘',
-          '',
-        ];
-      case 'geomc': {
-        const src = args || 'a = 2 + 3';
-        return [
-          `▸ GeomC Compiler v1.0`,
-          `▸ Source: ${src}`,
-          `▸ Phase: Parse → 11D Map → Fold → Emit`,
-          `▸ Output: ${src.includes('+') ? src.replace(/(\d+)\s*\+\s*(\d+)/, (_, a, b) => String(Number(a)+Number(b))) : 'geometric_fold(...)'}`,
-          `▸ Compile time: ${(3 + Math.random()*7).toFixed(1)}ms`,
-          `▸ Energy saved: 67%`,
-          '',
-        ];
+    }
+    return () => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
       }
-      case 'foldmem':
-        if (parts[1] === 'stats') {
-          return [
-            '┌─ FoldMem Statistics ───────────────────────┐',
-            '│ Alloc time:     388μs                      │',
-            '│ Free time:      22μs                       │',
-            '│ Fragmentation:  0% (after compact)         │',
-            '│ vs malloc:      12× faster                 │',
-            '│ vs jemalloc:    8× faster                  │',
-            '│ Mapping:        11D folded space            │',
-            '└─────────────────────────────────────────────┘',
-            '',
-          ];
-        }
-        return ['Usage: foldmem stats'];
-      case 'energy':
-        if (parts[1] === 'status') {
-          const cop = (3.0 + Math.random() * 0.4).toFixed(2);
-          return [
-            '┌─ Energy Harvesting Status ─────────────────┐',
-            `│ COP:          ${cop} (OVER-UNITY)            │`,
-            '│ Mode:         Satellite                     │',
-            '│ Input:        100W                          │',
-            `│ Output:       ${Math.round(100 * parseFloat(cop))}W                         │`,
-            '│ Coupling:     11D dimensional               │',
-            '│ Efficiency:   92% geometric                 │',
-            '│ Carnot limit: 42% (exceeded)                │',
-            '└─────────────────────────────────────────────┘',
-            '',
-          ];
-        }
-        return ['Usage: energy status'];
-      case 'storage':
-        if (parts[1] === 'info') {
-          return [
-            '┌─ Prime Storage (Infinite Database) ────────┐',
-            '│ Compression:   75% (Adinkra folding)        │',
-            '│ Capacity:      223.8 TB (folded)             │',
-            '│ Retrieval:     O(1) geometric lookup         │',
-            '│ Regions:       5 active manifolds            │',
-            '│ Encoding:      11D → 4D Adinkra              │',
-            '│ Redundancy:    Holographic (any 4D slice)     │',
-            '└─────────────────────────────────────────────┘',
-            '',
-          ];
-        }
-        return ['Usage: storage info'];
-      default:
-        if (!command) return null;
-        return [`psh: command not found: ${command}`, 'Type "help" for available commands.', ''];
+    };
+  }, [modeState.mode, modeState.debugProcess]);
+
+  const ctx: CommandContext = {
+    envVars,
+    setEnvVars,
+    onOpenApp,
+    onCloseApp,
+  };
+
+  const enterMode = useCallback((rawCmd: string) => {
+    const parts = rawCmd.trim().split(/\s+/);
+    const cmd = parts[0]?.toLowerCase();
+
+    if (cmd === 'q3' && parts[1] === 'train') {
+      const r = enterQ3Train();
+      setOutputQueue(r.lines);
+      setModeState(prev => ({ ...prev, ...r.state }));
+    } else if (cmd === 'psh' && parts[1] === 'debug') {
+      const r = enterDebug(parts.slice(2).join(' '));
+      setOutputQueue(r.lines);
+      setModeState(prev => ({ ...prev, ...r.state }));
+    } else if (cmd === 'geomc' && parts[1] === 'repl') {
+      const r = enterGeomcRepl();
+      setOutputQueue(r.lines);
+      setModeState(prev => ({ ...prev, ...r.state }));
+    } else if (cmd === 'primenet' && parts[1] === 'trace') {
+      const r = enterTrace();
+      setOutputQueue(r.lines);
+      setModeState(prev => ({ ...prev, ...r.state }));
     }
   }, []);
 
-  const handleSubmit = () => {
+  const handleModeInput = useCallback((cmd: string) => {
+    const prompt = getPrompt(modeState.mode);
+    setLines(prev => [...prev, `${prompt} ${cmd}`]);
+
+    switch (modeState.mode) {
+      case 'q3-train': {
+        const r = handleQ3TrainInput(cmd, modeState);
+        setOutputQueue(r.lines);
+        setModeState(prev => ({ ...prev, ...r.state }));
+        break;
+      }
+      case 'debug': {
+        if (cmd.toLowerCase() === 'detach') {
+          setModeState(prev => ({ ...prev, mode: 'normal' }));
+          setLines(prev => [...prev, '▸ Detached.', '']);
+        }
+        break;
+      }
+      case 'geomc-repl': {
+        const r = handleGeomcReplInput(cmd, modeState.replVars);
+        setOutputQueue(r.lines);
+        if (r.exit) {
+          setModeState(prev => ({ ...prev, mode: 'normal' }));
+        } else {
+          setModeState(prev => ({ ...prev, replVars: r.vars }));
+        }
+        break;
+      }
+      case 'trace': {
+        if (cmd.toLowerCase() === 'stop') {
+          setModeState(prev => ({ ...prev, mode: 'normal' }));
+          setLines(prev => [...prev, '▸ Trace stopped.', '']);
+        }
+        break;
+      }
+    }
+  }, [modeState]);
+
+  const handleSubmit = useCallback(() => {
     const cmd = input.trim();
+    setTabSuggestions(null);
+
     if (!cmd) {
-      setLines(prev => [...prev, 'psh ▸ ', '']);
+      setLines(prev => [...prev, `${getPrompt(modeState.mode)} `, '']);
+      setInput('');
       return;
     }
+
     setHistory(prev => [cmd, ...prev]);
     setHistIdx(-1);
-    const output = processCommand(cmd);
-    if (output !== null) {
-      setLines(prev => [...prev, `psh ▸ ${cmd}`, ...output]);
+
+    if (modeState.mode !== 'normal') {
+      handleModeInput(cmd);
+      setInput('');
+      return;
     }
+
+    // Normal mode
+    setLines(prev => [...prev, `psh ▸ ${cmd}`]);
+    const result = executeWithPipesAndChains(cmd, ctx);
+
+    if (result.clear) {
+      setLines([]);
+    }
+
+    if (result.enterMode) {
+      enterMode(result.enterMode);
+    }
+
+    if (result.output.length > 0) {
+      // Use typewriter for longer outputs
+      if (result.output.length > 4) {
+        setOutputQueue(result.output);
+      } else {
+        setLines(prev => [...prev, ...result.output]);
+      }
+    }
+
     setInput('');
-  };
+  }, [input, modeState, ctx, handleModeInput, enterMode]);
+
+  const handleTab = useCallback(() => {
+    if (modeState.mode !== 'normal') return;
+    const val = input.trim().toLowerCase();
+    if (!val) return;
+
+    const matches = ALL_COMMANDS.filter(c => c.startsWith(val));
+    if (matches.length === 1) {
+      setInput(matches[0] + ' ');
+      setTabSuggestions(null);
+    } else if (matches.length > 1) {
+      setTabSuggestions(matches);
+    }
+  }, [input, modeState.mode]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Tab') {
+      e.preventDefault();
+      handleTab();
+      return;
+    }
     if (e.key === 'Enter') {
       handleSubmit();
     } else if (e.key === 'ArrowUp') {
@@ -251,8 +228,12 @@ export default function TerminalApp() {
         setHistIdx(-1);
         setInput('');
       }
+    } else {
+      setTabSuggestions(null);
     }
   };
+
+  const prompt = getPrompt(modeState.mode);
 
   return (
     <div
@@ -263,20 +244,29 @@ export default function TerminalApp() {
         <div
           key={i}
           className={
-            line.startsWith('psh ▸')
+            line.startsWith('psh ▸') || line.startsWith('q3-train ▸') || line.startsWith('debug ▸') || line.startsWith('geomc ▸') || line.startsWith('trace ▸')
               ? 'text-primary'
-              : line.startsWith('▸')
+              : line.startsWith('▸') || line.startsWith('═')
               ? 'text-prime-cyan'
               : line.startsWith('┌') || line.startsWith('│') || line.startsWith('└') || line.startsWith('─')
               ? 'text-prime-amber'
+              : line.includes('✓')
+              ? 'text-green-400'
+              : line.includes('✗')
+              ? 'text-red-400'
               : 'text-card-foreground'
           }
         >
           {line || '\u00A0'}
         </div>
       ))}
+      {tabSuggestions && (
+        <div className="text-muted-foreground">
+          {tabSuggestions.join('  ')}
+        </div>
+      )}
       <div className="flex items-center">
-        <span className="text-primary mr-1">psh ▸</span>
+        <span className="text-primary mr-1">{prompt}</span>
         <input
           ref={inputRef}
           value={input}
@@ -285,6 +275,7 @@ export default function TerminalApp() {
           className="flex-1 bg-transparent outline-none text-foreground caret-primary"
           autoFocus
           spellCheck={false}
+          disabled={isStreaming}
         />
       </div>
       <div ref={endRef} />
