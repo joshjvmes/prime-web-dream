@@ -1,7 +1,7 @@
 import Desktop from '@/components/os/Desktop';
 
-const Index = () => {
+const OSPage = () => {
   return <Desktop />;
 };
 
-export default Index;
+export default OSPage;
