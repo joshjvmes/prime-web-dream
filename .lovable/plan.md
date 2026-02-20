@@ -1,118 +1,139 @@
 
 
-# Browser, Arcade, and Canvas Upgrades
+# Intranet CMS, Journal App, and Image Support
 
 ## Overview
 
-Four upgrades across three apps: add user bookmarks and browsing history to the browser, expand the arcade with new physics-based games, and enable PNG/SVG export from the canvas app.
+Transform the private intranet (`httpsp://`) from hardcoded pages into a dynamic, user-authored content system. Add a Journal app for blog-style writing. Connect PrimeDocs so documents can be published directly to the intranet. Support embedded images in all intranet content.
 
 ---
 
-## 1. Browser -- Bookmarks Manager + History Panel
+## 1. Shared Intranet Page Store
 
-### Current State
-- Hardcoded bookmark bar (10 entries, not editable)
-- No browsing history UI (history exists per-tab in memory but no panel to browse it)
+All user-created intranet content (pages, blog posts) will be stored via `useCloudStorage` under the key `intranet-pages`. Each page is a simple object:
 
-### Upgrades
+```text
+{
+  slug: string        // URL path after httpsp://pages/
+  title: string
+  content: string     // Markdown with image support
+  author: string
+  category: "page" | "blog"
+  coverImage?: string // URL to image in user-files bucket
+  publishedAt: string
+  updatedAt: string
+}
+```
 
-**User Bookmarks**
-- "Add Bookmark" button (star icon in address bar) saves the current page
-- Bookmarks persisted via `useCloudStorage` under key `browser-bookmarks`
-- Bookmarks bar shows user bookmarks alongside defaults
-- Right-click or hover-X to remove a bookmark
-- Default bookmarks remain as fallback for new users
+The browser will dynamically resolve any `httpsp://pages/{slug}` URL by looking up the slug in this store and rendering the markdown content. The existing hardcoded pages (wiki, research, handbook, changelog, status) remain untouched.
 
-**History Panel**
-- Clock icon in the toolbar toggles a history sidebar
-- Shows all visited URLs with timestamps, grouped by session
-- Click any entry to navigate to it
-- "Clear History" button
-- History persisted via `useCloudStorage` under key `browser-history`
-- Capped at 200 entries (oldest pruned automatically)
+---
 
-### File Changed
+## 2. Intranet Hub Page (`httpsp://hub`)
+
+A new landing page for user-created content. Shows:
+- **Blog posts** section: latest journal entries sorted by date, with title, author, date, and optional cover image
+- **Pages** section: all user-published pages in a grid/list
+- Search bar to filter across all user content
+- Links to each piece of content via `httpsp://pages/{slug}`
+
+This becomes a new default bookmark in the browser.
+
+---
+
+## 3. PrimeDocs: "Publish to Intranet" Button
+
+Add a "Publish" button to the PrimeDocs toolbar (next to Export/Copy). When clicked:
+- Prompts for a URL slug (auto-generated from title, editable)
+- Saves the document's markdown content as an intranet page with `category: "page"`
+- The page immediately becomes accessible at `httpsp://pages/{slug}`
+- If a page with that slug already exists, it updates it
+- Shows a confirmation with the intranet URL
+
+---
+
+## 4. Journal App (New App)
+
+A new app called **PrimeJournal** -- a focused blog/journal writing tool.
+
+**Features:**
+- Chronological list of journal entries in a sidebar
+- Markdown editor with live preview (reuses the same `renderMarkdown` function from PrimeDocs)
+- Each entry has: title, content (markdown), date, tags
+- "Publish to Intranet" button that pushes the entry as a blog post (`category: "blog"`) to the shared intranet store
+- Draft/Published status indicator
+- Cover image support: upload an image via the `user-files` bucket, reference it in the entry
+
+**Data storage:** Journal entries stored via `useCloudStorage` under key `journal-entries`.
+
+---
+
+## 5. Image Support in Markdown and Intranet
+
+**Markdown renderer upgrade:**
+- Add `![alt](url)` image syntax support to the existing `renderMarkdown` function in PrimeDocs
+- Images render as `<img>` tags with appropriate styling (max-width, rounded corners)
+- Support both external URLs (`https://...`) and internal storage URLs
+
+**Image upload in editors:**
+- Add an "Insert Image" button to PrimeDocs and PrimeJournal toolbars
+- Opens a file picker for PNG/SVG/JPG
+- Uploads the file to the `user-files` bucket under `{userId}/intranet/`
+- Generates a public URL and inserts `![filename](url)` at the cursor position
+- For non-authenticated users, falls back to external URL input
+
+**Intranet page rendering:**
+- The dynamic page renderer in the browser handles images naturally since it uses the same markdown renderer
+
+---
+
+## 6. Intranet Web Editor
+
+Add an "Edit Page" button on intranet pages (only for the page author). Clicking it opens an inline markdown editor directly in the browser, allowing quick edits without switching to PrimeDocs. Changes save back to the `intranet-pages` store.
+
+Also add a "New Page" option accessible from `httpsp://hub` that opens a simple create form (title, slug, markdown content, optional cover image).
+
+---
+
+## Technical Details
+
+### Files Changed
+
 | File | Action |
 |------|--------|
-| `src/components/os/PrimeBrowserApp.tsx` | Add bookmark management, history sidebar, cloud persistence |
+| `src/types/os.ts` | Add `'journal'` to the `AppType` union |
+| `src/components/os/PrimeJournalApp.tsx` | New file -- Journal app with markdown editor, entry management, publish-to-intranet |
+| `src/components/os/PrimeDocsApp.tsx` | Add "Publish to Intranet" button, image insert button, upgrade `renderMarkdown` for images |
+| `src/components/os/browser/IntranetPages.tsx` | Add `HubPage`, `DynamicPage`, `IntranetEditor` components for user content |
+| `src/components/os/PrimeBrowserApp.tsx` | Add `httpsp://hub` and `httpsp://pages/*` routing, register hub in bookmarks/titles |
+| `src/components/os/Desktop.tsx` | Register Journal app in the window renderer |
+| `src/components/os/Taskbar.tsx` | Add Journal to the app menu |
+| `src/components/os/DesktopIcons.tsx` | Add Journal desktop icon |
+| `src/hooks/useIntranetPages.ts` | New shared hook for reading/writing intranet pages from cloud storage |
 
----
+### Shared Hook: useIntranetPages
 
-## 2. Arcade -- New Physics-Based Games
+A custom hook that wraps `useCloudStorage` for the `intranet-pages` key. Used by PrimeDocs (publish), PrimeJournal (publish), and IntranetPages (read/render). Provides:
+- `pages`: all intranet pages
+- `publishPage(page)`: create or update a page
+- `deletePage(slug)`: remove a page
+- `getPage(slug)`: find a single page
 
-### Current State
-- 2 games: Lattice Minesweeper and Qutrit Snake
-- Both use canvas rendering and support high scores
+### Image Upload Flow
 
-### New Games
+1. User clicks "Insert Image" in the toolbar
+2. File picker opens (accepts `.png`, `.jpg`, `.svg`, `.webp`)
+3. File is uploaded to the `user-files` bucket at path `{userId}/intranet/{timestamp}-{filename}`
+4. A signed/public URL is generated
+5. Markdown image syntax is inserted at cursor: `![filename](url)`
 
-**Graviton Pong**
-- Classic pong with a twist: a gravity well in the center pulls the ball
-- Single-player vs AI opponent
-- Ball trajectory curves around the central mass
-- Score tracking and speed escalation
-- Canvas-based rendering with requestAnimationFrame
+### Browser Routing Changes
 
-**Particle Cascade (Breakout variant)**
-- Breakout-style game where bricks shatter into particle effects
-- Paddle at bottom, ball bounces off bricks
-- Bricks have different "element" types (3 colors matching qutrit states)
-- Particles fly off destroyed bricks with simple physics (gravity + fade)
-- Power-ups: wider paddle, multi-ball, slow motion
-- Level progression (more bricks, faster ball)
+The `renderInternalPage` function gains a new pattern:
+- `httpsp://hub` renders the `HubPage` component
+- `httpsp://pages/{slug}` renders the `DynamicPage` component, which loads the page from the intranet store and renders its markdown
 
-**Topology Tetris**
-- Classic tetris with standard piece rotation and movement
-- Themed as "manifold assembly" -- pieces are geometric manifold fragments
-- Standard scoring: points for lines cleared, bonus for multi-line clears
-- Speed increases with level
-- Ghost piece preview showing where the piece will land
-- Next piece preview
+### No Database Changes Required
 
-All three games include high-score persistence via localStorage (matching existing pattern).
-
-### File Changed
-| File | Action |
-|------|--------|
-| `src/components/os/PrimeArcadeApp.tsx` | Add 3 new game components and tabs |
-
----
-
-## 3. Canvas -- PNG and SVG Export
-
-### Current State
-- Drawing works (pencil, line, rect, circle, eraser)
-- Undo/redo, color palette, brush size
-- No export functionality
-
-### Upgrades
-
-**Export PNG**
-- "Export PNG" button in the toolbar
-- Uses `canvas.toDataURL('image/png')` to generate the image
-- Triggers a download with filename `prime-canvas-{timestamp}.png`
-
-**Export SVG**
-- "Export SVG" button in the toolbar
-- Converts the current canvas content to an SVG by embedding the canvas as a base64 image inside an SVG wrapper
-- This preserves all drawn content exactly as-is
-- Downloads as `prime-canvas-{timestamp}.svg`
-
-**Clear Canvas**
-- Add a "Clear" button to reset the canvas to blank (with confirmation)
-
-### File Changed
-| File | Action |
-|------|--------|
-| `src/components/os/PrimeCanvasApp.tsx` | Add export buttons, clear canvas, download logic |
-
----
-
-## Technical Notes
-
-- **Browser bookmarks format**: `{ label: string, url: string, addedAt: string }[]` stored under `browser-bookmarks` key
-- **Browser history format**: `{ url: string, title: string, visitedAt: string }[]` stored under `browser-history` key, max 200 entries
-- **Arcade games**: All canvas-based using requestAnimationFrame loops, matching the existing Snake pattern. No external physics libraries -- simple velocity/acceleration math.
-- **Canvas export**: PNG export is native via `canvas.toDataURL()`. SVG export wraps the rasterized canvas in an SVG `<image>` element so the output is a valid SVG file that can be opened in any vector editor.
-- **No database changes** needed -- all persistence uses existing `useCloudStorage` hook or localStorage.
+All data uses the existing `useCloudStorage` / `user_data` table and `user-files` storage bucket. No new tables or migrations needed.
 
