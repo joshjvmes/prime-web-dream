@@ -94,6 +94,10 @@ const APP_MAP: Record<string, { app: string; title: string }> = {
   storage: { app: 'storage', title: 'Prime Storage' },
   energy: { app: 'energy', title: 'Energy Monitor' },
   settings: { app: 'settings', title: 'Settings' },
+  monitor: { app: 'monitor', title: 'System Monitor' },
+  editor: { app: 'editor', title: 'PrimeEdit' },
+  chat: { app: 'chat', title: 'PrimeChat' },
+  security: { app: 'security', title: 'Lattice Shield' },
 };
 
 // Boot timestamp for uptime

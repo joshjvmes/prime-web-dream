@@ -16,6 +16,10 @@ import FoldMemApp from '@/components/os/FoldMemApp';
 import PrimeStorageApp from '@/components/os/PrimeStorageApp';
 import EnergyMonitorApp from '@/components/os/EnergyMonitorApp';
 import SettingsApp from '@/components/os/SettingsApp';
+import SystemMonitorApp from '@/components/os/SystemMonitorApp';
+import TextEditorApp from '@/components/os/TextEditorApp';
+import PrimeChatApp from '@/components/os/PrimeChatApp';
+import SecurityConsoleApp from '@/components/os/SecurityConsoleApp';
 import DesktopContextMenu from '@/components/os/DesktopContextMenu';
 import NotificationSystem from '@/components/os/NotificationSystem';
 import { AppType } from '@/types/os';
@@ -48,6 +52,10 @@ export default function Desktop() {
       case 'storage': return <PrimeStorageApp />;
       case 'energy': return <EnergyMonitorApp />;
       case 'settings': return <SettingsApp notifEvents={events} onToggleEvent={toggleEvent} onUpdateMessage={updateEventMessage} onAddEvent={addEvent} onRemoveEvent={removeEvent} />;
+      case 'monitor': return <SystemMonitorApp />;
+      case 'editor': return <TextEditorApp />;
+      case 'chat': return <PrimeChatApp />;
+      case 'security': return <SecurityConsoleApp />;
       default: return <div className="p-4 text-muted-foreground font-mono text-xs">App not found</div>;
     }
   };
