@@ -1,4 +1,4 @@
-import { Terminal, FolderTree, Activity, Cpu, Brain, Network, Code, HardDrive, Database, Zap, Settings, Globe, Server, LayoutList, Image, Link2, Orbit, CalendarDays } from 'lucide-react';
+import { Terminal, FolderTree, Activity, Cpu, Brain, Network, Code, HardDrive, Database, Zap, Settings, Globe, Server, LayoutList, Image, Link2, Orbit, CalendarDays, BookOpen, Table, Workflow, Paintbrush, Smartphone, Map, Package, Music } from 'lucide-react';
 import { AppType } from '@/types/os';
 
 interface DesktopIconsProps {
@@ -24,6 +24,14 @@ const icons: { app: AppType; title: string; icon: React.ReactNode; label: string
   { app: 'cloudhooks', title: 'Cloud Hooks', icon: <Link2 size={28} />, label: 'Cloud Hooks' },
   { app: 'hypersphere', title: 'Hyper AI', icon: <Orbit size={28} />, label: 'Hyper AI' },
   { app: 'calendar', title: 'Prime Calendar', icon: <CalendarDays size={28} />, label: 'Calendar' },
+  { app: 'docs', title: 'PrimeDocs', icon: <BookOpen size={28} />, label: 'Docs' },
+  { app: 'spreadsheet', title: 'PrimeGrid', icon: <Table size={28} />, label: 'Spreadsheet' },
+  { app: 'schemaforge', title: 'SchemaForge', icon: <Workflow size={28} />, label: 'SchemaForge' },
+  { app: 'canvas', title: 'PrimeCanvas', icon: <Paintbrush size={28} />, label: 'Canvas' },
+  { app: 'comm', title: 'PrimeComm', icon: <Smartphone size={28} />, label: 'PrimeComm' },
+  { app: 'maps', title: 'PrimeMaps', icon: <Map size={28} />, label: 'Maps' },
+  { app: 'pkg', title: 'PrimePkg', icon: <Package size={28} />, label: 'Packages' },
+  { app: 'audio', title: 'PrimeAudio', icon: <Music size={28} />, label: 'Audio' },
 ];
 
 export default function DesktopIcons({ onOpenApp }: DesktopIconsProps) {

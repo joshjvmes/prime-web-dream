@@ -107,6 +107,18 @@ const APP_MAP: Record<string, { app: string; title: string }> = {
   hypersphere: { app: 'hypersphere', title: 'Hyper AI' },
   hyper: { app: 'hypersphere', title: 'Hyper AI' },
   calendar: { app: 'calendar', title: 'Prime Calendar' },
+  docs: { app: 'docs', title: 'PrimeDocs' },
+  spreadsheet: { app: 'spreadsheet', title: 'PrimeGrid' },
+  grid: { app: 'spreadsheet', title: 'PrimeGrid' },
+  schemaforge: { app: 'schemaforge', title: 'SchemaForge' },
+  schema: { app: 'schemaforge', title: 'SchemaForge' },
+  canvas: { app: 'canvas', title: 'PrimeCanvas' },
+  comm: { app: 'comm', title: 'PrimeComm' },
+  phone: { app: 'comm', title: 'PrimeComm' },
+  maps: { app: 'maps', title: 'PrimeMaps' },
+  pkg: { app: 'pkg', title: 'PrimePkg' },
+  audio: { app: 'audio', title: 'PrimeAudio' },
+  music: { app: 'audio', title: 'PrimeAudio' },
 };
 
 // Boot timestamp for uptime
