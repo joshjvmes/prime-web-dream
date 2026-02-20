@@ -1,6 +1,32 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
-import { Bomb, RotateCcw, Trophy, Play } from 'lucide-react';
+import { Bomb, RotateCcw, Trophy, Play, Coins } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
+
+async function claimArcadeReward(game: string, amount: number) {
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) return;
+    const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/prime-bank?action=arcade-reward`;
+    await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${session.access_token}`,
+        'Content-Type': 'application/json',
+        'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+      },
+      body: JSON.stringify({ game, amount, session_id: `${game}-${Date.now()}` }),
+    });
+  } catch {}
+}
+
+function RewardBadge({ amount }: { amount: number }) {
+  return (
+    <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-400 text-[8px] font-mono ml-1">
+      <Coins size={8} /> +{amount} OS
+    </span>
+  );
+}
 
 // ─── Lattice Minesweeper ───
 type CellState = { mine: boolean; revealed: boolean; flagged: boolean; adjacent: number };
@@ -84,7 +110,10 @@ function LatticeMinesweeper() {
     }
     setBoard(newBoard);
     const unrevealed = newBoard.flat().filter(c => !c.revealed && !c.mine).length;
-    if (unrevealed === 0) setWon(true);
+    if (unrevealed === 0) {
+      setWon(true);
+      claimArcadeReward('minesweeper', [500, 1500, 5000][diff]);
+    }
   };
 
   const flag = (e: React.MouseEvent, r: number, c: number) => {
@@ -120,6 +149,7 @@ function LatticeMinesweeper() {
       {(gameOver || won) && (
         <div className={`text-[10px] font-display tracking-wider uppercase ${won ? 'text-prime-green' : 'text-prime-red'}`}>
           {won ? '✦ Lattice stabilized — singularities contained ✦' : '✦ Singularity breach — lattice collapsed ✦'}
+          {won && <RewardBadge amount={[500, 1500, 5000][diff]} />}
         </div>
       )}
       <div className="inline-grid gap-px" style={{ gridTemplateColumns: `repeat(${size}, minmax(0, 1fr))` }}>
@@ -230,7 +260,9 @@ function QutritSnake() {
 
       gs.snake.unshift(head);
       if (head.x === gs.food.x && head.y === gs.food.y) {
-        setScore(s => s + (gs.foodState + 1) * 10);
+        const pts = (gs.foodState + 1) * 10;
+        setScore(s => s + pts);
+        claimArcadeReward('snake', pts);
         gs.food = spawnFood(gs.snake);
         gs.foodState = Math.floor(Math.random() * 3);
         gs.speed = Math.max(60, gs.speed - 3);
@@ -397,7 +429,7 @@ function GravitonPong() {
       if (g.ball.x > W) {
         setScore(s => {
           const ns = { ...s, player: s.player + 1 };
-          if (ns.player >= 5) { g.running = false; setPlaying(false); setGameOver(true); }
+          if (ns.player >= 5) { g.running = false; setPlaying(false); setGameOver(true); claimArcadeReward('pong', 200); }
           return ns;
         });
         g.ball = { x: W / 2, y: H / 2, vx: -3, vy: 2 * (Math.random() > 0.5 ? 1 : -1) };
@@ -603,6 +635,7 @@ function ParticleCascade() {
 
       // Check level complete
       if (g.bricks.every(b => !b.alive)) {
+        claimArcadeReward('cascade', 300);
         setLevel(l => {
           const nl = l + 1;
           g.bricks = buildBricks(nl);
@@ -815,6 +848,7 @@ function TopologyTetris() {
       if (cleared > 0) {
         const pts = [0, 100, 300, 500, 800][cleared] || 800;
         setScore(s => s + pts * level);
+        claimArcadeReward('tetris', cleared * 100);
         setLines(l => {
           const nl = l + cleared;
           setLevel(Math.floor(nl / 10) + 1);

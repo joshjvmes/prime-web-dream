@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Wallet, Send, ArrowLeftRight, Shield, History, Trophy, RefreshCw, Search } from 'lucide-react';
+import { Wallet, Send, ArrowLeftRight, Shield, History, Trophy, RefreshCw, Search, ShoppingBag } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { supabase } from '@/integrations/supabase/client';
+import { useCloudStorage } from '@/hooks/useCloudStorage';
 
 const EXCHANGE_RATE = 2_000_000;
 
@@ -27,7 +28,17 @@ async function bankAction(action: string, body?: object) {
   return data;
 }
 
-type Tab = 'overview' | 'send' | 'exchange' | 'escrow' | 'history' | 'leaderboard';
+export { bankAction };
+
+type Tab = 'overview' | 'send' | 'exchange' | 'escrow' | 'history' | 'leaderboard' | 'shop';
+
+const SHOP_ITEMS = [
+  { id: 'dark_neon_theme', name: 'Dark Neon Theme', cost: 10000, desc: 'Unlock a neon color scheme for the OS', icon: '🌈' },
+  { id: 'extra_workspace', name: 'Extra Workspace', cost: 25000, desc: 'Adds a 5th workspace slot', icon: '🖥️' },
+  { id: 'ai_priority', name: 'AI Priority', cost: 50000, desc: 'Faster AI responses', icon: '⚡' },
+  { id: 'custom_widget', name: 'Custom Widget', cost: 15000, desc: 'Unlock custom widget placement', icon: '🧩' },
+  { id: 'geomq_pro', name: 'GeomQ Pro Toolkit', cost: 30000, desc: 'Advanced GeomQ gate operations', icon: '🔬' },
+];
 
 export default function PrimeWalletApp() {
   const [tab, setTab] = useState<Tab>('overview');
@@ -35,6 +46,7 @@ export default function PrimeWalletApp() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const { save, load } = useCloudStorage();
 
   // Send state
   const [sendSearch, setSendSearch] = useState('');
@@ -62,6 +74,10 @@ export default function PrimeWalletApp() {
   const [escrowToken, setEscrowToken] = useState<'OS' | 'IX'>('OS');
   const [escrowDesc, setEscrowDesc] = useState('');
 
+  // Shop
+  const [unlocks, setUnlocks] = useState<string[]>([]);
+  const [purchasing, setPurchasing] = useState('');
+
   const loadWallet = useCallback(async () => {
     try {
       setLoading(true);
@@ -75,6 +91,10 @@ export default function PrimeWalletApp() {
   }, []);
 
   useEffect(() => { loadWallet(); }, [loadWallet]);
+
+  useEffect(() => {
+    load<string[]>('user-unlocks', []).then(u => setUnlocks(u || []));
+  }, [load]);
 
   const searchUsers = async (q: string) => {
     setSendSearch(q);
@@ -121,7 +141,7 @@ export default function PrimeWalletApp() {
   };
 
   const loadEscrows = async () => {
-    const { data } = await supabase.from('escrow_deals' as any).select('*').order('created_at', { ascending: false });
+    const { data } = await supabase.from('escrow_deals').select('*').order('created_at', { ascending: false });
     setEscrows(data || []);
   };
 
@@ -143,6 +163,21 @@ export default function PrimeWalletApp() {
     try { await bankAction('escrow-cancel', { escrow_id: id }); loadEscrows(); loadWallet(); } catch (e: any) { setError(e.message); }
   };
 
+  const purchaseItem = async (item: typeof SHOP_ITEMS[0]) => {
+    if (unlocks.includes(item.id)) return;
+    setPurchasing(item.id);
+    setError(''); setSuccess('');
+    try {
+      await bankAction('purchase-unlock', { item_id: item.id, cost: item.cost });
+      const newUnlocks = [...unlocks, item.id];
+      setUnlocks(newUnlocks);
+      await save('user-unlocks', newUnlocks);
+      setSuccess(`Unlocked: ${item.name}`);
+      loadWallet();
+    } catch (e: any) { setError(e.message); }
+    finally { setPurchasing(''); }
+  };
+
   useEffect(() => {
     if (tab === 'history') loadHistory();
     if (tab === 'leaderboard') loadLeaderboard();
@@ -156,6 +191,7 @@ export default function PrimeWalletApp() {
     { id: 'escrow', label: 'Escrow', icon: <Shield size={12} /> },
     { id: 'history', label: 'History', icon: <History size={12} /> },
     { id: 'leaderboard', label: 'Board', icon: <Trophy size={12} /> },
+    { id: 'shop', label: 'Shop', icon: <ShoppingBag size={12} /> },
   ];
 
   const txColor = (tx: any) => {
@@ -384,6 +420,46 @@ export default function PrimeWalletApp() {
                     </div>
                   ))}
                   {leaderboard.length === 0 && <p className="text-center text-muted-foreground py-4">No data</p>}
+                </div>
+              )}
+
+              {/* Shop */}
+              {tab === 'shop' && (
+                <div className="space-y-3">
+                  <p className="text-[9px] text-muted-foreground font-display tracking-wider uppercase">
+                    Balance: <span className="text-primary">{wallet ? fmt(wallet.os_balance) : '—'} OS</span>
+                  </p>
+                  {SHOP_ITEMS.map(item => {
+                    const owned = unlocks.includes(item.id);
+                    const canAfford = wallet && Number(wallet.os_balance) >= item.cost;
+                    return (
+                      <div key={item.id} className={`p-3 rounded border ${owned ? 'border-emerald-500/30 bg-emerald-500/5' : 'border-border bg-background/30'}`}>
+                        <div className="flex items-start gap-3">
+                          <span className="text-lg">{item.icon}</span>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-foreground text-[11px] font-medium">{item.name}</p>
+                            <p className="text-[9px] text-muted-foreground mt-0.5">{item.desc}</p>
+                          </div>
+                          <div className="text-right shrink-0">
+                            {owned ? (
+                              <span className="text-[9px] text-emerald-400 font-display tracking-wider uppercase">Owned</span>
+                            ) : (
+                              <>
+                                <p className="text-[10px] text-primary font-mono">{fmt(item.cost, 0)} OS</p>
+                                <button
+                                  onClick={() => purchaseItem(item)}
+                                  disabled={!canAfford || purchasing === item.id}
+                                  className="mt-1 px-2 py-0.5 rounded bg-primary/20 text-primary text-[8px] hover:bg-primary/30 disabled:opacity-40 font-display tracking-wider uppercase"
+                                >
+                                  {purchasing === item.id ? '...' : 'Buy'}
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </>
