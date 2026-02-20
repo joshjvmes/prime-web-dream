@@ -1,4 +1,4 @@
-import { Terminal, FolderTree, Activity, Cpu, Brain, Network, Code, HardDrive, Database, Zap, Settings, Globe, Server, LayoutList, Image, Link2, Orbit, CalendarDays, BookOpen, Table, Workflow, Paintbrush, Smartphone, Map, Package, Music, Dices, TrendingUp, Radio, Vault, Video } from 'lucide-react';
+import { Terminal, FolderTree, Activity, Cpu, Brain, Network, Code, HardDrive, Database, Zap, Settings, Globe, Server, LayoutList, Image, Link2, Orbit, CalendarDays, BookOpen, Table, Workflow, Paintbrush, Smartphone, Map, Package, Music, Dices, TrendingUp, Radio, Vault, Video, Bot, Cog, CalendarCheck, Wifi } from 'lucide-react';
 import { AppType } from '@/types/os';
 
 interface DesktopIconsProps {
@@ -37,6 +37,10 @@ const icons: { app: AppType; title: string; icon: React.ReactNode; label: string
   { app: 'stream', title: 'PrimeStream', icon: <Radio size={28} />, label: 'Stream' },
   { app: 'vault', title: 'PrimeVault', icon: <Vault size={28} />, label: 'Vault' },
   { app: 'videocall', title: 'PrimeLink', icon: <Video size={28} />, label: 'Video' },
+  { app: 'agent', title: 'PrimeAgent', icon: <Bot size={28} />, label: 'Agent' },
+  { app: 'robotics', title: 'PrimeRobotics', icon: <Cog size={28} />, label: 'Robotics' },
+  { app: 'booking', title: 'PrimeBooking', icon: <CalendarCheck size={28} />, label: 'Booking' },
+  { app: 'iot', title: 'PrimeIoT', icon: <Wifi size={28} />, label: 'IoT' },
 ];
 
 export default function DesktopIcons({ onOpenApp }: DesktopIconsProps) {

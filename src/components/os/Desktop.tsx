@@ -45,6 +45,10 @@ import PrimeVaultApp from '@/components/os/PrimeVaultApp';
 import PrimeLinkApp from '@/components/os/PrimeLinkApp';
 import PrimeMailApp from '@/components/os/PrimeMailApp';
 import PrimeSocialApp from '@/components/os/PrimeSocialApp';
+import PrimeAgentApp from '@/components/os/PrimeAgentApp';
+import PrimeRoboticsApp from '@/components/os/PrimeRoboticsApp';
+import PrimeBookingApp from '@/components/os/PrimeBookingApp';
+import PrimeIoTApp from '@/components/os/PrimeIoTApp';
 import DesktopContextMenu from '@/components/os/DesktopContextMenu';
 import NotificationSystem from '@/components/os/NotificationSystem';
 import { AppType } from '@/types/os';
@@ -170,6 +174,10 @@ export default function Desktop() {
       case 'videocall': return <PrimeLinkApp />;
       case 'mail': return <PrimeMailApp />;
       case 'social': return <PrimeSocialApp />;
+      case 'agent': return <PrimeAgentApp onOpenApp={openWindow} onCloseApp={closeWindowByApp} />;
+      case 'robotics': return <PrimeRoboticsApp />;
+      case 'booking': return <PrimeBookingApp />;
+      case 'iot': return <PrimeIoTApp />;
       default: return <div className="p-4 text-muted-foreground font-mono text-xs">App not found</div>;
     }
   };
