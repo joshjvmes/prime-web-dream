@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Blocks, Plus, Trash2, Play, Code, ArrowLeft, Store, Briefcase, Upload, Download, Search, TrendingUp, BarChart3, DollarSign, Users, Star, Filter, ChevronLeft, ShoppingCart, Rocket, LineChart } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { HoverCard, HoverCardTrigger, HoverCardContent } from '@/components/ui/hover-card';
 import { supabase } from '@/integrations/supabase/client';
 import { useCloudStorage } from '@/hooks/useCloudStorage';
 import MiniAppRenderer from './MiniAppRenderer';
@@ -71,7 +72,7 @@ export default function AppForgeApp() {
   const [catFilter, setCatFilter] = useState('All');
   const [selectedListing, setSelectedListing] = useState<ForgeListing | null>(null);
   const [publishingApp, setPublishingApp] = useState<MiniApp | null>(null);
-  const [publishForm, setPublishForm] = useState({ category: 'utility', price: 0, ipoActive: false, ipoTarget: 0 });
+  const [publishForm, setPublishForm] = useState({ category: 'utility', price: 0, ipoActive: false, ipoTarget: 0, sharePrice: 1, totalShares: 1000 });
   const [creating, setCreating] = useState(false);
   const [createPrompt, setCreatePrompt] = useState('');
   const [createLoading, setCreateLoading] = useState(false);
@@ -143,9 +144,12 @@ export default function AppForgeApp() {
       price: publishForm.price,
       ipo_active: publishForm.ipoActive,
       ipo_target: publishForm.ipoTarget,
+      share_price: publishForm.sharePrice,
+      total_shares: publishForm.totalShares,
     });
     if (res?.error) return alert(res.error);
     setPublishingApp(null);
+    setPublishForm({ category: 'utility', price: 0, ipoActive: false, ipoTarget: 0, sharePrice: 1, totalShares: 1000 });
     loadAll();
   };
 
@@ -275,12 +279,62 @@ export default function AppForgeApp() {
               <label className="text-[9px] text-muted-foreground">Launch IPO (fundraise)</label>
             </div>
             {publishForm.ipoActive && (
-              <div>
-                <label className="text-[9px] text-muted-foreground">IPO Target (OS)</label>
-                <input type="number" value={publishForm.ipoTarget} onChange={e => setPublishForm(p => ({ ...p, ipoTarget: Number(e.target.value) }))}
-                  className="w-full mt-1 px-2 py-1 rounded bg-muted border border-border text-[10px] text-foreground" />
+              <div className="space-y-2">
+                <div>
+                  <label className="text-[9px] text-muted-foreground">IPO Target (OS)</label>
+                  <input type="number" value={publishForm.ipoTarget} onChange={e => setPublishForm(p => ({ ...p, ipoTarget: Number(e.target.value) }))}
+                    className="w-full mt-1 px-2 py-1 rounded bg-muted border border-border text-[10px] text-foreground" />
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="text-[9px] text-muted-foreground">Share Price (OS)</label>
+                    <input type="number" value={publishForm.sharePrice} onChange={e => setPublishForm(p => ({ ...p, sharePrice: Math.max(0.01, Number(e.target.value)) }))}
+                      className="w-full mt-1 px-2 py-1 rounded bg-muted border border-border text-[10px] text-foreground" min="0.01" step="0.01" />
+                  </div>
+                  <div>
+                    <label className="text-[9px] text-muted-foreground">Total Shares</label>
+                    <input type="number" value={publishForm.totalShares} onChange={e => setPublishForm(p => ({ ...p, totalShares: Math.max(1, Math.round(Number(e.target.value))) }))}
+                      className="w-full mt-1 px-2 py-1 rounded bg-muted border border-border text-[10px] text-foreground" min="1" step="1" />
+                  </div>
+                </div>
+                {/* IPO Summary Card */}
+                <div className="border border-primary/30 rounded-lg p-3 bg-primary/5 space-y-1.5">
+                  <p className="text-[9px] text-primary font-bold flex items-center gap-1"><Rocket size={10} /> IPO Summary</p>
+                  <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-[9px]">
+                    <span className="text-muted-foreground">Shares Issued</span>
+                    <span className="text-foreground text-right">{publishForm.totalShares.toLocaleString()}</span>
+                    <span className="text-muted-foreground">Price / Share</span>
+                    <span className="text-foreground text-right">{publishForm.sharePrice} OS</span>
+                    <span className="text-muted-foreground">Valuation</span>
+                    <span className="text-primary font-bold text-right">{(publishForm.totalShares * publishForm.sharePrice).toLocaleString()} OS</span>
+                    <span className="text-muted-foreground">Fundraise Target</span>
+                    <span className="text-foreground text-right">{publishForm.ipoTarget.toLocaleString()} OS</span>
+                  </div>
+                </div>
               </div>
             )}
+
+            {/* Listing Preview */}
+            <div className="border border-border rounded-lg p-3 bg-card/30">
+              <p className="text-[8px] text-muted-foreground/60 uppercase tracking-wider mb-2">Preview — How it will appear</p>
+              <div className="flex items-start gap-2">
+                <span className="text-xl">{publishingApp.icon}</span>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-1">
+                    <p className="text-foreground font-display text-[10px] tracking-wider uppercase truncate">{publishingApp.name}</p>
+                    {publishForm.ipoActive && <span className="px-1 py-0.5 rounded bg-primary/20 text-primary text-[7px] font-bold">IPO</span>}
+                  </div>
+                  <p className="text-[9px] text-muted-foreground truncate">{publishingApp.description}</p>
+                  <div className="flex items-center gap-3 mt-1">
+                    <span className="text-[8px] text-muted-foreground flex items-center gap-0.5"><Download size={8} />0</span>
+                    <span className="text-[8px] text-muted-foreground flex items-center gap-0.5"><DollarSign size={8} />{publishForm.price === 0 ? 'Free' : `${publishForm.price} OS`}</span>
+                    {publishForm.ipoActive && <span className="text-[8px] text-muted-foreground flex items-center gap-0.5"><LineChart size={8} />{publishForm.sharePrice} OS/share</span>}
+                    <span className="text-[8px] text-muted-foreground px-1 rounded bg-muted">{publishForm.category}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
             <button onClick={publishToForge}
               className="w-full py-2 rounded bg-primary text-primary-foreground text-[10px] font-bold hover:bg-primary/90 transition-colors flex items-center justify-center gap-1">
               <Rocket size={12} /> Publish to Forge
@@ -451,25 +505,51 @@ export default function AppForgeApp() {
               {filteredListings.length === 0 ? (
                 <div className="text-center py-8 text-muted-foreground">No apps found</div>
               ) : filteredListings.map(l => (
-                <button key={l.id} onClick={() => setSelectedListing(l)}
-                  className="w-full text-left p-3 rounded border border-border hover:border-primary/40 hover:bg-muted/30 transition-colors">
-                  <div className="flex items-start gap-2">
-                    <span className="text-xl">{l.icon}</span>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-1">
-                        <p className="text-foreground font-display text-[10px] tracking-wider uppercase truncate">{l.name}</p>
-                        {l.ipo_active && <span className="px-1 py-0.5 rounded bg-primary/20 text-primary text-[7px] font-bold">IPO</span>}
+                <HoverCard key={l.id} openDelay={400} closeDelay={200}>
+                  <HoverCardTrigger asChild>
+                    <button onClick={() => setSelectedListing(l)}
+                      className="w-full text-left p-3 rounded border border-border hover:border-primary/40 hover:bg-muted/30 transition-colors">
+                      <div className="flex items-start gap-2">
+                        <span className="text-xl">{l.icon}</span>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-1">
+                            <p className="text-foreground font-display text-[10px] tracking-wider uppercase truncate">{l.name}</p>
+                            {l.ipo_active && <span className="px-1 py-0.5 rounded bg-primary/20 text-primary text-[7px] font-bold">IPO</span>}
+                          </div>
+                          <p className="text-[9px] text-muted-foreground truncate">{l.description}</p>
+                          <div className="flex items-center gap-3 mt-1">
+                            <span className="text-[8px] text-muted-foreground flex items-center gap-0.5"><Download size={8} />{l.installs}</span>
+                            <span className="text-[8px] text-muted-foreground flex items-center gap-0.5"><DollarSign size={8} />{l.price === 0 ? 'Free' : `${l.price} OS`}</span>
+                            <span className="text-[8px] text-muted-foreground flex items-center gap-0.5"><LineChart size={8} />{l.share_price} OS/share</span>
+                            <span className="text-[8px] text-muted-foreground px-1 rounded bg-muted">{l.category}</span>
+                          </div>
+                        </div>
                       </div>
-                      <p className="text-[9px] text-muted-foreground truncate">{l.description}</p>
-                      <div className="flex items-center gap-3 mt-1">
-                        <span className="text-[8px] text-muted-foreground flex items-center gap-0.5"><Download size={8} />{l.installs}</span>
-                        <span className="text-[8px] text-muted-foreground flex items-center gap-0.5"><DollarSign size={8} />{l.price === 0 ? 'Free' : `${l.price} OS`}</span>
-                        <span className="text-[8px] text-muted-foreground flex items-center gap-0.5"><LineChart size={8} />{l.share_price} OS/share</span>
-                        <span className="text-[8px] text-muted-foreground px-1 rounded bg-muted">{l.category}</span>
+                    </button>
+                  </HoverCardTrigger>
+                  <HoverCardContent side="right" align="start" className="w-72 p-0 overflow-hidden">
+                    {/* Code snippet */}
+                    <div className="border-b border-border">
+                      <p className="px-2 py-1 text-[8px] text-muted-foreground/60 uppercase tracking-wider bg-muted/30">Source Preview</p>
+                      <pre className="px-2 py-1.5 text-[9px] text-muted-foreground font-mono leading-relaxed overflow-hidden max-h-[120px]">
+                        {l.code.split('\n').slice(0, 8).join('\n')}
+                      </pre>
+                    </div>
+                    {/* Live mini-app preview */}
+                    <div>
+                      <p className="px-2 py-1 text-[8px] text-muted-foreground/60 uppercase tracking-wider bg-muted/30">Live Preview</p>
+                      <div className="h-[150px] overflow-hidden">
+                        <MiniAppRenderer code={l.code} name={l.name} />
                       </div>
                     </div>
-                  </div>
-                </button>
+                    {/* Stats footer */}
+                    <div className="flex items-center gap-3 px-2 py-1.5 bg-muted/20 border-t border-border text-[8px] text-muted-foreground">
+                      <span className="flex items-center gap-0.5"><Download size={8} />{l.installs} installs</span>
+                      <span className="flex items-center gap-0.5"><LineChart size={8} />{l.share_price} OS</span>
+                      <span className="px-1 rounded bg-muted">{l.category}</span>
+                    </div>
+                  </HoverCardContent>
+                </HoverCard>
               ))}
             </div>
           </ScrollArea>
