@@ -433,6 +433,80 @@ Deno.serve(async (req) => {
       return json(data || []);
     }
 
+    // ── Arcade Reward ──
+    if (action === "arcade-reward") {
+      const user = await getUser(req);
+      if (!user) return err("Auth required", 401);
+      const body = await req.json();
+      const { game, amount: rawAmount, session_id } = body;
+      const amount = Number(rawAmount);
+      if (!game || !amount || amount <= 0 || amount > 5000) return err("Invalid reward");
+
+      const { data: sysW } = await db.from("wallets").select("*").eq("is_system", true).maybeSingle();
+      if (!sysW || Number(sysW.os_balance) < amount) return err("Insufficient reserves");
+
+      let { data: userW } = await db.from("wallets").select("*").eq("user_id", user.id).maybeSingle();
+      if (!userW) {
+        const { data: c } = await db.from("wallets").insert({ user_id: user.id, os_balance: 0, ix_balance: 0 }).select("*").single();
+        userW = c;
+      }
+      if (!userW) return err("Wallet error", 500);
+
+      await db.from("wallets").update({ os_balance: Number(sysW.os_balance) - amount }).eq("id", sysW.id);
+      await db.from("wallets").update({ os_balance: Number(userW.os_balance) + amount }).eq("id", userW.id);
+      await db.from("transactions").insert({
+        from_wallet_id: sysW.id, to_wallet_id: userW.id,
+        token_type: "OS", amount, tx_type: "reward",
+        description: `Arcade: ${game} (+${amount} OS)`,
+      });
+      return json({ success: true, new_balance: Number(userW.os_balance) + amount });
+    }
+
+    // ── AI Charge ──
+    if (action === "ai-charge") {
+      const user = await getUser(req);
+      if (!user) return err("Auth required", 401);
+      const body = await req.json();
+      const amount = Number(body.amount || 50);
+
+      const { data: userW } = await db.from("wallets").select("*").eq("user_id", user.id).maybeSingle();
+      if (!userW) return json({ charged: false, reason: "no_wallet" });
+      if (Number(userW.os_balance) < amount) return json({ charged: false, reason: "insufficient" });
+
+      const { data: sysW } = await db.from("wallets").select("*").eq("is_system", true).maybeSingle();
+      await db.from("wallets").update({ os_balance: Number(userW.os_balance) - amount }).eq("id", userW.id);
+      if (sysW) await db.from("wallets").update({ os_balance: Number(sysW.os_balance) + amount }).eq("id", sysW.id);
+      await db.from("transactions").insert({
+        from_wallet_id: userW.id, to_wallet_id: sysW?.id,
+        token_type: "OS", amount, tx_type: "transfer",
+        description: body.description || "AI usage charge",
+      });
+      return json({ charged: true });
+    }
+
+    // ── Purchase Unlock ──
+    if (action === "purchase-unlock") {
+      const user = await getUser(req);
+      if (!user) return err("Auth required", 401);
+      const body = await req.json();
+      const { item_id, cost } = body;
+      const amount = Number(cost);
+      if (!item_id || !amount || amount <= 0) return err("Invalid purchase");
+
+      const { data: userW } = await db.from("wallets").select("*").eq("user_id", user.id).maybeSingle();
+      if (!userW || Number(userW.os_balance) < amount) return err("Insufficient OS tokens");
+
+      const { data: sysW } = await db.from("wallets").select("*").eq("is_system", true).maybeSingle();
+      await db.from("wallets").update({ os_balance: Number(userW.os_balance) - amount }).eq("id", userW.id);
+      if (sysW) await db.from("wallets").update({ os_balance: Number(sysW.os_balance) + amount }).eq("id", sysW.id);
+      await db.from("transactions").insert({
+        from_wallet_id: userW.id, to_wallet_id: sysW?.id,
+        token_type: "OS", amount, tx_type: "transfer",
+        description: `Shop: ${item_id}`,
+      });
+      return json({ success: true });
+    }
+
     return err("Unknown action: " + action);
   } catch (e) {
     return err(e instanceof Error ? e.message : "Internal error", 500);

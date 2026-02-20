@@ -8,3 +8,6 @@ verify_jwt = false
 
 [functions.prime-bank]
 verify_jwt = false
+
+[functions.mini-app-gen]
+verify_jwt = false

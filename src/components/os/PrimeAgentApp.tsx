@@ -28,7 +28,9 @@ interface ChatMessage {
 const QUICK_COMMANDS = [
   { label: 'Full System Check', icon: <Zap size={12} />, instruction: 'Run a full system diagnostics check' },
   { label: 'Secure All', icon: <Shield size={12} />, instruction: 'Lock down all security protocols' },
-  { label: 'Optimize Energy', icon: <Zap size={12} />, instruction: 'Optimize energy harvesting systems' },
+  { label: 'Check Wallet', icon: <Zap size={12} />, instruction: 'Check my wallet balance' },
+  { label: 'Launch Game', icon: <Rocket size={12} />, instruction: 'Launch a random arcade game' },
+  { label: 'Create Mini-App', icon: <Rocket size={12} />, instruction: 'Create a new mini-app' },
   { label: 'Deploy Build', icon: <Rocket size={12} />, instruction: 'Deploy the latest build to production' },
 ];
 
@@ -36,6 +38,8 @@ const APP_TITLES: Record<string, string> = {
   terminal: 'Prime Shell (psh)', energy: 'Energy Monitor', security: 'Lattice Shield',
   sysinfo: 'System Info', processes: 'Qutrit Processes', primenet: 'PrimeNet Monitor',
   monitor: 'System Monitor', storage: 'Prime Storage', datacenter: 'LatticeCore',
+  wallet: 'PrimeWallet', arcade: 'PrimeArcade', miniapps: 'Mini Apps',
+  journal: 'PrimeJournal', browser: 'PrimeBrowser', calendar: 'Prime Calendar',
 };
 
 function parseInstruction(input: string): AgentAction[] {
@@ -68,6 +72,28 @@ function parseInstruction(input: string): AgentAction[] {
       { id: id(), type: 'check-status', label: 'Measure dimensional coupling', status: 'pending' },
       { id: id(), type: 'run-command', label: 'Optimize harvesting mode', status: 'pending' },
       { id: id(), type: 'report', label: 'Energy optimization report', status: 'pending' },
+    );
+  } else if (lower.includes('wallet') || lower.includes('balance') || lower.includes('token')) {
+    actions.push(
+      { id: id(), type: 'open-app', label: 'Open PrimeWallet', payload: { app: 'wallet', title: 'PrimeWallet' }, status: 'pending' },
+      { id: id(), type: 'check-status', label: 'Checking OS & IX balances', status: 'pending' },
+      { id: id(), type: 'report', label: 'Wallet status retrieved', status: 'pending' },
+    );
+  } else if (lower.includes('game') || lower.includes('arcade') || lower.includes('play')) {
+    actions.push(
+      { id: id(), type: 'open-app', label: 'Open PrimeArcade', payload: { app: 'arcade', title: 'PrimeArcade' }, status: 'pending' },
+      { id: id(), type: 'report', label: 'Arcade ready — earn OS tokens by playing!', status: 'pending' },
+    );
+  } else if (lower.includes('mini-app') || lower.includes('miniapp') || lower.includes('create app')) {
+    actions.push(
+      { id: id(), type: 'open-app', label: 'Open Mini Apps', payload: { app: 'miniapps', title: 'Mini Apps' }, status: 'pending' },
+      { id: id(), type: 'open-app', label: 'Open Hyper AI', payload: { app: 'hypersphere', title: 'Hyper AI' }, status: 'pending' },
+      { id: id(), type: 'report', label: 'Ask Hyper AI: "Create a mini-app that..."', status: 'pending' },
+    );
+  } else if (lower.includes('journal') || lower.includes('publish')) {
+    actions.push(
+      { id: id(), type: 'open-app', label: 'Open PrimeJournal', payload: { app: 'journal', title: 'PrimeJournal' }, status: 'pending' },
+      { id: id(), type: 'report', label: 'Journal ready', status: 'pending' },
     );
   } else if (lower.includes('deploy') || lower.includes('build') || lower.includes('ship')) {
     actions.push(

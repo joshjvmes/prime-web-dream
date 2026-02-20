@@ -64,6 +64,7 @@ import PrimeArcadeApp from '@/components/os/PrimeArcadeApp';
 import AdminConsoleApp from '@/components/os/AdminConsoleApp';
 import PrimeJournalApp from '@/components/os/PrimeJournalApp';
 import PrimeWalletApp from '@/components/os/PrimeWalletApp';
+import MiniAppsApp from '@/components/os/MiniAppsApp';
 import DesktopContextMenu from '@/components/os/DesktopContextMenu';
 import NotificationSystem from '@/components/os/NotificationSystem';
 import { AppType } from '@/types/os';
@@ -97,6 +98,7 @@ const APP_NAME_MAP: Record<string, { app: AppType; title: string }> = {
   'admin': { app: 'admin', title: 'Admin Console' },
   'journal': { app: 'journal', title: 'PrimeJournal' },
   'wallet': { app: 'wallet', title: 'PrimeWallet' },
+  'miniapps': { app: 'miniapps', title: 'Mini Apps' },
 };
 
 export default function Desktop() {
@@ -375,6 +377,7 @@ export default function Desktop() {
       case 'admin': return <AdminConsoleApp />;
       case 'journal': return <PrimeJournalApp />;
       case 'wallet': return <PrimeWalletApp />;
+      case 'miniapps': return <MiniAppsApp />;
       default: return <div className="p-4 text-muted-foreground font-mono text-xs">App not found</div>;
     }
   };
