@@ -5,3 +5,6 @@ verify_jwt = false
 
 [functions.admin-actions]
 verify_jwt = false
+
+[functions.prime-bank]
+verify_jwt = false

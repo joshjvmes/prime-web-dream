@@ -82,8 +82,11 @@ function renderInternalPage(url: string, onNavigate?: (url: string) => void) {
     case 'httpsp://handbook': return <HandbookPage />;
     case 'httpsp://changelog': return <ChangelogPage />;
     case 'httpsp://status': return <StatusPage />;
-    case 'httpsp://hub': return <HubPage onNavigate={onNavigate} />;
     default:
+      if (url === 'httpsp://hub' || url.startsWith('httpsp://hub?')) {
+        const params = url.includes('?') ? new URLSearchParams(url.split('?')[1]) : undefined;
+        return <HubPage onNavigate={onNavigate} initialSearch={params?.get('search') || ''} />;
+      }
       if (url.startsWith('httpsp://pages/')) {
         const slug = url.replace('httpsp://pages/', '');
         return <DynamicPage slug={slug} onNavigate={onNavigate} />;
@@ -213,6 +216,9 @@ export default function PrimeBrowserApp() {
     if (!normalizedUrl.startsWith('prime://') && !normalizedUrl.startsWith('httpsp://') && !normalizedUrl.startsWith('http://') && !normalizedUrl.startsWith('https://')) {
       if (normalizedUrl.includes('.') && !normalizedUrl.includes(' ')) {
         normalizedUrl = 'https://' + normalizedUrl;
+      } else {
+        // Treat as intranet search query
+        normalizedUrl = 'httpsp://hub?search=' + encodeURIComponent(normalizedUrl);
       }
     }
 

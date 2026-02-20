@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Terminal, FolderTree, Activity, Cpu, Brain, Network, Code, HardDrive, Database, Zap, Settings, Globe, Server, LayoutList, Image, Link2, Orbit, CalendarDays, BookOpen, Table, Workflow, Paintbrush, Smartphone, Map, Package, Music, Dices, TrendingUp, Radio, Vault, Video, Bot, Cog, CalendarCheck, Wifi, Monitor, FileText, MessageSquare, Shield, Mail, Users, ChevronDown, ChevronRight, Gamepad2, ShieldCheck, PenLine } from 'lucide-react';
+import { Terminal, FolderTree, Activity, Cpu, Brain, Network, Code, HardDrive, Database, Zap, Settings, Globe, Server, LayoutList, Image, Link2, Orbit, CalendarDays, BookOpen, Table, Workflow, Paintbrush, Smartphone, Map, Package, Music, Dices, TrendingUp, Radio, Vault, Video, Bot, Cog, CalendarCheck, Wifi, Monitor, FileText, MessageSquare, Shield, Mail, Users, ChevronDown, ChevronRight, Gamepad2, ShieldCheck, PenLine, Wallet } from 'lucide-react';
 import { AppType } from '@/types/os';
 
 interface DesktopIconsProps {
@@ -50,6 +50,7 @@ const categories: { name: string; apps: AppEntry[] }[] = [
       { app: 'calendar', title: 'Prime Calendar', icon: <CalendarDays size={22} />, label: 'Calendar' },
       { app: 'booking', title: 'PrimeBooking', icon: <CalendarCheck size={22} />, label: 'Booking' },
       { app: 'journal', title: 'PrimeJournal', icon: <PenLine size={22} />, label: 'Journal' },
+      { app: 'wallet', title: 'PrimeWallet', icon: <Wallet size={22} />, label: 'Wallet' },
       { app: 'schemaforge', title: 'SchemaForge', icon: <Workflow size={22} />, label: 'SchemaForge' },
     ],
   },
