@@ -16,7 +16,6 @@ import FoldMemApp from '@/components/os/FoldMemApp';
 import PrimeStorageApp from '@/components/os/PrimeStorageApp';
 import EnergyMonitorApp from '@/components/os/EnergyMonitorApp';
 import SettingsApp from '@/components/os/SettingsApp';
-// DesktopIcons removed — apps now accessible via PRIME menu in taskbar
 import DesktopContextMenu from '@/components/os/DesktopContextMenu';
 import NotificationSystem from '@/components/os/NotificationSystem';
 import { AppType } from '@/types/os';
@@ -98,7 +97,13 @@ export default function Desktop() {
           </DesktopContextMenu>
 
           <NotificationSystem notifications={notifications} onDismiss={dismissNotification} />
-          <Taskbar windows={windows} onOpenApp={openWindow} onFocusWindow={focusWindow} />
+          <Taskbar
+            windows={windows}
+            onOpenApp={openWindow}
+            onFocusWindow={focusWindow}
+            notifications={notifications}
+            onDismissNotification={dismissNotification}
+          />
         </>
       )}
     </div>
