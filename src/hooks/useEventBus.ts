@@ -11,6 +11,8 @@ export const EVENT_TYPES = [
   'file.deleted',
   'timer.fired',
   'clipboard.copied',
+  'social.post.created',
+  'mail.received',
 ] as const;
 
 export type EventType = typeof EVENT_TYPES[number];
