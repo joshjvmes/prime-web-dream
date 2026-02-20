@@ -88,12 +88,13 @@ export default function PrimeSocialApp() {
     }
   }, []);
 
-  // Listen for Hyper agent posts via EventBus
+  // Listen for Hyper agent posts via EventBus + trigger cross-agent replies
   useEffect(() => {
     const handler = (payload: any) => {
       if (!payload?.content) return;
+      const postId = `hyper-${Date.now()}`;
       const newPost: Post = {
-        id: `hyper-${Date.now()}`,
+        id: postId,
         author: payload.author || 'Hyper',
         role: payload.role || 'Geometric AI',
         content: payload.content,
@@ -105,6 +106,35 @@ export default function PrimeSocialApp() {
         aiGenerated: true,
       };
       setPosts(prev => [newPost, ...prev]);
+
+      // Cross-agent: generate AI persona replies after a delay
+      setTimeout(async () => {
+        try {
+          const { data, error } = await supabase.functions.invoke('ai-social', {
+            body: {
+              action: 'generate-replies',
+              postContent: payload.content,
+              postAuthor: payload.author || 'Hyper',
+            },
+          });
+          if (!error && data?.replies) {
+            setPosts(prev => prev.map(p => {
+              if (p.id === postId) {
+                return { ...p, comments: [...p.comments, ...data.replies], showComments: true };
+              }
+              return p;
+            }));
+            // Log cross-agent activity
+            eventBus.emit('agent.action.logged', {
+              type: 'post',
+              summary: `AI personas replied to Hyper's post`,
+              timestamp: new Date(),
+            });
+          }
+        } catch (e) {
+          console.error('Failed to generate cross-agent replies:', e);
+        }
+      }, 2500);
     };
     eventBus.on('social.post.created', handler);
     return () => eventBus.off('social.post.created', handler);
