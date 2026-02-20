@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { Dices, TrendingUp, TrendingDown, ArrowUp, ArrowDown, Wallet, BarChart3, Clock, ChevronLeft, Plus } from 'lucide-react';
+import { Dices, TrendingUp, TrendingDown, ArrowUp, ArrowDown, Wallet, BarChart3, Clock, ChevronLeft, Plus, RefreshCw, Zap } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, ResponsiveContainer, Tooltip } from 'recharts';
 import { supabase } from '@/integrations/supabase/client';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -16,6 +16,14 @@ interface BetMarket {
   expiry: string | null;
   created_at: string;
   creation_cost: number;
+  source?: string;
+  external_id?: string;
+  sport_key?: string;
+  sport_title?: string;
+  home_team?: string;
+  away_team?: string;
+  commence_time?: string;
+  odds_data?: { bookmakers: Array<{ title: string; markets: Array<{ outcomes: Array<{ name: string; price: number }> }> }> };
 }
 
 interface UserBet {
@@ -26,7 +34,7 @@ interface UserBet {
   claimed: boolean;
 }
 
-const CATEGORIES = ['All', 'general', 'apps', 'compute', 'network', 'energy'];
+const CATEGORIES = ['All', 'general', 'apps', 'compute', 'network', 'energy', 'sports'];
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 
 async function bankAction(action: string, body?: Record<string, unknown>) {
@@ -51,6 +59,39 @@ function generateChartData(yesRatio: number) {
   return data;
 }
 
+function americanToImplied(odds: number): number {
+  if (odds < 0) return Math.abs(odds) / (Math.abs(odds) + 100);
+  return 100 / (odds + 100);
+}
+
+function getBookmakerAvgOdds(market: BetMarket): { homeProb: number; awayProb: number } | null {
+  if (!market.odds_data?.bookmakers?.length) return null;
+  let homeSum = 0, awaySum = 0, count = 0;
+  for (const bk of market.odds_data.bookmakers) {
+    const h2h = bk.markets?.find((m: any) => m.key === 'h2h');
+    if (!h2h?.outcomes?.length) continue;
+    const homeOutcome = h2h.outcomes.find((o: any) => o.name === market.home_team);
+    const awayOutcome = h2h.outcomes.find((o: any) => o.name === market.away_team);
+    if (homeOutcome && awayOutcome) {
+      homeSum += americanToImplied(homeOutcome.price);
+      awaySum += americanToImplied(awayOutcome.price);
+      count++;
+    }
+  }
+  if (count === 0) return null;
+  return { homeProb: homeSum / count, awayProb: awaySum / count };
+}
+
+function timeUntil(dateStr: string): string {
+  const diff = new Date(dateStr).getTime() - Date.now();
+  if (diff <= 0) return 'Started';
+  const h = Math.floor(diff / 3600000);
+  const m = Math.floor((diff % 3600000) / 60000);
+  if (h > 24) return `${Math.floor(h / 24)}d`;
+  if (h > 0) return `${h}h ${m}m`;
+  return `${m}m`;
+}
+
 export default function PrimeBetsApp() {
   const [tab, setTab] = useState<'markets' | 'portfolio' | 'create'>('markets');
   const [selectedCat, setSelectedCat] = useState('All');
@@ -61,6 +102,7 @@ export default function PrimeBetsApp() {
   const [betAmount, setBetAmount] = useState('');
   const [walletBalance, setWalletBalance] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   // Create market
   const [newQuestion, setNewQuestion] = useState('');
   const [newCategory, setNewCategory] = useState('general');
@@ -74,7 +116,6 @@ export default function PrimeBetsApp() {
     ]);
     setMarkets((mkts as BetMarket[]) || []);
     setMyBets((bets as UserBet[]) || []);
-    // Get balance
     const bal = await bankAction('balance');
     if (bal?.os_balance) setWalletBalance(Number(bal.os_balance));
     setLoading(false);
@@ -88,6 +129,21 @@ export default function PrimeBetsApp() {
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [loadData]);
+
+  const refreshSports = async () => {
+    setRefreshing(true);
+    try {
+      const res = await fetch(`${SUPABASE_URL}/functions/v1/sports-odds?action=refresh-odds`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      await res.json();
+      await loadData();
+    } catch (e) {
+      console.error('Failed to refresh sports:', e);
+    }
+    setRefreshing(false);
+  };
 
   const placeBet = async () => {
     if (!selectedMarket || !betAmount) return;
@@ -130,6 +186,9 @@ export default function PrimeBetsApp() {
     return generateChartData(yesRatio);
   }, [selectedMarket]);
 
+  const isSportsMarket = (m: BetMarket) => m.source === 'sports_api';
+
+  // ─── Market Detail View ───
   if (selectedMarket) {
     const total = Number(selectedMarket.yes_pool) + Number(selectedMarket.no_pool);
     const yesPrice = total > 0 ? Number(selectedMarket.yes_pool) / total : 0.5;
@@ -137,6 +196,7 @@ export default function PrimeBetsApp() {
     const shares = betAmount ? parseFloat(betAmount) / (betSide === 'YES' ? yesPrice || 0.5 : noPrice || 0.5) : 0;
     const payout = shares;
     const myMarketBets = myBets.filter(b => b.market_id === selectedMarket.id);
+    const bookOdds = isSportsMarket(selectedMarket) ? getBookmakerAvgOdds(selectedMarket) : null;
 
     return (
       <div className="h-full flex flex-col bg-background text-foreground font-mono text-xs">
@@ -147,6 +207,17 @@ export default function PrimeBetsApp() {
         </div>
         <ScrollArea className="flex-1">
           <div className="p-3 space-y-3">
+            {/* Sports header */}
+            {isSportsMarket(selectedMarket) && (
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="px-1.5 py-0.5 rounded bg-primary/20 text-primary text-[8px] font-bold">{selectedMarket.sport_title || selectedMarket.sport_key}</span>
+                <span className="text-[9px] text-foreground font-bold">{selectedMarket.home_team} vs {selectedMarket.away_team}</span>
+                {selectedMarket.commence_time && (
+                  <span className="ml-auto flex items-center gap-0.5 text-[8px] text-muted-foreground"><Clock size={8} />{timeUntil(selectedMarket.commence_time)}</span>
+                )}
+              </div>
+            )}
+
             {/* Price Chart */}
             <div className="border border-border rounded p-2">
               <p className="text-[9px] text-muted-foreground mb-1">PROBABILITY</p>
@@ -165,7 +236,7 @@ export default function PrimeBetsApp() {
               </ResponsiveContainer>
             </div>
 
-            {/* Pool Stats */}
+            {/* Pool Stats + Bookmaker Odds */}
             <div className="grid grid-cols-3 gap-2">
               <div className="border border-border rounded p-2 text-center">
                 <p className="text-[8px] text-muted-foreground">YES POOL</p>
@@ -180,6 +251,29 @@ export default function PrimeBetsApp() {
                 <p className="text-sm text-foreground font-bold">{total.toLocaleString()} OS</p>
               </div>
             </div>
+
+            {/* Bookmaker odds comparison */}
+            {bookOdds && (
+              <div className="border border-border rounded p-2 space-y-1">
+                <p className="text-[9px] text-muted-foreground font-bold flex items-center gap-1"><Zap size={8} className="text-primary" />BOOKMAKER vs POOL ODDS</p>
+                <div className="grid grid-cols-2 gap-2 text-[9px]">
+                  <div>
+                    <span className="text-muted-foreground">Home ({selectedMarket.home_team})</span>
+                    <div className="flex gap-2 mt-0.5">
+                      <span className="text-primary">Pool: {(yesPrice * 100).toFixed(0)}%</span>
+                      <span className="text-accent-foreground">Book: {(bookOdds.homeProb * 100).toFixed(0)}%</span>
+                    </div>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Away ({selectedMarket.away_team})</span>
+                    <div className="flex gap-2 mt-0.5">
+                      <span className="text-destructive">Pool: {(noPrice * 100).toFixed(0)}%</span>
+                      <span className="text-accent-foreground">Book: {(bookOdds.awayProb * 100).toFixed(0)}%</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Betting Panel */}
             {selectedMarket.status === 'open' && (
@@ -219,8 +313,8 @@ export default function PrimeBetsApp() {
               </div>
             )}
 
-            {/* Resolve buttons (creator/admin) */}
-            {selectedMarket.status === 'open' && (
+            {/* Resolve buttons (creator/admin) - hidden for sports markets */}
+            {selectedMarket.status === 'open' && !isSportsMarket(selectedMarket) && (
               <div className="border border-border rounded p-2 space-y-1">
                 <p className="text-[9px] text-muted-foreground">RESOLVE (creator/admin only)</p>
                 <div className="flex gap-1">
@@ -236,6 +330,7 @@ export default function PrimeBetsApp() {
     );
   }
 
+  // ─── Market List View ───
   return (
     <div className="h-full flex flex-col bg-background text-foreground font-mono text-xs">
       <div className="flex items-center gap-2 px-3 py-2 border-b border-border">
@@ -251,11 +346,16 @@ export default function PrimeBetsApp() {
           <Plus size={10} className="inline mr-0.5" />Create
         </button>
         {tab === 'markets' && (
-          <div className="ml-2 flex gap-1 overflow-x-auto scrollbar-none">
-            {CATEGORIES.map(c => (
-              <button key={c} onClick={() => setSelectedCat(c)} className={`px-1.5 py-0.5 rounded text-[8px] shrink-0 transition-colors ${selectedCat === c ? 'bg-accent text-accent-foreground' : 'text-muted-foreground hover:bg-muted'}`}>{c}</button>
-            ))}
-          </div>
+          <>
+            <div className="ml-2 flex gap-1 overflow-x-auto scrollbar-none">
+              {CATEGORIES.map(c => (
+                <button key={c} onClick={() => setSelectedCat(c)} className={`px-1.5 py-0.5 rounded text-[8px] shrink-0 transition-colors ${selectedCat === c ? 'bg-accent text-accent-foreground' : 'text-muted-foreground hover:bg-muted'}`}>{c}</button>
+              ))}
+            </div>
+            <button onClick={refreshSports} disabled={refreshing} className="ml-1 p-1 rounded hover:bg-muted text-muted-foreground hover:text-primary transition-colors disabled:opacity-50" title="Refresh Sports Feed">
+              <RefreshCw size={10} className={refreshing ? 'animate-spin' : ''} />
+            </button>
+          </>
         )}
       </div>
 
@@ -267,7 +367,7 @@ export default function PrimeBetsApp() {
               <div className="text-center py-8">
                 <Dices size={32} className="mx-auto text-muted-foreground/30 mb-3" />
                 <p className="text-muted-foreground">No open markets</p>
-                <p className="text-[9px] text-muted-foreground/60">Create one to get started</p>
+                <p className="text-[9px] text-muted-foreground/60">Create one or refresh sports feed</p>
               </div>
             ) : (
               <div className="space-y-1">
@@ -275,12 +375,30 @@ export default function PrimeBetsApp() {
                   const total = Number(m.yes_pool) + Number(m.no_pool);
                   const yesPrice = total > 0 ? Number(m.yes_pool) / total : 0.5;
                   const noPrice = 1 - yesPrice;
+                  const isSport = isSportsMarket(m);
+                  const bookOdds = isSport ? getBookmakerAvgOdds(m) : null;
+
                   return (
                     <button key={m.id} onClick={() => setSelectedMarket(m)} className="w-full text-left p-2 rounded border border-border hover:border-primary/40 hover:bg-muted/30 transition-colors">
-                      <p className="text-[10px] text-foreground leading-tight">{m.question}</p>
+                      {isSport && (
+                        <div className="flex items-center gap-1.5 mb-1">
+                          <span className="px-1 py-0.5 rounded bg-primary/20 text-primary text-[7px] font-bold">{m.sport_title || m.sport_key}</span>
+                          <span className="text-[8px] text-foreground font-bold">{m.home_team} vs {m.away_team}</span>
+                          {m.commence_time && (
+                            <span className="ml-auto flex items-center gap-0.5 text-[7px] text-muted-foreground"><Clock size={7} />{timeUntil(m.commence_time)}</span>
+                          )}
+                        </div>
+                      )}
+                      {!isSport && <p className="text-[10px] text-foreground leading-tight">{m.question}</p>}
                       <div className="flex items-center gap-3 mt-1.5">
                         <div className="flex items-center gap-1"><span className="text-[8px] text-muted-foreground">YES</span><span className="text-[10px] text-primary font-bold">{(yesPrice * 100).toFixed(0)}¢</span></div>
                         <div className="flex items-center gap-1"><span className="text-[8px] text-muted-foreground">NO</span><span className="text-[10px] text-destructive font-bold">{(noPrice * 100).toFixed(0)}¢</span></div>
+                        {bookOdds && (
+                          <div className="flex items-center gap-1 text-[7px] text-muted-foreground">
+                            <Zap size={7} className="text-primary" />
+                            <span>Book: {(bookOdds.homeProb * 100).toFixed(0)}%</span>
+                          </div>
+                        )}
                         <span className="text-[8px] text-muted-foreground ml-auto flex items-center gap-0.5"><BarChart3 size={8} />{total.toLocaleString()} OS</span>
                         <span className="text-[8px] text-muted-foreground px-1 rounded bg-muted">{m.category}</span>
                       </div>
@@ -344,7 +462,7 @@ export default function PrimeBetsApp() {
                 <label className="text-[9px] text-muted-foreground">Category</label>
                 <select value={newCategory} onChange={e => setNewCategory(e.target.value)}
                   className="w-full mt-1 px-2 py-1 rounded bg-muted border border-border text-[10px] text-foreground">
-                  {CATEGORIES.filter(c => c !== 'All').map(c => <option key={c} value={c}>{c}</option>)}
+                  {CATEGORIES.filter(c => c !== 'All' && c !== 'sports').map(c => <option key={c} value={c}>{c}</option>)}
                 </select>
               </div>
               <div>

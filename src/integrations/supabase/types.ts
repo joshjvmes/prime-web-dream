@@ -102,41 +102,65 @@ export type Database = {
       }
       bet_markets: {
         Row: {
+          away_team: string | null
           category: string
+          commence_time: string | null
           created_at: string
           creation_cost: number
           creator_id: string
           expiry: string | null
+          external_id: string | null
+          home_team: string | null
           id: string
           listing_id: string | null
           no_pool: number
+          odds_data: Json | null
           question: string
+          source: string
+          sport_key: string | null
+          sport_title: string | null
           status: string
           yes_pool: number
         }
         Insert: {
+          away_team?: string | null
           category?: string
+          commence_time?: string | null
           created_at?: string
           creation_cost?: number
           creator_id: string
           expiry?: string | null
+          external_id?: string | null
+          home_team?: string | null
           id?: string
           listing_id?: string | null
           no_pool?: number
+          odds_data?: Json | null
           question: string
+          source?: string
+          sport_key?: string | null
+          sport_title?: string | null
           status?: string
           yes_pool?: number
         }
         Update: {
+          away_team?: string | null
           category?: string
+          commence_time?: string | null
           created_at?: string
           creation_cost?: number
           creator_id?: string
           expiry?: string | null
+          external_id?: string | null
+          home_team?: string | null
           id?: string
           listing_id?: string | null
           no_pool?: number
+          odds_data?: Json | null
           question?: string
+          source?: string
+          sport_key?: string | null
+          sport_title?: string | null
           status?: string
           yes_pool?: number
         }
