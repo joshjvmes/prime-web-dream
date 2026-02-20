@@ -1,186 +1,191 @@
 
 
-# GeomQ Language, AI Mini-Apps, Agent Upgrade, and Token Economy Expansion
+# App Forge Marketplace and Stock Exchange
 
 ## Overview
 
-This is a massive feature set. To keep it achievable, we'll split it into four focused deliverables:
-
-1. **GeomQ Programming Language** -- A ternary/quantum-gate scripting language that compiles to executable JavaScript within the OS
-2. **AI-Powered Mini-App Creator** -- The Hypersphere AI gains the ability to generate and install user mini-apps from natural language descriptions
-3. **PrimeAgent Upgrade** -- Expanded capabilities covering wallet operations, arcade, journal, browser, and more
-4. **Token Economy Expansion** -- Arcade rewards, AI token costs, and unlockable upgrades
+Two major systems that merge together: (1) an **App Forge** where users create, publish, and monetize mini-apps, and (2) a **real stock market exchange** where published apps become tradeable listings that users invest OS tokens in -- plus a prediction market upgrade for PrimeBets that uses real OS tokens.
 
 ---
 
-## Part 1: GeomQ -- The Ternary Programming Language
+## Part 1: App Forge -- Publish Mini-Apps to Market
 
-A custom scripting language that uses ternary quantum gate simulation syntax and compiles to executable JavaScript. This lives in the existing GeomC app, which gets upgraded from a static demo to a real interpreter.
+Upgrade the existing MiniApps system from a private gallery into a public marketplace called the **App Forge**.
 
-### Language Design
+### New Database Table: `forge_listings`
 
-```text
--- GeomQ Syntax Examples --
-
-qutrit x = |2>          -- declare a qutrit in state 2
-qutrit y = |0>
-
-gate HADAMARD x         -- apply quantum-inspired gate
-gate CNOT x y           -- controlled gate
-
-measure x -> result     -- collapse to classical value (0, 1, or 2)
-
-fold sum = 0            -- fold block (loop equivalent)
-  over range(10) as i
-    sum = sum + i
-endfold
-
-emit "Result: " + result   -- output
-
-fn fibonacci(n)             -- function definition
-  if n < 2 then return n
-  return fibonacci(n-1) + fibonacci(n-2)
-endfn
-```
-
-### Compilation Pipeline
+Stores publicly published mini-apps that any user can browse, install, and invest in.
 
 ```text
-GeomQ Source --> Lexer/Tokenizer --> AST --> Ternary Gate Simulator --> JavaScript Emitter --> eval()
+forge_listings
+  id: uuid (PK)
+  creator_id: uuid (references auth.users)
+  name: text
+  description: text
+  icon: text (emoji)
+  code: text (the React component source)
+  category: text ('utility' | 'game' | 'tool' | 'social' | 'finance' | 'other')
+  version: integer (default 1)
+  installs: integer (default 0)
+  revenue: numeric (default 0) -- total OS earned
+  price: numeric (default 0) -- install price in OS (0 = free)
+  is_listed: boolean (default true) -- visible in forge
+  ipo_active: boolean (default false) -- currently raising funds
+  ipo_target: numeric (default 0) -- OS fundraise target
+  ipo_raised: numeric (default 0) -- OS raised so far
+  total_shares: integer (default 1000) -- shares issued for this app
+  share_price: numeric (default 1) -- current price per share in OS
+  created_at: timestamptz
+  updated_at: timestamptz
 ```
 
-- **Lexer**: Tokenizes keywords (`qutrit`, `gate`, `fold`, `emit`, `fn`, `measure`, `if/then/else`)
-- **Gates**: Simulated ternary gates (HADAMARD produces superposition probabilities, CNOT applies controlled transforms, PHASE rotates state)
-- **Output**: Compiles to plain JavaScript that runs in a sandboxed function scope
-- **Persistence**: User programs saved via `useCloudStorage` under key `geomq-programs`
+### New Database Table: `app_shares`
 
-### Changes to GeomCApp
+Tracks who owns shares in which listed app.
 
-The existing GeomC app gets a second tab: "GeomQ REPL" -- a live coding environment where users write GeomQ code, see compilation phases, and view output. The existing compiler demo stays as the first tab.
+```text
+app_shares
+  id: uuid (PK)
+  user_id: uuid
+  listing_id: uuid (references forge_listings)
+  shares: integer
+  avg_cost: numeric -- average purchase price
+  created_at: timestamptz
+```
+
+### New Database Table: `share_orders`
+
+Order book for buying/selling app shares.
+
+```text
+share_orders
+  id: uuid (PK)
+  user_id: uuid
+  listing_id: uuid (references forge_listings)
+  order_type: text ('buy' | 'sell')
+  shares: integer
+  price: numeric -- price per share in OS
+  filled: integer (default 0)
+  status: text ('open' | 'filled' | 'cancelled')
+  created_at: timestamptz
+```
+
+### RLS Policies
+- **forge_listings**: Anyone can SELECT (public marketplace). Only creator can INSERT. Updates go through edge function.
+- **app_shares**: Users can SELECT their own shares. Admins can see all.
+- **share_orders**: Users can SELECT their own orders. All open orders are visible (for the order book).
 
 ---
 
-## Part 2: AI Mini-App Creator
+## Part 2: App Forge UI
 
-The Hypersphere AI gains a new capability: generating mini-apps from natural language descriptions. These mini-apps are rendered as sandboxed React components inside the OS.
+### Upgrade MiniAppsApp to include Forge tabs
+
+**Tabs:**
+- **My Apps**: Current personal mini-apps (existing functionality)
+- **Forge**: Public marketplace -- browse all published apps by category, search, sort by installs/price/trending
+- **Create**: AI-powered app creator (calls `mini-app-gen` edge function) with a "Publish to Forge" option
+- **Portfolio**: Your investments in app listings -- shares owned, P&L, dividends
+
+### Publishing Flow
+1. User creates a mini-app (via AI or manually)
+2. Clicks "Publish to Forge"
+3. Sets: name, description, category, install price (0 = free), and optionally launches an IPO
+4. If IPO: sets a fundraise target (e.g., 50,000 OS) and issues 1,000 shares. Investors buy shares during the IPO phase. When target is reached, the app goes live and the creator receives the funds.
+5. The app appears in the Forge for everyone to browse and install
+
+### Install Flow
+1. User browses Forge, finds an app they like
+2. Clicks "Install" -- deducts the install price in OS from their wallet (via prime-bank)
+3. The app code is saved to their personal `user-mini-apps` cloud storage
+4. Creator earns the OS revenue
+
+---
+
+## Part 3: Stock Market Exchange
+
+Every published Forge app with an IPO becomes a tradeable stock. Users can buy and sell shares using OS tokens.
 
 ### How It Works
+- Each IPO app issues 1,000 shares at an initial price
+- Share price fluctuates based on supply/demand (order book matching)
+- Users place buy/sell limit orders
+- The edge function matches orders: if a buy price >= a sell price, the trade executes
+- Revenue metrics (installs, daily active users) influence perceived value
+- Creators retain a percentage of shares (e.g., 30%) as founder shares
 
-1. User opens Hypersphere and says: "Create a mini-app that shows a countdown timer"
-2. AI generates a self-contained React component as a string (JSX + state + logic)
-3. The component is stored in cloud storage under `user-mini-apps`
-4. A new "Mini Apps" panel in the OS lets users browse, launch, and delete their created apps
-5. Mini-apps run inside a sandboxed iframe or a controlled eval renderer
-
-### Mini-App Structure
-
-```text
-{
-  id: string,
-  name: string,
-  description: string,
-  code: string,        // React component source
-  icon: string,        // emoji or lucide icon name
-  createdAt: string,
-  geomqSource?: string // optional GeomQ source that generated it
-}
-```
-
-### AI Integration
-
-A new edge function `mini-app-gen` calls the AI gateway with a specialized system prompt that instructs it to output a single self-contained React functional component using only inline styles and basic React hooks (useState, useEffect, useCallback). No imports -- everything self-contained.
-
-### Rendering Engine
-
-Mini-apps render via `new Function()` in a controlled wrapper component that:
-- Provides React, useState, useEffect as globals
-- Catches errors gracefully and shows error boundaries
-- Limits execution time (5-second timeout)
-- Cannot access the parent window, localStorage, or network
-
-### Desktop Integration
-
-- New app type: `miniapps` -- a gallery/launcher for user-created mini-apps
-- Each mini-app can also be opened as its own OS window
-- Mini-apps appear in the desktop icon grid if pinned
+### PrimeBets Integration
+The existing PrimeBets app gets upgraded from hardcoded mock data to real functionality:
+- **App Markets**: Bet YES/NO on whether an app will hit install targets, revenue goals, etc.
+- **Real OS wagers**: Bets use actual OS tokens via `prime-bank`
+- Markets can be created by anyone (costs OS to create a market)
+- Resolution is manual (admin or creator confirms outcome)
 
 ---
 
-## Part 3: PrimeAgent Upgrade
-
-The agent currently uses keyword matching to generate task queues. We'll upgrade it to:
-
-### New Capabilities
-
-| Capability | Description |
-|-----------|-------------|
-| Wallet ops | Check balance, send tokens, exchange OS/IX |
-| Arcade | Launch games, check high scores |
-| Journal | Create/publish journal entries |
-| Browser | Navigate to intranet pages, search content |
-| Mini-apps | Install and launch user mini-apps |
-| Calendar | Create events, check schedule |
-| Files | Upload/download files |
-| Multi-step workflows | Chain complex operations with conditionals |
-
-### Implementation
-
-Expand the `parseInstruction` function with new keyword patterns and action types:
-- `'wallet-check'`, `'wallet-send'`, `'wallet-exchange'` action types
-- `'arcade-launch'`, `'journal-create'`, `'calendar-add'` action types  
-- Add actual API calls in the executor (currently just simulated delays)
-- For wallet operations, call the `prime-bank` edge function
-- For journal operations, use the `useIntranetPages` hook patterns
-
-### Quick Commands Update
-
-Add new quick command buttons:
-- "Check Wallet" -- shows OS/IX balance
-- "Publish Journal" -- creates a quick journal entry
-- "Launch Game" -- opens a random arcade game
-- "Create Mini-App" -- triggers the AI mini-app flow
-
----
-
-## Part 4: Token Economy Expansion
-
-### Arcade Rewards
-
-- Completing a game awards OS tokens based on score:
-  - Minesweeper win: 500 OS (Easy), 1500 OS (Medium), 5000 OS (Hard)
-  - Snake: 10 OS per food eaten
-  - Pong win: 200 OS per game
-  - Cascade level clear: 300 OS per level
-  - Tetris: 100 OS per line cleared
-- Rewards claimed via `prime-bank` edge function with a new `arcade-reward` action
-- Anti-cheat: server validates that the reward amount is within expected bounds and limits claims to once per game session
-
-### AI Token Costs
-
-- Using Hypersphere AI costs 50 OS per message (deducted via prime-bank)
-- Creating a mini-app costs 500 OS
-- Users with 0 OS get 3 free AI messages per day (tracked client-side)
-
-### Unlockable Upgrades (Token Shop)
-
-A new "Shop" tab in the Wallet app where users spend OS tokens on:
-
-| Item | Cost | Effect |
-|------|------|--------|
-| Dark Neon Theme | 10,000 OS | Unlocks a neon color scheme for the OS |
-| Extra Workspace | 25,000 OS | Adds a 5th workspace slot |
-| AI Priority | 50,000 OS | Faster AI responses (client-side flag) |
-| Custom Desktop Widget | 15,000 OS | Unlock custom widget placement |
-| GeomQ Pro Toolkit | 30,000 OS | Unlock advanced GeomQ gate operations |
-
-Purchases stored in `useCloudStorage` under `user-unlocks`.
-
-### prime-bank Edge Function Updates
+## Part 4: Edge Function Updates (`prime-bank`)
 
 New actions added:
-- `arcade-reward`: Validate and grant arcade earnings
-- `ai-charge`: Deduct OS for AI usage  
-- `purchase-unlock`: Buy shop items
+
+| Action | Description |
+|--------|-------------|
+| `forge-publish` | Publish an app to the Forge, optionally start IPO |
+| `forge-install` | Install a Forge app (deducts OS, credits creator) |
+| `forge-invest` | Buy shares in an IPO |
+| `share-order` | Place a buy/sell order for app shares |
+| `share-cancel` | Cancel an open order |
+| `match-orders` | Execute matching orders (called after new orders) |
+| `bet-place` | Place a real OS bet on a PrimeBets market |
+| `bet-resolve` | Admin resolves a market, distributes winnings |
+
+### Order Matching Logic
+When a new order is placed:
+1. Check for opposing orders on the same listing where buy price >= sell price
+2. Execute the trade at the sell price (seller gets what they asked)
+3. Transfer OS between buyer and seller wallets
+4. Update share ownership in `app_shares`
+5. Mark orders as filled
+
+---
+
+## Part 5: PrimeBets Real Markets
+
+### New Database Table: `bet_markets`
+
+```text
+bet_markets
+  id: uuid (PK)
+  creator_id: uuid
+  question: text
+  category: text
+  listing_id: uuid (nullable, links to a forge app)
+  yes_pool: numeric (default 0) -- total OS bet on YES
+  no_pool: numeric (default 0) -- total OS bet on NO
+  status: text ('open' | 'resolved_yes' | 'resolved_no' | 'cancelled')
+  expiry: timestamptz
+  created_at: timestamptz
+  creation_cost: numeric (default 1000) -- OS cost to create market
+```
+
+### New Database Table: `bets`
+
+```text
+bets
+  id: uuid (PK)
+  user_id: uuid
+  market_id: uuid (references bet_markets)
+  side: text ('YES' | 'NO')
+  amount: numeric -- OS wagered
+  claimed: boolean (default false)
+  created_at: timestamptz
+```
+
+### Market Mechanics
+- Creating a market costs 1,000 OS (anti-spam)
+- Users bet OS on YES or NO
+- Odds are determined by pool ratios (AMM-style: yes_price = yes_pool / (yes_pool + no_pool))
+- When resolved, winning side splits the total pool proportionally
+- Payout = (your_bet / winning_pool) * total_pool
 
 ---
 
@@ -190,47 +195,38 @@ New actions added:
 
 | File | Description |
 |------|-------------|
-| `src/lib/geomq/lexer.ts` | GeomQ tokenizer |
-| `src/lib/geomq/parser.ts` | GeomQ AST parser |
-| `src/lib/geomq/compiler.ts` | GeomQ to JavaScript compiler |
-| `src/lib/geomq/gates.ts` | Ternary quantum gate simulation |
-| `src/components/os/MiniAppsApp.tsx` | Mini-app gallery and launcher |
-| `src/components/os/MiniAppRenderer.tsx` | Sandboxed mini-app renderer |
-| `supabase/functions/mini-app-gen/index.ts` | AI-powered mini-app generator |
+| `src/components/os/AppForgeApp.tsx` | New unified Forge app (replaces MiniAppsApp as the primary interface) |
 
 ### Files to Modify
 
 | File | Change |
 |------|--------|
-| `src/components/os/GeomCApp.tsx` | Add GeomQ REPL tab with live interpreter |
-| `src/components/os/HypersphereApp.tsx` | Add "Create Mini-App" mode, AI token charging |
-| `src/components/os/PrimeAgentApp.tsx` | Expand capabilities, add real API calls |
-| `src/components/os/PrimeArcadeApp.tsx` | Add OS token rewards on game completion |
-| `src/components/os/PrimeWalletApp.tsx` | Add "Shop" tab for unlockables |
-| `supabase/functions/prime-bank/index.ts` | Add arcade-reward, ai-charge, purchase-unlock actions |
-| `src/types/os.ts` | Add `'miniapps'` to AppType |
-| `src/components/os/Desktop.tsx` | Register MiniAppsApp |
-| `src/components/os/Taskbar.tsx` | Add Mini Apps to menu |
-| `src/components/os/DesktopIcons.tsx` | Add Mini Apps icon |
-| `supabase/config.toml` | Register mini-app-gen function |
+| `src/components/os/MiniAppsApp.tsx` | Refactor into a sub-component of AppForge, or redirect to Forge |
+| `src/components/os/PrimeBetsApp.tsx` | Replace hardcoded markets with real database-backed markets and OS token wagering |
+| `supabase/functions/prime-bank/index.ts` | Add forge-publish, forge-install, forge-invest, share-order, match-orders, bet-place, bet-resolve actions |
+| `src/types/os.ts` | Add `'forge'` to AppType |
+| `src/components/os/Desktop.tsx` | Register AppForgeApp |
+| `src/components/os/Taskbar.tsx` | Add Forge to app menu (replace or supplement Mini Apps) |
+| `src/components/os/DesktopIcons.tsx` | Add Forge desktop icon |
 
-### Edge Function: mini-app-gen
+### Database Migrations
+- Create `forge_listings` table with RLS
+- Create `app_shares` table with RLS
+- Create `share_orders` table with RLS
+- Create `bet_markets` table with RLS
+- Create `bets` table with RLS
+- Enable realtime on `forge_listings`, `share_orders`, `bet_markets`
 
-Uses the Lovable AI Gateway (google/gemini-3-flash-preview) with a system prompt that constrains output to a single React functional component string. The function:
-1. Accepts a natural language description
-2. Deducts 500 OS from the user's wallet via prime-bank
-3. Calls the AI to generate the component
-4. Returns the component source code
-5. Client saves it to cloud storage
+### Security
+- All financial operations go through `prime-bank` edge function with service role
+- Share trades are atomic (deduct OS + transfer shares in one operation)
+- IPO investments are locked until target is met (or refunded if cancelled)
+- Bet resolution is admin-only to prevent fraud
+- Order matching validates balances before execution
 
-### Security Considerations
-
-- Mini-app code runs in a sandboxed `new Function()` scope with no access to `window`, `document`, `fetch`, or `localStorage`
-- GeomQ `eval` output is wrapped in a try/catch with timeout
-- Arcade rewards are rate-limited server-side (max 1 claim per game type per 30 seconds)
-- AI charges verified server-side before forwarding to AI gateway
-
-### No New Database Tables Required
-
-All new data (GeomQ programs, mini-apps, unlocks, arcade sessions) uses the existing `user_data` table via `useCloudStorage`. Only the `prime-bank` edge function gains new action handlers.
+### Mini-App API Access
+Published Forge apps gain limited API access through a callback system:
+- `onWalletCheck()`: returns user's OS balance (read-only)
+- `onEarnReward(amount, reason)`: request OS reward (capped, rate-limited)
+- These are passed as props to the MiniAppRenderer, not direct network access
 
