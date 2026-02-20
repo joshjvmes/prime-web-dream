@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { BookOpen, Plus, Trash2, Eye, Edit3, Search, Globe, Tag, Image as ImageIcon } from 'lucide-react';
+import { BookOpen, Plus, Trash2, Eye, Edit3, Search, Globe, Tag, Image as ImageIcon, Download } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useCloudStorage } from '@/hooks/useCloudStorage';
 import { useIntranetPages } from '@/hooks/useIntranetPages';
@@ -110,6 +110,30 @@ export default function PrimeJournalApp() {
     setShowPublish(true);
   };
 
+  const exportHTML = () => {
+    if (!selected) return;
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${selected.title}</title>
+<style>body{font-family:Georgia,serif;max-width:700px;margin:40px auto;padding:0 20px;color:#222;line-height:1.7}
+h1{font-size:28px;margin-bottom:4px}
+.meta{color:#888;font-size:13px;margin-bottom:24px;border-bottom:1px solid #eee;padding-bottom:12px}
+.tags span{background:#f0f0f0;padding:2px 8px;border-radius:3px;font-size:12px;margin-right:4px}
+img{max-width:100%;border-radius:4px;margin:12px 0}
+pre{background:#f5f5f5;padding:12px;border-radius:4px;overflow-x:auto;font-size:13px}
+code{background:#f5f5f5;padding:1px 4px;border-radius:2px;font-size:13px}
+@media print{body{margin:0;max-width:100%}}</style></head><body>
+<h1>${selected.title}</h1>
+<div class="meta"><span>${new Date(selected.createdAt).toLocaleDateString('en-US', { year:'numeric', month:'long', day:'numeric' })}</span>
+${selected.tags.length > 0 ? `<div class="tags" style="margin-top:6px">${selected.tags.map(t => `<span>${t}</span>`).join('')}</div>` : ''}</div>
+<div>${selected.content.replace(/^### (.+)$/gm, '<h3>$1</h3>').replace(/^## (.+)$/gm, '<h2>$1</h2>').replace(/^# (.+)$/gm, '<h1>$1</h1>').replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>').replace(/\*(.+?)\*/g, '<em>$1</em>').replace(/`([^`]+)`/g, '<code>$1</code>').replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img src="$2" alt="$1">').replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>').replace(/\n/g, '<br>')}</div>
+</body></html>`;
+    const blob = new Blob([html], { type: 'text/html' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `${selected.title.replace(/[^a-z0-9]/gi, '-').toLowerCase()}.html`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  };
+
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !selected) return;
@@ -199,6 +223,7 @@ export default function PrimeJournalApp() {
               <input ref={fileInputRef} type="file" accept=".png,.jpg,.jpeg,.svg,.webp" className="hidden" onChange={handleImageUpload} />
               <button onClick={() => fileInputRef.current?.click()} className="p-1 rounded hover:bg-muted text-muted-foreground" title="Insert Image"><ImageIcon size={12} /></button>
               <button onClick={startPublish} className="p-1 rounded hover:bg-muted text-muted-foreground" title="Publish to Intranet"><Globe size={12} /></button>
+              <button onClick={exportHTML} className="p-1 rounded hover:bg-muted text-muted-foreground" title="Export HTML/PDF"><Download size={12} /></button>
               <button onClick={deleteEntry} className="p-1 rounded hover:bg-muted text-muted-foreground" title="Delete"><Trash2 size={12} /></button>
             </div>
           </div>

@@ -7,9 +7,9 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 
 // ─── Dynamic Intranet Components ───
 
-export function HubPage({ onNavigate }: { onNavigate?: (url: string) => void }) {
+export function HubPage({ onNavigate, initialSearch = '' }: { onNavigate?: (url: string) => void; initialSearch?: string }) {
   const { pages, loaded } = useIntranetPages();
-  const [search, setSearch] = useState('');
+  const [search, setSearch] = useState(initialSearch);
   const [showCreate, setShowCreate] = useState(false);
   const [newTitle, setNewTitle] = useState('');
   const [newSlug, setNewSlug] = useState('');

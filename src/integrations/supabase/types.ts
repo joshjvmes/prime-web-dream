@@ -104,6 +104,42 @@ export type Database = {
         }
         Relationships: []
       }
+      escrow_deals: {
+        Row: {
+          amount: number
+          counterparty_id: string
+          created_at: string
+          creator_id: string
+          description: string | null
+          id: string
+          resolved_at: string | null
+          status: string
+          token_type: string
+        }
+        Insert: {
+          amount: number
+          counterparty_id: string
+          created_at?: string
+          creator_id: string
+          description?: string | null
+          id?: string
+          resolved_at?: string | null
+          status?: string
+          token_type: string
+        }
+        Update: {
+          amount?: number
+          counterparty_id?: string
+          created_at?: string
+          creator_id?: string
+          description?: string | null
+          id?: string
+          resolved_at?: string | null
+          status?: string
+          token_type?: string
+        }
+        Relationships: []
+      }
       file_metadata: {
         Row: {
           created_at: string
@@ -170,6 +206,64 @@ export type Database = {
         }
         Relationships: []
       }
+      transactions: {
+        Row: {
+          amount: number
+          created_at: string
+          description: string | null
+          escrow_id: string | null
+          from_wallet_id: string | null
+          id: string
+          to_wallet_id: string | null
+          token_type: string
+          tx_type: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          description?: string | null
+          escrow_id?: string | null
+          from_wallet_id?: string | null
+          id?: string
+          to_wallet_id?: string | null
+          token_type: string
+          tx_type: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          description?: string | null
+          escrow_id?: string | null
+          from_wallet_id?: string | null
+          id?: string
+          to_wallet_id?: string | null
+          token_type?: string
+          tx_type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "transactions_escrow_id_fkey"
+            columns: ["escrow_id"]
+            isOneToOne: false
+            referencedRelation: "escrow_deals"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "transactions_from_wallet_id_fkey"
+            columns: ["from_wallet_id"]
+            isOneToOne: false
+            referencedRelation: "wallets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "transactions_to_wallet_id_fkey"
+            columns: ["to_wallet_id"]
+            isOneToOne: false
+            referencedRelation: "wallets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       user_data: {
         Row: {
           id: string
@@ -230,6 +324,36 @@ export type Database = {
           email?: string
           id?: string
           name?: string | null
+        }
+        Relationships: []
+      }
+      wallets: {
+        Row: {
+          created_at: string
+          id: string
+          is_system: boolean
+          ix_balance: number
+          os_balance: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_system?: boolean
+          ix_balance?: number
+          os_balance?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_system?: boolean
+          ix_balance?: number
+          os_balance?: number
+          updated_at?: string
+          user_id?: string
         }
         Relationships: []
       }

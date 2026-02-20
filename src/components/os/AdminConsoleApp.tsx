@@ -1,9 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { Users, ListChecks, MessageSquare, BarChart3, ShieldCheck, Trash2, Search, Download, Plus, Minus, Activity } from 'lucide-react';
+import { Users, ListChecks, MessageSquare, BarChart3, ShieldCheck, Trash2, Search, Download, Plus, Minus, Activity, Wallet, Banknote, RefreshCw } from 'lucide-react';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 
-type Tab = 'users' | 'waitlist' | 'chat' | 'stats' | 'activity';
+type Tab = 'users' | 'waitlist' | 'chat' | 'stats' | 'activity' | 'bank';
 
 interface AdminUser {
   id: string;
@@ -71,6 +71,24 @@ async function adminAction(action: string, method = 'GET', body?: object) {
   return res.json();
 }
 
+async function bankAction(action: string, method = 'GET', body?: object) {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) throw new Error('Not authenticated');
+  const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/prime-bank?action=${action}`;
+  const res = await fetch(url, {
+    method: body ? 'POST' : method,
+    headers: {
+      'Authorization': `Bearer ${session.access_token}`,
+      'Content-Type': 'application/json',
+      'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+    },
+    ...(body ? { body: JSON.stringify(body) } : {}),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Request failed');
+  return data;
+}
+
 export default function AdminConsoleApp() {
   const [tab, setTab] = useState<Tab>('users');
   const [users, setUsers] = useState<AdminUser[]>([]);
@@ -81,6 +99,11 @@ export default function AdminConsoleApp() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [search, setSearch] = useState('');
+  const [bankStats, setBankStats] = useState<any>(null);
+  const [bankWallets, setBankWallets] = useState<any[]>([]);
+  const [bankTxns, setBankTxns] = useState<any[]>([]);
+  const [rewardUserId, setRewardUserId] = useState('');
+  const [rewardAmount, setRewardAmount] = useState('');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -94,6 +117,17 @@ export default function AdminConsoleApp() {
         case 'activity': {
           const { data } = await supabase.from('chat_presence').select('*').order('last_seen', { ascending: false });
           setPresenceUsers(data || []);
+          break;
+        }
+        case 'bank': {
+          const [stats, wallets, txns] = await Promise.all([
+            bankAction('admin-stats'),
+            bankAction('admin-wallets'),
+            bankAction('admin-transactions'),
+          ]);
+          setBankStats(stats);
+          setBankWallets(wallets);
+          setBankTxns(txns);
           break;
         }
       }
@@ -182,6 +216,7 @@ export default function AdminConsoleApp() {
     { id: 'waitlist', label: 'Waitlist', icon: <ListChecks size={14} /> },
     { id: 'chat', label: 'Chat Mod', icon: <MessageSquare size={14} /> },
     { id: 'stats', label: 'Stats', icon: <BarChart3 size={14} /> },
+    { id: 'bank', label: 'Bank', icon: <Banknote size={14} /> },
   ];
 
   const filteredUsers = users.filter(u =>
@@ -370,6 +405,83 @@ export default function AdminConsoleApp() {
                     <p className={`text-2xl font-mono mt-1 ${s.color}`}>{s.value}</p>
                   </div>
                 ))}
+              </div>
+            )}
+
+            {tab === 'bank' && (
+              <div className="space-y-4">
+                {!bankStats?.system_wallet && (
+                  <button onClick={async () => { try { await bankAction('init'); load(); } catch (e: any) { setError(e.message); } }}
+                    className="w-full py-3 rounded border border-primary bg-primary/10 text-primary text-[10px] font-display tracking-wider uppercase hover:bg-primary/20">
+                    Initialize Central Bank System
+                  </button>
+                )}
+                {bankStats && (
+                  <>
+                    <div>
+                      <p className="text-[9px] font-display tracking-wider uppercase text-primary mb-2">Treasury Overview</p>
+                      <div className="grid grid-cols-2 gap-2">
+                        {[
+                          { label: 'CB OS Reserve', value: `${Number(bankStats.system_wallet?.os_balance || 0).toLocaleString()} OS`, cls: 'text-primary' },
+                          { label: 'CB IX Reserve', value: `${Number(bankStats.system_wallet?.ix_balance || 0).toLocaleString(undefined, { maximumFractionDigits: 6 })} IX`, cls: 'text-amber-400' },
+                          { label: 'Circulating OS', value: Number(bankStats.circulating_os).toLocaleString(), cls: 'text-foreground' },
+                          { label: 'Circulating IX', value: Number(bankStats.circulating_ix).toLocaleString(undefined, { maximumFractionDigits: 6 }), cls: 'text-foreground' },
+                          { label: 'Wallets', value: bankStats.wallet_count, cls: 'text-foreground' },
+                          { label: 'Transactions', value: bankStats.transaction_count, cls: 'text-foreground' },
+                        ].map(s => (
+                          <div key={s.label} className="p-3 rounded border border-border/50 bg-background/50">
+                            <p className="text-[8px] text-muted-foreground">{s.label}</p>
+                            <p className={`text-sm font-mono mt-0.5 ${s.cls}`}>{s.value}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3 p-3 rounded border border-border/50 bg-background/30">
+                      <div className="flex-1">
+                        <p className="text-[9px] font-display tracking-wider uppercase text-primary">Interest Distribution</p>
+                        <p className="text-[8px] text-muted-foreground mt-0.5">Rate: {(bankStats.interest_rate * 100).toFixed(2)}% daily</p>
+                      </div>
+                      <button onClick={async () => {
+                        try { const r = await bankAction('distribute-interest'); alert(`Distributed ${Number(r.distributed).toLocaleString()} OS to ${r.accounts} accounts`); load(); } catch (e: any) { setError(e.message); }
+                      }} className="px-3 py-1.5 rounded bg-primary/20 text-primary text-[9px] hover:bg-primary/30 flex items-center gap-1">
+                        <RefreshCw size={10} /> Distribute
+                      </button>
+                    </div>
+                    <div className="p-3 rounded border border-border/50 bg-background/30 space-y-2">
+                      <p className="text-[9px] font-display tracking-wider uppercase text-primary">Reward User</p>
+                      <div className="flex gap-2">
+                        <input value={rewardUserId} onChange={e => setRewardUserId(e.target.value)} placeholder="User ID" className="flex-1 px-2 py-1 bg-background border border-border rounded text-xs" />
+                        <input value={rewardAmount} onChange={e => setRewardAmount(e.target.value)} placeholder="OS Amount" type="number" className="w-28 px-2 py-1 bg-background border border-border rounded text-xs" />
+                        <button onClick={async () => { if (!rewardUserId || !rewardAmount) return; try { await bankAction('reward', 'POST', { target_user_id: rewardUserId, amount: rewardAmount }); setRewardUserId(''); setRewardAmount(''); load(); } catch (e: any) { setError(e.message); } }}
+                          className="px-3 py-1 rounded bg-primary/20 text-primary text-[9px] hover:bg-primary/30">Send</button>
+                      </div>
+                    </div>
+                    <div>
+                      <p className="text-[9px] font-display tracking-wider uppercase text-primary mb-2">All Wallets ({bankWallets.length})</p>
+                      <div className="space-y-1 max-h-40 overflow-y-auto">
+                        {bankWallets.map((w: any) => (
+                          <div key={w.id} className="flex items-center gap-2 p-2 rounded border border-border/50">
+                            <span className="text-foreground text-[10px] flex-1 truncate">{w.display_name}</span>
+                            <span className="text-primary text-[10px] font-mono">{Number(w.os_balance).toLocaleString()} OS</span>
+                            {Number(w.ix_balance) > 0 && <span className="text-amber-400 text-[9px] font-mono">{Number(w.ix_balance).toLocaleString(undefined, { maximumFractionDigits: 6 })} IX</span>}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                    <div>
+                      <p className="text-[9px] font-display tracking-wider uppercase text-primary mb-2">Recent Transactions</p>
+                      <div className="space-y-1 max-h-40 overflow-y-auto">
+                        {bankTxns.slice(0, 50).map((tx: any) => (
+                          <div key={tx.id} className="flex items-center gap-2 p-1.5 rounded border border-border/30 text-[9px]">
+                            <span className="text-muted-foreground truncate flex-1">{tx.description || tx.tx_type}</span>
+                            <span className="text-foreground font-mono">{Number(tx.amount).toLocaleString()} {tx.token_type}</span>
+                            <span className="text-muted-foreground/50">{new Date(tx.created_at).toLocaleDateString()}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </>
+                )}
               </div>
             )}
           </>
