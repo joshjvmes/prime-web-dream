@@ -1,118 +1,178 @@
 
-# PRIME OS: Living, Breathing AI-Driven System
+
+# PRIME OS: Real-World Workflow Engine
 
 ## Overview
 
-Transform PRIME OS from a collection of apps into a sentient-feeling organism where the AI (Hyper) is the soul of the system. The terminal greets you on arrival, the OS generates ambient life events, and every surface breathes with AI-driven awareness.
+Four major real-utility upgrades: global keyboard shortcuts with a clipboard manager, persistent calendar events with timed reminders, real file upload/download backed by cloud storage, and a live workflow automation engine connecting apps together.
 
 ---
 
-## 1. AI-Powered Terminal Welcome
+## 1. Global Keyboard Shortcuts + Clipboard Manager
 
-When the terminal opens after boot, it automatically streams a personalized greeting from Hyper AI -- not a static message, but a real AI-generated welcome that references the time of day, what the user was doing last session, and suggests what to explore.
+A system-wide hotkey layer and a clipboard history panel, like macOS Spotlight + clipboard managers.
 
-**Update: `src/components/os/TerminalApp.tsx`**
-- Add a new prop `isFirstOpen?: boolean` that Desktop passes as `true` on the first terminal open after boot
-- On mount, if `isFirstOpen` is true, call the `hyper-chat` edge function with a special system-level prompt asking for a short terminal greeting
-- Stream the AI response line-by-line into the terminal output (replacing the static WELCOME lines)
-- The greeting references: time of day, user profile name (from localStorage), and a random PRIME OS system tip
-- Falls back to the existing static WELCOME if the AI call fails or times out (3s timeout)
-- After the greeting streams in, show the normal `psh` prompt ready for input
+### New hook: `src/hooks/useGlobalShortcuts.ts`
+- Registers document-level keydown listener
+- Shortcut map:
+  - `Ctrl+K` -- Global Search (already exists, formalize)
+  - `Ctrl+L` -- Lock screen
+  - `Ctrl+\`` -- Open terminal
+  - `Ctrl+Shift+A` -- Open PrimeAgent
+  - `Alt+1..9` -- Switch workspace
+  - `Alt+Tab` -- Cycle focus to next window
+  - `Alt+Shift+Tab` -- Cycle focus backwards
+  - `Alt+F4` -- Close focused window
+  - `Ctrl+Shift+V` -- Open clipboard manager
+  - `Ctrl+M` -- Minimize focused window
+  - `Ctrl+Shift+M` -- Maximize/restore focused window
+- Accepts callbacks map from Desktop so shortcuts trigger real actions
+- Only active when booted and unlocked
 
-**Update: `src/components/os/Desktop.tsx`**
-- Track `firstTerminalOpened` state so only the very first terminal after boot gets the AI greeting
-- Pass `isFirstOpen` prop to TerminalApp in `renderApp`
+### New component: `src/components/os/ClipboardManager.tsx`
+- Slide-out panel (triggered by `Ctrl+Shift+V` or taskbar icon)
+- Maintains history of last 20 copied text items (uses `document.addEventListener('copy')`)
+- Click any item to copy it back to clipboard
+- Pin items to keep them permanently
+- Clear all button
+- Persisted to localStorage (and cloud storage if signed in)
+- Search/filter within clipboard history
 
----
-
-## 2. Terminal `ask` Command -- Chat with Hyper from the Shell
-
-Add a new terminal command `ask <question>` that lets users talk to Hyper AI directly from the shell, with streaming responses rendered as terminal output.
-
-**Update: `src/components/os/terminal/commands.ts`**
-- Add `ask` to `ALL_COMMANDS` list
-- Add `ask` case to `processCommand` that returns a special marker (like `'ai-ask'`)
-
-**Update: `src/components/os/TerminalApp.tsx`**
-- Detect the `'ai-ask'` return from processCommand
-- When triggered, stream from `hyper-chat` edge function and render response lines into the terminal
-- Show a `▸ Hyper is thinking...` indicator while waiting
-- The question is sent as a single user message (no conversation history needed in terminal mode)
-
----
-
-## 3. Ambient System Pulse -- The OS Breathes
-
-A background system that periodically generates small, organic "life signs" throughout the OS -- subtle notifications, status changes, and ambient activity that make the system feel alive even when idle.
-
-**New file: `src/hooks/useSystemPulse.ts`**
-- Generates periodic ambient events every 30-90 seconds (randomized)
-- Events are small system status updates like:
-  - "Lattice coherence optimized -- 0.3% efficiency gain"
-  - "FoldMem auto-compact cycle 4,097 complete"
-  - "PrimeNet geodesic route recalculated -- 2 hops saved"
-  - "Energy harvesting COP adjusted to 3.24"
-  - "Qutrit core #347 rebalanced to state |2>"
-- Pushes events as notifications (via existing notification system)
-- Only active when the OS is booted and unlocked
-- Configurable in Settings (on/off toggle, frequency slider)
-- Events are contextual -- different messages based on which apps are open
-
-**Update: `src/components/os/Desktop.tsx`**
-- Wire `useSystemPulse` with the notification system's `pushNotification` callback
-- Pass active apps list so pulse messages are contextual
-
-**Update: `src/hooks/useNotifications.ts`**
-- Export `pushNotification` so it can be used by the pulse system
-
-**Update: `src/components/os/SettingsApp.tsx`**
-- Add "System Pulse" toggle under a new "Ambience" section: enable/disable, frequency (calm/normal/active)
+### Updates
+- **Desktop.tsx**: Wire `useGlobalShortcuts` with all system callbacks
+- **Taskbar.tsx**: Add clipboard icon in system tray area
+- **SettingsApp.tsx**: Add "Shortcuts" panel showing all hotkeys in a reference table
 
 ---
 
-## 4. Hyper Proactive Tips -- AI That Reaches Out
+## 2. Persistent Calendar Events + Reminders
 
-Hyper occasionally sends proactive suggestions as notifications based on what you're doing, making the AI feel like it's watching and helping.
+Transform the calendar from a display-only moon-phase viewer into a real event management system with database-backed persistence and timed notification reminders.
 
-**Update: `src/hooks/useSystemPulse.ts`** (extend the pulse system)
-- Every 2-5 minutes, if enabled, send a request to `hyper-chat` with context about what apps are currently open
-- The AI generates a short, contextual tip or suggestion (1-2 sentences)
-- Examples:
-  - If terminal is open: "Try `q3 infer` with comma-separated data for pattern classification"
-  - If energy monitor is open: "COP readings above 3.5 indicate optimal dimensional coupling"
-  - If no apps are open: "The lattice is quiet. Would you like me to run diagnostics?"
-- Displayed as a special "Hyper" notification with a distinct style
-- Rate-limited to max 1 AI tip every 3 minutes to avoid API overuse
-- Can be toggled separately from ambient pulse in Settings
+### Database
+- New table: `calendar_events`
+  - `id` (uuid, PK, default gen_random_uuid())
+  - `user_id` (uuid, not null)
+  - `title` (text, not null)
+  - `description` (text, nullable)
+  - `start_time` (timestamptz, not null)
+  - `end_time` (timestamptz, nullable)
+  - `color` (text, default '#8b5cf6')
+  - `reminder_minutes` (integer, nullable) -- e.g. 5, 15, 30 minutes before
+  - `recurring` (text, nullable) -- 'daily', 'weekly', 'monthly', or null
+  - `created_at` (timestamptz, default now())
+- RLS: users can only CRUD their own events
+- Enable Realtime so events sync across tabs
+
+### Update: `src/components/os/PrimeCalendarApp.tsx`
+- Add event CRUD:
+  - Click a day to create an event (modal with title, time, color picker, reminder dropdown)
+  - Click an event to edit/delete it
+  - Events shown as colored dots/bars on calendar days
+  - Day detail panel listing events for selected day
+- Load events from database (for signed-in users) or localStorage (guests)
+- Recurring event support: auto-generate visible instances for daily/weekly/monthly
+
+### New hook: `src/hooks/useCalendarReminders.ts`
+- Polls or checks every 30 seconds for upcoming events with reminders
+- When an event's reminder time is reached, pushes a notification via `pushNotification`
+- Notification includes event title and "starts in X minutes"
+- Clicking the notification opens the calendar app to that day
+- Only active for signed-in users with cloud events
+
+### Updates
+- **Desktop.tsx**: Wire `useCalendarReminders` with notification system and `openWindow` callback
+- **Taskbar.tsx**: Show a small dot on the calendar popover if there are events today
 
 ---
 
-## 5. Boot Sequence Enhancement -- AI Announces Arrival
+## 3. File Upload/Download with Real Cloud Storage
 
-After the existing boot sequence completes, add a brief AI-powered "system ready" announcement that streams into view before the desktop appears.
+Give the Files app real file management -- upload files from the user's computer, store them in cloud storage, and download them back.
 
-**Update: `src/components/os/BootSequence.tsx`**
-- After the existing boot lines finish, add 2-3 more lines that are dynamically generated:
-  - Line 1: `"Hyper AI: Online. Good [morning/afternoon/evening], [username]."`
-  - Line 2: A short AI-generated system status quote (pre-fetched or from a small pool)
-  - Line 3: `"All lattice nodes synchronized. The manifold awaits."`
-- These are locally generated (no API call needed during boot -- keep it fast)
-- Username pulled from localStorage profile
+### Database / Storage
+- New storage bucket: `user-files` (private)
+- RLS policies on `storage.objects`:
+  - Authenticated users can upload to their own folder (`user_id/`)
+  - Authenticated users can read/download their own files
+  - Authenticated users can delete their own files
+- New table: `file_metadata`
+  - `id` (uuid, PK)
+  - `user_id` (uuid, not null)
+  - `file_name` (text, not null)
+  - `file_path` (text, not null) -- storage path
+  - `file_size` (bigint, not null)
+  - `mime_type` (text, nullable)
+  - `folder` (text, default '/') -- virtual folder path
+  - `created_at` (timestamptz, default now())
+- RLS: users can only CRUD their own metadata
+
+### Update: `src/components/os/FilesApp.tsx`
+- Add "Upload" button in the toolbar
+  - Opens native file picker (accept any file type)
+  - Uploads to Supabase Storage under `user-files/{user_id}/{folder}/{filename}`
+  - Creates corresponding `file_metadata` row
+  - Shows upload progress bar
+- Add "Download" button for selected files
+  - Creates signed URL from Supabase Storage, triggers browser download
+- Add "Delete" for uploaded files (removes from storage + metadata)
+- Display real uploaded files alongside the existing simulated manifold files
+  - Visual distinction: real files show actual size, type icon, upload date
+  - Simulated files keep their existing geometric styling
+- Drag-and-drop upload support (drop files onto the Files window)
+- File preview: clicking an image file shows preview in a modal; clicking a text file opens it in PrimeEdit
+- Guest mode: show "Sign in to upload files" prompt instead of upload button
 
 ---
 
-## 6. Desktop Ambient Indicators
+## 4. Workflow Automation (Real CloudHooks)
 
-Small visual touches that make the desktop feel alive.
+Transform CloudHooks from a simulated dashboard into a real event-driven automation engine where users create rules that trigger actual actions across the OS.
 
-**Update: `src/components/os/Desktop.tsx`**
-- Add a subtle "system heartbeat" indicator near the PRIME OS title: a tiny dot that pulses every few seconds
-- Add a slowly incrementing "lattice operations" counter in the corner (counts up from boot, purely cosmetic)
-- The existing "lattice: P11 / fold: 11D to 4D" text gets a subtle breathing opacity animation
+### Architecture
+Internal event bus that apps emit to and CloudHooks listens on. No external services needed -- everything runs client-side.
 
-**Update: `src/components/os/Taskbar.tsx`**
-- Add a tiny animated "pulse" dot in the system tray area that glows gently, indicating "system alive"
-- Shows a tooltip on hover: "Lattice pulse: nominal" or similar
+### New module: `src/hooks/useEventBus.ts`
+- Simple pub/sub event bus using a singleton pattern
+- `emit(event, payload)` -- fire an event
+- `on(event, callback)` -- subscribe
+- `off(event, callback)` -- unsubscribe
+- Event types:
+  - `app.opened` / `app.closed` -- with app name
+  - `calendar.event.starting` -- with event details
+  - `notification.received` -- with notification data
+  - `user.signed-in` / `user.signed-out`
+  - `file.uploaded` / `file.deleted`
+  - `timer.fired` -- for scheduled triggers
+  - `clipboard.copied` -- when text is copied
+- Apps emit events at appropriate moments (FilesApp emits on upload, Calendar emits on event start, etc.)
+
+### Update: `src/components/os/CloudHooksApp.tsx`
+- Replace simulated hooks with real configurable automations
+- Users can create rules with:
+  - **Trigger**: Select from event bus events (dropdown)
+  - **Condition**: Optional filter (e.g. "app name = terminal")
+  - **Actions**: One or more actions to execute:
+    - Open an app
+    - Close an app
+    - Show a notification with custom message
+    - Run a terminal command
+    - Copy text to clipboard
+    - Lock the screen
+    - Send a webhook (user provides URL, like Zapier integration)
+- Hooks saved to localStorage / cloud storage
+- Execution log shows real executions with timestamps
+- Enable/disable toggle per hook
+- Built-in templates:
+  - "When a file is uploaded, show a notification"
+  - "When calendar event starts, open the terminal"
+  - "When user signs in, run system diagnostics"
+
+### Integration points
+- **Desktop.tsx**: Initialize event bus, emit `app.opened`/`app.closed` events
+- **FilesApp.tsx**: Emit `file.uploaded`/`file.deleted`
+- **PrimeCalendarApp.tsx**: Emit `calendar.event.starting`
+- **LockScreen.tsx**: Emit `user.signed-in`/`user.signed-out`
 
 ---
 
@@ -120,21 +180,31 @@ Small visual touches that make the desktop feel alive.
 
 | File | Action |
 |------|--------|
-| `src/hooks/useSystemPulse.ts` | Create -- ambient event generator + AI tip system |
-| `src/components/os/TerminalApp.tsx` | Edit -- AI greeting on first open, `ask` command streaming |
-| `src/components/os/terminal/commands.ts` | Edit -- add `ask` command |
-| `src/components/os/Desktop.tsx` | Edit -- wire pulse system, first-terminal tracking, ambient visuals |
-| `src/components/os/BootSequence.tsx` | Edit -- personalized boot completion message |
-| `src/components/os/Taskbar.tsx` | Edit -- alive indicator dot |
-| `src/hooks/useNotifications.ts` | Edit -- export pushNotification for pulse system |
-| `src/components/os/SettingsApp.tsx` | Edit -- ambience settings (pulse toggle, AI tips toggle, frequency) |
+| `src/hooks/useGlobalShortcuts.ts` | Create -- keyboard shortcut system |
+| `src/hooks/useEventBus.ts` | Create -- pub/sub event bus for workflow automation |
+| `src/hooks/useCalendarReminders.ts` | Create -- reminder notification checker |
+| `src/components/os/ClipboardManager.tsx` | Create -- clipboard history panel |
+| `src/components/os/PrimeCalendarApp.tsx` | Rewrite -- add event CRUD, reminders, database persistence |
+| `src/components/os/FilesApp.tsx` | Edit -- add real upload/download/delete with cloud storage |
+| `src/components/os/CloudHooksApp.tsx` | Rewrite -- real event-driven automation engine |
+| `src/components/os/Desktop.tsx` | Edit -- wire shortcuts, event bus, calendar reminders |
+| `src/components/os/Taskbar.tsx` | Edit -- clipboard icon, today-events indicator |
+| `src/components/os/SettingsApp.tsx` | Edit -- shortcuts reference panel |
+
+### Database Changes
+- `calendar_events` table with RLS (user-scoped CRUD)
+- `file_metadata` table with RLS (user-scoped CRUD)
+- `user-files` storage bucket (private, user-scoped RLS)
+- Enable Realtime on `calendar_events`
 
 ---
 
 ## Technical Notes
 
-- **AI greeting in terminal** uses the existing `hyper-chat` edge function with a short, focused prompt. A 3-second timeout ensures boot never feels slow -- if AI is unavailable, the classic static welcome appears instantly.
-- **`ask` command** streams SSE responses into terminal lines, reusing the same typewriter queue mechanism already in TerminalApp.
-- **System Pulse** is purely local (randomized messages from a curated pool). Only the **AI Tips** feature makes API calls, and those are rate-limited to 1 per 3 minutes max.
-- **No new edge functions needed** -- everything reuses the existing `hyper-chat` function.
-- **No database changes** -- all ambient state is ephemeral or stored in localStorage.
+- **Global shortcuts** use a single `document.addEventListener('keydown')` with a Map lookup for efficiency. Modifier keys are checked via `e.ctrlKey`, `e.altKey`, `e.shiftKey`. The listener is only active when the OS is booted and unlocked to avoid conflicts with the lock screen.
+- **Clipboard manager** hooks into the native `copy` event on `document` to capture text. It cannot read clipboard contents on page load (browser security), only on user-initiated copy events.
+- **Event bus** is a lightweight in-memory pub/sub (no database needed). Workflow rules (hooks) are persisted to `user_data` via the existing cloud storage hook. The bus is initialized once in Desktop and passed to apps via props or a React context.
+- **File storage** uses the existing Supabase Storage API. Files are namespaced under `{user_id}/` paths for isolation. The RLS policies on `storage.objects` enforce that users can only access their own files.
+- **Calendar reminders** use `setInterval` checking every 30s. When the tab is in the background, browsers may throttle intervals, so reminders may fire slightly late -- this is acceptable for a web OS.
+- **Webhook support** in CloudHooks uses `fetch` with `mode: 'no-cors'` for Zapier-style integrations, same pattern as the existing Zapier knowledge base.
+
