@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { AppType, WindowState } from '@/types/os';
 import { OSNotification } from '@/hooks/useNotifications';
-import { Terminal, FolderTree, Activity, Cpu, Brain, Network, Code, HardDrive, Database, Zap, Settings, ChevronUp, Bell, X, Monitor, FileText, MessageSquare, Shield, Globe, Server, LayoutList, Image, Search, Link2, Orbit, CalendarDays, Moon, BookOpen, Table, Workflow, Paintbrush, Smartphone, Map, Package, Music } from 'lucide-react';
+import { Terminal, FolderTree, Activity, Cpu, Brain, Network, Code, HardDrive, Database, Zap, Settings, ChevronUp, Bell, X, Monitor, FileText, MessageSquare, Shield, Globe, Server, LayoutList, Image, Search, Link2, Orbit, CalendarDays, Moon, BookOpen, Table, Workflow, Paintbrush, Smartphone, Map, Package, Music, Dices, TrendingUp, Radio, Vault, Video } from 'lucide-react';
 import { startOfMonth, endOfMonth, eachDayOfInterval, getDay, isToday, isSameMonth, format } from 'date-fns';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 
@@ -44,6 +44,11 @@ const allApps: { app: AppType; title: string; icon: React.ReactNode; label: stri
   { app: 'maps', title: 'PrimeMaps', icon: <Map size={18} />, label: 'Maps' },
   { app: 'pkg', title: 'PrimePkg', icon: <Package size={18} />, label: 'Packages' },
   { app: 'audio', title: 'PrimeAudio', icon: <Music size={18} />, label: 'Audio' },
+  { app: 'bets', title: 'PrimeBets', icon: <Dices size={18} />, label: 'Bets' },
+  { app: 'signals', title: 'PrimeSignals', icon: <TrendingUp size={18} />, label: 'Signals' },
+  { app: 'stream', title: 'PrimeStream', icon: <Radio size={18} />, label: 'Stream' },
+  { app: 'vault', title: 'PrimeVault', icon: <Vault size={18} />, label: 'Vault' },
+  { app: 'videocall', title: 'PrimeLink', icon: <Video size={18} />, label: 'Video' },
   { app: 'settings', title: 'Settings', icon: <Settings size={18} />, label: 'Settings' },
 ];
 

@@ -39,6 +39,11 @@ export function useWindowManager() {
           case 'maps': return [800, 550];
           case 'pkg': return [700, 480];
           case 'audio': return [650, 400];
+          case 'bets': return [850, 550];
+          case 'signals': return [800, 520];
+          case 'stream': return [820, 500];
+          case 'vault': return [780, 520];
+          case 'videocall': return [750, 550];
           default: return [600, 420];
         }
       };

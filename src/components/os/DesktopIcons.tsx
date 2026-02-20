@@ -1,4 +1,4 @@
-import { Terminal, FolderTree, Activity, Cpu, Brain, Network, Code, HardDrive, Database, Zap, Settings, Globe, Server, LayoutList, Image, Link2, Orbit, CalendarDays, BookOpen, Table, Workflow, Paintbrush, Smartphone, Map, Package, Music } from 'lucide-react';
+import { Terminal, FolderTree, Activity, Cpu, Brain, Network, Code, HardDrive, Database, Zap, Settings, Globe, Server, LayoutList, Image, Link2, Orbit, CalendarDays, BookOpen, Table, Workflow, Paintbrush, Smartphone, Map, Package, Music, Dices, TrendingUp, Radio, Vault, Video } from 'lucide-react';
 import { AppType } from '@/types/os';
 
 interface DesktopIconsProps {
@@ -32,6 +32,11 @@ const icons: { app: AppType; title: string; icon: React.ReactNode; label: string
   { app: 'maps', title: 'PrimeMaps', icon: <Map size={28} />, label: 'Maps' },
   { app: 'pkg', title: 'PrimePkg', icon: <Package size={28} />, label: 'Packages' },
   { app: 'audio', title: 'PrimeAudio', icon: <Music size={28} />, label: 'Audio' },
+  { app: 'bets', title: 'PrimeBets', icon: <Dices size={28} />, label: 'Bets' },
+  { app: 'signals', title: 'PrimeSignals', icon: <TrendingUp size={28} />, label: 'Signals' },
+  { app: 'stream', title: 'PrimeStream', icon: <Radio size={28} />, label: 'Stream' },
+  { app: 'vault', title: 'PrimeVault', icon: <Vault size={28} />, label: 'Vault' },
+  { app: 'videocall', title: 'PrimeLink', icon: <Video size={28} />, label: 'Video' },
 ];
 
 export default function DesktopIcons({ onOpenApp }: DesktopIconsProps) {

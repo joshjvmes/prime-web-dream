@@ -37,6 +37,11 @@ import PrimeCommApp from '@/components/os/PrimeCommApp';
 import PrimeMapsApp from '@/components/os/PrimeMapsApp';
 import PrimePkgApp from '@/components/os/PrimePkgApp';
 import PrimeAudioApp from '@/components/os/PrimeAudioApp';
+import PrimeBetsApp from '@/components/os/PrimeBetsApp';
+import PrimeSignalsApp from '@/components/os/PrimeSignalsApp';
+import PrimeStreamApp from '@/components/os/PrimeStreamApp';
+import PrimeVaultApp from '@/components/os/PrimeVaultApp';
+import PrimeLinkApp from '@/components/os/PrimeLinkApp';
 import DesktopContextMenu from '@/components/os/DesktopContextMenu';
 import NotificationSystem from '@/components/os/NotificationSystem';
 import { AppType } from '@/types/os';
@@ -140,6 +145,11 @@ export default function Desktop() {
       case 'maps': return <PrimeMapsApp />;
       case 'pkg': return <PrimePkgApp />;
       case 'audio': return <PrimeAudioApp />;
+      case 'bets': return <PrimeBetsApp />;
+      case 'signals': return <PrimeSignalsApp />;
+      case 'stream': return <PrimeStreamApp />;
+      case 'vault': return <PrimeVaultApp />;
+      case 'videocall': return <PrimeLinkApp />;
       default: return <div className="p-4 text-muted-foreground font-mono text-xs">App not found</div>;
     }
   };
