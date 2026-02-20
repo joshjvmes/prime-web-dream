@@ -1,119 +1,160 @@
 
-# Sports Betting Feed Integration
+
+# Adaptive Mobile UI for Prime OS
 
 ## Overview
 
-Integrate live sports odds from The Odds API into PrimeBets. A new backend function fetches real sporting events and automatically creates prediction markets. Users can bet on real games using OS tokens through the existing AMM system.
+Replace the windowed desktop experience with a mobile-friendly app launcher on phones and a simplified desktop on tablets. The OS retains its identity and aesthetic but adapts to touch-first interaction patterns.
 
 ---
 
-## Changes
+## Breakpoints
 
-### 1. Store the API Key as a Secret
+| Device | Width | Behavior |
+|--------|-------|----------|
+| Mobile | < 768px | Full-screen app launcher with icon grid, single full-screen app at a time, bottom tab bar |
+| Tablet | 768px - 1024px | Simplified desktop: windows auto-maximize, compact taskbar, touch-friendly controls |
+| Desktop | > 1024px | Current experience (unchanged) |
 
-The Odds API key (`7c5de5e58923688fb050e0ebcaa39e56`) will be stored as a backend secret called `ODDS_API_KEY` so it stays server-side only.
+---
 
-### 2. Database Migration -- Add Sports Metadata to `bet_markets`
+## What Changes
 
-Add new columns to the existing `bet_markets` table to track API-sourced events:
+### 1. New Component: `MobileLauncher.tsx`
 
-| Column | Type | Purpose |
-|--------|------|---------|
-| `source` | text (default 'user') | Distinguishes user-created vs API-fed markets |
-| `external_id` | text (nullable, unique) | The Odds API event ID to prevent duplicates |
-| `sport_key` | text (nullable) | e.g. 'basketball_nba', 'soccer_epl' |
-| `sport_title` | text (nullable) | e.g. 'NBA', 'EPL' |
-| `home_team` | text (nullable) | Home team name |
-| `away_team` | text (nullable) | Away team name |
-| `commence_time` | timestamptz (nullable) | When the game starts |
-| `odds_data` | jsonb (nullable) | Raw bookmaker odds for reference display |
+A phone-optimized home screen that replaces the windowed desktop on small screens:
 
-Also update the INSERT RLS policy on `bet_markets` to allow the service role to insert system-generated markets (the edge function uses service role key, so this works automatically).
+- **App grid**: 4-column icon grid organized by category (reuses the existing `categories` array from DesktopIcons)
+- **Single-tap to open** (not double-click like desktop icons)
+- **Full-screen apps**: When an app opens, it takes the entire screen with a top bar showing the app name and a back button
+- **Bottom navigation bar**: Replaces the taskbar with a minimal dock showing 4-5 pinned apps (Terminal, Hyper AI, Chat, Settings) plus an "All Apps" button
+- **Swipe down** from top to see notifications
+- **Status bar** at top: time, workspace indicator, notification count
+- No window dragging, resizing, or snapping -- everything is full-screen
 
-### 3. New Edge Function: `sports-odds`
+### 2. New Component: `MobileAppView.tsx`
 
-**File: `supabase/functions/sports-odds/index.ts`**
+A full-screen wrapper for apps on mobile:
 
-Two actions:
+- Top bar with back arrow, app title, and a minimize (home) button
+- The app component renders inside a full-height scrollable container
+- Swipe-right gesture to go back to the launcher (optional, nice to have)
 
-- **`fetch-odds`**: Calls The Odds API for upcoming events, then upserts markets into `bet_markets` with:
-  - `question`: "Will {home_team} beat {away_team}?"
-  - `category`: 'sports'
-  - `source`: 'sports_api'
-  - `external_id`: event ID (prevents duplicates)
-  - `creator_id`: system UUID (`00000000-0000-0000-0000-000000000000`)
-  - `creation_cost`: 0
-  - `expiry`: set to `commence_time`
-  - `odds_data`: bookmaker odds JSON
-  - If a market with that `external_id` already exists, update `odds_data` only
+### 3. Updated: `Desktop.tsx`
 
-- **`refresh-odds`**: Frontend-callable endpoint that triggers fetch-odds with a 5-minute rate limit (tracked via a simple timestamp check against the most recent sports market's `created_at`)
+The main Desktop component will detect the screen size and render different layouts:
 
-### 4. Frontend Updates: `PrimeBetsApp.tsx`
+- **Mobile (< 768px)**: Render `MobileLauncher` instead of the windowed desktop. The window manager still tracks open apps but windows are always maximized and only one is visible at a time.
+- **Tablet (768-1024px)**: Render the normal desktop but with auto-maximized windows and larger touch targets on the taskbar (taller buttons, bigger icons).
+- **Desktop (> 1024px)**: No changes.
 
-- Add `'sports'` to the `CATEGORIES` array
-- Add a "Refresh Sports" button that calls the `sports-odds` edge function
-- For sports-sourced markets, show enhanced cards with:
-  - Sport badge (e.g. "NBA", "Soccer")
-  - Team matchup display: "{home_team} vs {away_team}"
-  - Commence time countdown (e.g. "Starts in 3h")
-  - Bookmaker reference odds alongside the pool YES/NO odds
-  - A small "LIVE" indicator
-- In the market detail view, show bookmaker odds comparison when `odds_data` is present
-- Sports markets hide the "Resolve" buttons (admin-only resolution)
+The `useIsMobile` hook already exists. We'll extend it or create a `useDeviceClass` hook that returns `'mobile' | 'tablet' | 'desktop'`.
 
-### 5. Config Update
+### 4. New Hook: `useDeviceClass.ts`
 
-Register the new function in `supabase/config.toml`:
+```text
+Returns 'mobile' (< 768px), 'tablet' (768-1024px), or 'desktop' (> 1024px)
+Uses window.matchMedia for efficiency
 ```
-[functions.sports-odds]
-verify_jwt = false
-```
+
+### 5. Updated: `useWindowManager.ts`
+
+- On mobile, `openWindow` always sets `isMaximized: true`
+- On mobile, only one window is visible at a time (the most recently focused)
+- Window position/size defaults adjusted for tablet (larger initial sizes, centered)
+
+### 6. Updated: `Taskbar.tsx`
+
+- **Mobile**: Hidden entirely (replaced by MobileLauncher's bottom nav)
+- **Tablet**: Taller (h-12 instead of h-10), larger icons (size 18 instead of 14), always show window titles (no `hidden sm:inline`)
+
+### 7. Updated: `OSWindow.tsx`
+
+- **Mobile**: No title bar drag handle, no resize handles, always full-screen
+- **Tablet**: Drag enabled but snap zones are larger (easier touch targets)
+
+### 8. Updated: `LockScreen.tsx`
+
+- Already mostly responsive (uses flexbox centering)
+- Increase touch target sizes for PIN input on mobile
+- Make the swipe-up unlock gesture area larger on touch devices
+
+### 9. Updated: `DesktopIcons.tsx`
+
+- **Mobile**: Not rendered (MobileLauncher replaces it)
+- **Tablet**: Wider icon column (100px instead of 84px), larger icons, single-tap instead of double-click
+
+### 10. CSS Additions in `index.css`
+
+- Add touch-action utilities for mobile
+- Safe area insets for notched phones (`env(safe-area-inset-*)`)
+- Disable scan-lines effect on mobile (performance)
 
 ---
 
 ## Technical Details
 
-### Files to Create/Modify
+### Files to Create
+
+| File | Purpose |
+|------|---------|
+| `src/hooks/useDeviceClass.ts` | Returns 'mobile', 'tablet', or 'desktop' based on viewport width |
+| `src/components/os/MobileLauncher.tsx` | Mobile home screen with app grid and bottom nav |
+| `src/components/os/MobileAppView.tsx` | Full-screen app wrapper with back navigation |
+
+### Files to Modify
 
 | File | Change |
-|------|--------|
-| Database migration | Add 8 new columns to `bet_markets` |
-| `supabase/functions/sports-odds/index.ts` | New edge function to fetch and sync odds |
-| `src/components/os/PrimeBetsApp.tsx` | Sports category, enhanced cards, refresh button, odds display |
-| `supabase/config.toml` | Register new function |
+|------|---------|
+| `src/components/os/Desktop.tsx` | Conditionally render MobileLauncher on mobile, pass device class to child components |
+| `src/hooks/useWindowManager.ts` | Accept device class, force maximize on mobile, single-visible-app on mobile |
+| `src/components/os/Taskbar.tsx` | Hide on mobile, enlarge on tablet |
+| `src/components/os/OSWindow.tsx` | Disable drag/resize on mobile, full-screen mode |
+| `src/components/os/DesktopIcons.tsx` | Hide on mobile, single-tap on tablet |
+| `src/components/os/LockScreen.tsx` | Larger touch targets on mobile |
+| `src/index.css` | Safe area insets, mobile touch utilities |
 
-### BetMarket Interface Update
-
-The `BetMarket` TypeScript interface will be extended with the new optional fields:
+### Mobile Launcher Layout
 
 ```text
-source?: string
-external_id?: string
-sport_key?: string
-sport_title?: string
-home_team?: string
-away_team?: string
-commence_time?: string
-odds_data?: { bookmakers: Array<{ title: string, markets: Array<{ outcomes: Array<{ name: string, price: number }> }> }> }
++---------------------------+
+| 10:30 AM    WS1    [3] bell|  <- Status bar
++---------------------------+
+|                           |
+|  [Terminal] [Files]       |
+|  [Hyper AI] [Chat]       |
+|  [Browser]  [Calendar]   |
+|  [Mail]     [Settings]   |
+|  ...                     |  <- Scrollable icon grid
+|                           |
++---------------------------+
+| [Term] [AI] [Chat] [All] |  <- Bottom dock
++---------------------------+
 ```
 
-### Odds Display Logic
+### How Apps Look on Mobile
 
-American odds from bookmakers are converted to implied probability for display:
-- Negative odds (favorite): probability = |odds| / (|odds| + 100)
-- Positive odds (underdog): probability = 100 / (odds + 100)
+```text
++---------------------------+
+| <- Terminal         [Home]|  <- App top bar
++---------------------------+
+|                           |
+|  (full app content here)  |
+|  (scrollable)             |
+|                           |
++---------------------------+
+```
 
-These are shown as "Book: 65%" alongside the pool-based "Pool: 58%" for reference.
+### Touch Considerations
 
-### How Sports Markets Work
+- All interactive elements will be at least 44x44px on mobile (Apple HIG)
+- Bottom navigation uses safe-area-inset-bottom for notched phones
+- Long-press on app icons shows a tooltip with the full app name
+- No hover states relied upon -- all interactions work with tap
 
-1. Edge function fetches events and creates markets with home team as YES side
-2. Users bet YES (home wins) or NO (away wins) using OS tokens
-3. The AMM pool determines payout ratios independently of bookmaker odds
-4. Markets auto-expire at commence time (no new bets after game starts)
-5. Resolution is manual (admin/creator resolves after the game ends)
+### Performance
 
-### Rate Limiting
+- Scan-line CSS effect disabled on mobile (saves GPU)
+- Desktop widgets hidden on mobile (less DOM)
+- Framer Motion animations simplified on mobile (shorter durations, fewer spring physics)
 
-The refresh endpoint checks if the newest sports market was created less than 5 minutes ago. If so, it skips the API call and returns existing markets to conserve API quota.
