@@ -5,6 +5,9 @@ import { useNotifications } from '@/hooks/useNotifications';
 import { useIdleTimeout } from '@/hooks/useIdleTimeout';
 import { useVoiceControl } from '@/hooks/useVoiceControl';
 import { useSystemPulse } from '@/hooks/useSystemPulse';
+import { useGlobalShortcuts } from '@/hooks/useGlobalShortcuts';
+import { useCalendarReminders } from '@/hooks/useCalendarReminders';
+import { eventBus } from '@/hooks/useEventBus';
 import { supabase } from '@/integrations/supabase/client';
 import type { User } from '@supabase/supabase-js';
 import LockScreen from '@/components/os/LockScreen';
@@ -15,6 +18,7 @@ import GlobalSearch from '@/components/os/GlobalSearch';
 import QuickTour from '@/components/os/QuickTour';
 import AboutModal from '@/components/os/AboutModal';
 import DesktopWidgets from '@/components/os/DesktopWidgets';
+import ClipboardManager from '@/components/os/ClipboardManager';
 import TerminalApp from '@/components/os/TerminalApp';
 import FilesApp from '@/components/os/FilesApp';
 import ProcessesApp from '@/components/os/ProcessesApp';
@@ -61,7 +65,6 @@ import DesktopContextMenu from '@/components/os/DesktopContextMenu';
 import NotificationSystem from '@/components/os/NotificationSystem';
 import { AppType } from '@/types/os';
 
-// App name map for voice control
 const APP_NAME_MAP: Record<string, { app: AppType; title: string }> = {
   'terminal': { app: 'terminal', title: 'Prime Shell (psh)' },
   'shell': { app: 'terminal', title: 'Prime Shell (psh)' },
@@ -96,6 +99,7 @@ export default function Desktop() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [showTour, setShowTour] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
+  const [clipboardOpen, setClipboardOpen] = useState(false);
   const [user, setUser] = useState<User | null>(null);
   const [voiceEnabled, setVoiceEnabled] = useState(() => {
     try { return localStorage.getItem('prime-os-voice-enabled') === 'true'; } catch { return false; }
@@ -114,8 +118,28 @@ export default function Desktop() {
   const activeApps = useMemo(() => visibleWindows.filter(w => !w.isMinimized).map(w => w.app), [visibleWindows]);
   const { notifications, dismissNotification, pushNotification, events, toggleEvent, updateEventMessage, addEvent, removeEvent } = useNotifications(activeApps);
 
-  // System pulse - ambient life signs
+  // System pulse
   useSystemPulse(pushNotification, activeApps, booted && !locked);
+
+  // Calendar reminders
+  const openCalendar = useCallback(() => openWindow('calendar', 'Prime Calendar'), [openWindow]);
+  useCalendarReminders(pushNotification, openCalendar, booted && !locked && !!user);
+
+  // Global shortcuts
+  const shortcutCallbacks = useMemo(() => ({
+    openSearch: () => setSearchOpen(prev => !prev),
+    lockScreen: () => setLocked(true),
+    openApp: openWindow,
+    closeWindow,
+    minimizeWindow,
+    maximizeWindow,
+    focusWindow,
+    switchWorkspace,
+    toggleClipboard: () => setClipboardOpen(prev => !prev),
+    getVisibleWindows: () => visibleWindows,
+  }), [openWindow, closeWindow, minimizeWindow, maximizeWindow, focusWindow, switchWorkspace, visibleWindows]);
+
+  useGlobalShortcuts(shortcutCallbacks, booted && !locked);
 
   // Lattice ops counter
   useEffect(() => {
@@ -126,14 +150,54 @@ export default function Desktop() {
     }, 2000);
     return () => clearInterval(id);
   }, [booted, locked]);
+
   const handleUnlock = useCallback(() => setLocked(false), []);
   const handleLock = useCallback(() => setLocked(true), []);
 
-  // Auth state listener
+  // Event bus: emit app.opened / app.closed
+  const prevWindowsRef = useRef<Set<AppType>>(new Set());
+  useEffect(() => {
+    const currentApps = new Set(windows.map(w => w.app));
+    const prevApps = prevWindowsRef.current;
+    
+    currentApps.forEach(app => {
+      if (!prevApps.has(app)) eventBus.emit('app.opened', { app });
+    });
+    prevApps.forEach(app => {
+      if (!currentApps.has(app)) eventBus.emit('app.closed', { app });
+    });
+    prevWindowsRef.current = currentApps;
+  }, [windows]);
+
+  // CloudHooks action listeners
+  useEffect(() => {
+    const handleNotif = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      pushNotification(detail.title, detail.message);
+    };
+    const handleOpenApp = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      const match = APP_NAME_MAP[detail.app];
+      if (match) openWindow(match.app, match.title);
+    };
+    const handleLockEvt = () => setLocked(true);
+
+    window.addEventListener('cloudhook-notification', handleNotif);
+    window.addEventListener('cloudhook-open-app', handleOpenApp);
+    window.addEventListener('cloudhook-lock', handleLockEvt);
+    return () => {
+      window.removeEventListener('cloudhook-notification', handleNotif);
+      window.removeEventListener('cloudhook-open-app', handleOpenApp);
+      window.removeEventListener('cloudhook-lock', handleLockEvt);
+    };
+  }, [pushNotification, openWindow]);
+
+  // Auth state
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null);
       if (session?.user) {
+        eventBus.emit('user.signed-in', { userId: session.user.id });
         const meta = session.user.user_metadata;
         const name = meta?.full_name || meta?.name || '';
         const avatar = meta?.avatar_url || meta?.picture || '';
@@ -143,15 +207,15 @@ export default function Desktop() {
             localStorage.setItem('prime-os-profile', JSON.stringify({ ...existing, name, avatar }));
           } catch {}
         }
+      } else {
+        eventBus.emit('user.signed-out', {});
       }
     });
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user ?? null);
-    });
+    supabase.auth.getSession().then(({ data: { session } }) => setUser(session?.user ?? null));
     return () => subscription.unsubscribe();
   }, []);
 
-  // Auto-lock idle timeout
+  // Auto-lock
   const autoLockSettings = useMemo(() => {
     try {
       const s = localStorage.getItem('prime-os-lock-settings');
@@ -161,7 +225,7 @@ export default function Desktop() {
       }
     } catch {}
     return { enabled: false, timeout: 5 * 60 * 1000 };
-  }, [locked]); // re-read when lock state changes
+  }, [locked]);
 
   useIdleTimeout({
     timeout: autoLockSettings.timeout,
@@ -232,30 +296,6 @@ export default function Desktop() {
   const handleTourOpenTerminal = useCallback(() => {
     setTimeout(() => openWindow('terminal', 'Prime Shell (psh)'), 200);
   }, [openWindow]);
-
-  // Global keyboard shortcuts
-  useEffect(() => {
-    if (!booted) return;
-    const handler = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === 'k') { e.preventDefault(); setSearchOpen(prev => !prev); return; }
-      if ((e.ctrlKey || e.metaKey) && e.key === 'l') { e.preventDefault(); handleLock(); return; }
-      if ((e.ctrlKey || e.metaKey) && ['1', '2', '3', '4'].includes(e.key)) { e.preventDefault(); switchWorkspace(parseInt(e.key)); return; }
-      if ((e.ctrlKey || e.metaKey) && ['c', 'v', 'a', 'x'].includes(e.key)) return;
-      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key === 'w') { e.preventDefault(); const f = visibleWindows.find(w => w.isFocused); if (f) closeWindow(f.id); return; }
-      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key === 'm') { e.preventDefault(); const f = visibleWindows.find(w => w.isFocused); if (f) minimizeWindow(f.id); return; }
-      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'M') { e.preventDefault(); const f = visibleWindows.find(w => w.isFocused); if (f) maximizeWindow(f.id); return; }
-      if (e.altKey && e.key === 'Tab') {
-        e.preventDefault();
-        const nonMin = visibleWindows.filter(w => !w.isMinimized);
-        if (nonMin.length < 2) return;
-        const focusedIdx = nonMin.findIndex(w => w.isFocused);
-        const next = nonMin[(focusedIdx + 1) % nonMin.length];
-        focusWindow(next.id);
-      }
-    };
-    window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
-  }, [booted, visibleWindows, closeWindow, focusWindow, minimizeWindow, maximizeWindow, handleLock, switchWorkspace]);
 
   const closeWindowByApp = useCallback((app: string) => {
     const win = windows.find(w => w.app === app);
@@ -340,18 +380,14 @@ export default function Desktop() {
               </div>
 
               <div className="absolute top-4 right-4 text-right select-none">
-                <motion.p
-                  className="font-mono text-[9px] text-muted-foreground/30"
+                <motion.p className="font-mono text-[9px] text-muted-foreground/30"
                   animate={{ opacity: [0.25, 0.4, 0.25] }}
-                  transition={{ duration: 5, repeat: Infinity, ease: 'easeInOut' }}
-                >
+                  transition={{ duration: 5, repeat: Infinity, ease: 'easeInOut' }}>
                   lattice: P¹¹
                 </motion.p>
-                <motion.p
-                  className="font-mono text-[9px] text-muted-foreground/30"
+                <motion.p className="font-mono text-[9px] text-muted-foreground/30"
                   animate={{ opacity: [0.25, 0.4, 0.25] }}
-                  transition={{ duration: 5, repeat: Infinity, ease: 'easeInOut', delay: 1 }}
-                >
+                  transition={{ duration: 5, repeat: Infinity, ease: 'easeInOut', delay: 1 }}>
                   fold: 11D → 4D
                 </motion.p>
                 <p className="font-mono text-[8px] text-muted-foreground/20 mt-0.5">
@@ -381,6 +417,8 @@ export default function Desktop() {
             </div>
           </DesktopContextMenu>
 
+          <ClipboardManager open={clipboardOpen} onClose={() => setClipboardOpen(false)} />
+
           <NotificationSystem notifications={notifications} onDismiss={dismissNotification} />
           <Taskbar
             windows={windows}
@@ -396,6 +434,7 @@ export default function Desktop() {
             windowCountsByWorkspace={getWindowCountsByWorkspace()}
             voiceState={{ isListening: voice.isListening, lastCommand: voice.lastCommand, supported: voice.supported }}
             onToggleVoice={toggleVoice}
+            onToggleClipboard={() => setClipboardOpen(prev => !prev)}
           />
 
           <GlobalSearch

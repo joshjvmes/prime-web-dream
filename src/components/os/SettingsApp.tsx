@@ -413,9 +413,14 @@ export default function SettingsApp({ notifEvents = [], onToggleEvent, onUpdateM
                 ['Ctrl+M', 'Minimize Window'],
                 ['Ctrl+Shift+M', 'Maximize / Restore'],
                 ['Ctrl+L', 'Lock Screen'],
+                ['Ctrl+`', 'Open Terminal'],
+                ['Ctrl+Shift+A', 'Open PrimeAgent'],
+                ['Ctrl+Shift+V', 'Clipboard Manager'],
                 ['Ctrl+1-4', 'Switch Workspace'],
+                ['Alt+1-4', 'Switch Workspace'],
                 ['Alt+Tab', 'Cycle Windows'],
-                ['Escape', 'Close focused dialog'],
+                ['Alt+Shift+Tab', 'Cycle Backwards'],
+                ['Alt+F4', 'Close Window'],
               ].map(([key, desc]) => (
                 <div key={key} className="flex items-center justify-between px-2 py-1.5 border-b border-border/30 last:border-0">
                   <span className="text-[10px] text-muted-foreground">{desc}</span>
