@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
-import { Send } from 'lucide-react';
+import { Send, Coins } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
 
 interface Message {
   id: string;
@@ -25,6 +26,7 @@ export default function HypersphereApp() {
   ]);
   const [input, setInput] = useState('');
   const [thinking, setThinking] = useState(false);
+  const [osCharged, setOsCharged] = useState<number | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
 
@@ -38,6 +40,25 @@ export default function HypersphereApp() {
     setMessages(prev => [...prev, userMsg]);
     setInput('');
     setThinking(true);
+    setOsCharged(null);
+
+    // Charge 50 OS for AI usage
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) {
+        const chargeRes = await fetch(`${SUPABASE_URL}/functions/v1/prime-bank?action=ai-charge`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${session.access_token}`,
+            'Content-Type': 'application/json',
+            'apikey': SUPABASE_KEY,
+          },
+          body: JSON.stringify({ amount: 50, description: 'Hypersphere AI query' }),
+        });
+        const chargeData = await chargeRes.json();
+        if (chargeData.charged) setOsCharged(50);
+      }
+    } catch {}
 
     // Build conversation history for API
     const history = [...messages.filter(m => m.id !== 'greeting'), userMsg].map(m => ({
@@ -226,7 +247,13 @@ export default function HypersphereApp() {
       </div>
 
       {/* Input */}
-      <div className="p-2 border-t border-border flex gap-2">
+      <div className="p-2 border-t border-border">
+        {osCharged && (
+          <div className="flex items-center gap-1 mb-1.5 text-[8px] text-amber-400/70">
+            <Coins size={8} /> {osCharged} OS charged for this query
+          </div>
+        )}
+        <div className="flex gap-2">
         <input
           value={input}
           onChange={e => setInput(e.target.value)}
@@ -242,6 +269,7 @@ export default function HypersphereApp() {
         >
           <Send size={14} />
         </button>
+        </div>
       </div>
     </div>
   );
