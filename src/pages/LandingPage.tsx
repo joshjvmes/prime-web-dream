@@ -246,12 +246,12 @@ export default function LandingPage() {
       {/* ─── Nav ─── */}
       <nav className="fixed top-0 left-0 right-0 z-50 bg-background/80 backdrop-blur-md border-b border-border/50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-14 flex items-center justify-between">
-          <div className="flex items-center gap-3">
+          <a href="#" onClick={e => { e.preventDefault(); window.scrollTo({ top: 0, behavior: 'smooth' }); }} className="flex items-center gap-3 cursor-pointer">
             <div className="w-7 h-7 rounded bg-primary/20 border border-primary/40 flex items-center justify-center">
               <span className="font-display text-[10px] font-bold text-primary">P</span>
             </div>
             <span className="font-display text-xs tracking-[0.25em] text-primary glow-text">PRIME OS</span>
-          </div>
+          </a>
 
           <div className="hidden md:flex items-center gap-8">
             <a href="#features" className="font-body text-sm text-muted-foreground hover:text-foreground transition-colors">Features</a>
