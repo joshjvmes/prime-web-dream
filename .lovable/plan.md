@@ -1,178 +1,144 @@
 
 
-# PRIME OS: Real-World Workflow Engine
+# PRIME OS: User Profiles & Admin Management
 
 ## Overview
 
-Four major real-utility upgrades: global keyboard shortcuts with a clipboard manager, persistent calendar events with timed reminders, real file upload/download backed by cloud storage, and a live workflow automation engine connecting apps together.
+Authentication already works (Google OAuth on the lock screen). This upgrade adds database-backed user profiles, a roles system, and an Admin Console app for managing users, viewing system analytics, and moderating content.
 
 ---
 
-## 1. Global Keyboard Shortcuts + Clipboard Manager
+## 1. User Profiles Table
 
-A system-wide hotkey layer and a clipboard history panel, like macOS Spotlight + clipboard managers.
+Store persistent user data in the database so identity carries across sessions and devices.
 
-### New hook: `src/hooks/useGlobalShortcuts.ts`
-- Registers document-level keydown listener
-- Shortcut map:
-  - `Ctrl+K` -- Global Search (already exists, formalize)
-  - `Ctrl+L` -- Lock screen
-  - `Ctrl+\`` -- Open terminal
-  - `Ctrl+Shift+A` -- Open PrimeAgent
-  - `Alt+1..9` -- Switch workspace
-  - `Alt+Tab` -- Cycle focus to next window
-  - `Alt+Shift+Tab` -- Cycle focus backwards
-  - `Alt+F4` -- Close focused window
-  - `Ctrl+Shift+V` -- Open clipboard manager
-  - `Ctrl+M` -- Minimize focused window
-  - `Ctrl+Shift+M` -- Maximize/restore focused window
-- Accepts callbacks map from Desktop so shortcuts trigger real actions
-- Only active when booted and unlocked
+### Database Migration
 
-### New component: `src/components/os/ClipboardManager.tsx`
-- Slide-out panel (triggered by `Ctrl+Shift+V` or taskbar icon)
-- Maintains history of last 20 copied text items (uses `document.addEventListener('copy')`)
-- Click any item to copy it back to clipboard
-- Pin items to keep them permanently
-- Clear all button
-- Persisted to localStorage (and cloud storage if signed in)
-- Search/filter within clipboard history
+**Table: `profiles`**
+- `id` (uuid, PK, default gen_random_uuid())
+- `user_id` (uuid, unique, not null) -- references auth.users
+- `display_name` (text, nullable)
+- `avatar_url` (text, nullable)
+- `title` (text, default 'Operator')
+- `bio` (text, nullable)
+- `created_at` (timestamptz, default now())
+- `updated_at` (timestamptz, default now())
 
-### Updates
-- **Desktop.tsx**: Wire `useGlobalShortcuts` with all system callbacks
-- **Taskbar.tsx**: Add clipboard icon in system tray area
-- **SettingsApp.tsx**: Add "Shortcuts" panel showing all hotkeys in a reference table
+**RLS policies:**
+- Users can SELECT their own profile
+- Users can UPDATE their own profile
+- Users can INSERT their own profile
+- All authenticated users can SELECT any profile (needed for chat usernames, presence)
 
----
+**Trigger:** Auto-create a profile row when a user signs up (via `auth.users` insert trigger using a security definer function).
 
-## 2. Persistent Calendar Events + Reminders
+**Table: `user_roles`** (following the security guidelines)
+- `id` (uuid, PK, default gen_random_uuid())
+- `user_id` (uuid, not null, references auth.users ON DELETE CASCADE)
+- `role` (app_role enum: 'admin', 'moderator', 'user')
+- Unique constraint on (user_id, role)
 
-Transform the calendar from a display-only moon-phase viewer into a real event management system with database-backed persistence and timed notification reminders.
+**RLS policies:**
+- All authenticated users can SELECT roles (so the app can check permissions)
+- Only admins can INSERT/UPDATE/DELETE (enforced via `has_role` security definer function)
 
-### Database
-- New table: `calendar_events`
-  - `id` (uuid, PK, default gen_random_uuid())
-  - `user_id` (uuid, not null)
-  - `title` (text, not null)
-  - `description` (text, nullable)
-  - `start_time` (timestamptz, not null)
-  - `end_time` (timestamptz, nullable)
-  - `color` (text, default '#8b5cf6')
-  - `reminder_minutes` (integer, nullable) -- e.g. 5, 15, 30 minutes before
-  - `recurring` (text, nullable) -- 'daily', 'weekly', 'monthly', or null
-  - `created_at` (timestamptz, default now())
-- RLS: users can only CRUD their own events
-- Enable Realtime so events sync across tabs
-
-### Update: `src/components/os/PrimeCalendarApp.tsx`
-- Add event CRUD:
-  - Click a day to create an event (modal with title, time, color picker, reminder dropdown)
-  - Click an event to edit/delete it
-  - Events shown as colored dots/bars on calendar days
-  - Day detail panel listing events for selected day
-- Load events from database (for signed-in users) or localStorage (guests)
-- Recurring event support: auto-generate visible instances for daily/weekly/monthly
-
-### New hook: `src/hooks/useCalendarReminders.ts`
-- Polls or checks every 30 seconds for upcoming events with reminders
-- When an event's reminder time is reached, pushes a notification via `pushNotification`
-- Notification includes event title and "starts in X minutes"
-- Clicking the notification opens the calendar app to that day
-- Only active for signed-in users with cloud events
-
-### Updates
-- **Desktop.tsx**: Wire `useCalendarReminders` with notification system and `openWindow` callback
-- **Taskbar.tsx**: Show a small dot on the calendar popover if there are events today
+**Security definer functions:**
+- `has_role(uuid, app_role)` -- checks if a user has a specific role
+- `handle_new_user()` -- trigger function that creates a profile row on signup
 
 ---
 
-## 3. File Upload/Download with Real Cloud Storage
+## 2. Settings Profile Panel Enhancement
 
-Give the Files app real file management -- upload files from the user's computer, store them in cloud storage, and download them back.
-
-### Database / Storage
-- New storage bucket: `user-files` (private)
-- RLS policies on `storage.objects`:
-  - Authenticated users can upload to their own folder (`user_id/`)
-  - Authenticated users can read/download their own files
-  - Authenticated users can delete their own files
-- New table: `file_metadata`
-  - `id` (uuid, PK)
-  - `user_id` (uuid, not null)
-  - `file_name` (text, not null)
-  - `file_path` (text, not null) -- storage path
-  - `file_size` (bigint, not null)
-  - `mime_type` (text, nullable)
-  - `folder` (text, default '/') -- virtual folder path
-  - `created_at` (timestamptz, default now())
-- RLS: users can only CRUD their own metadata
-
-### Update: `src/components/os/FilesApp.tsx`
-- Add "Upload" button in the toolbar
-  - Opens native file picker (accept any file type)
-  - Uploads to Supabase Storage under `user-files/{user_id}/{folder}/{filename}`
-  - Creates corresponding `file_metadata` row
-  - Shows upload progress bar
-- Add "Download" button for selected files
-  - Creates signed URL from Supabase Storage, triggers browser download
-- Add "Delete" for uploaded files (removes from storage + metadata)
-- Display real uploaded files alongside the existing simulated manifold files
-  - Visual distinction: real files show actual size, type icon, upload date
-  - Simulated files keep their existing geometric styling
-- Drag-and-drop upload support (drop files onto the Files window)
-- File preview: clicking an image file shows preview in a modal; clicking a text file opens it in PrimeEdit
-- Guest mode: show "Sign in to upload files" prompt instead of upload button
+### Update: `src/components/os/SettingsApp.tsx`
+- The existing "Profile" panel currently uses localStorage only
+- Upgrade to read/write from the `profiles` table when signed in
+- Fields: Display Name, Title, Bio, Avatar (read from Google, non-editable)
+- Show account info: email, sign-in provider, member since date
+- Show assigned roles as badges (admin, moderator, user)
+- Falls back to localStorage for guest users (unchanged behavior)
 
 ---
 
-## 4. Workflow Automation (Real CloudHooks)
+## 3. Admin Console App
 
-Transform CloudHooks from a simulated dashboard into a real event-driven automation engine where users create rules that trigger actual actions across the OS.
+A new OS app only accessible to users with the `admin` role, providing user management, waitlist viewing, and system analytics.
 
-### Architecture
-Internal event bus that apps emit to and CloudHooks listens on. No external services needed -- everything runs client-side.
+### New file: `src/components/os/AdminConsoleApp.tsx`
 
-### New module: `src/hooks/useEventBus.ts`
-- Simple pub/sub event bus using a singleton pattern
-- `emit(event, payload)` -- fire an event
-- `on(event, callback)` -- subscribe
-- `off(event, callback)` -- unsubscribe
-- Event types:
-  - `app.opened` / `app.closed` -- with app name
-  - `calendar.event.starting` -- with event details
-  - `notification.received` -- with notification data
-  - `user.signed-in` / `user.signed-out`
-  - `file.uploaded` / `file.deleted`
-  - `timer.fired` -- for scheduled triggers
-  - `clipboard.copied` -- when text is copied
-- Apps emit events at appropriate moments (FilesApp emits on upload, Calendar emits on event start, etc.)
+**Sections (tab layout):**
 
-### Update: `src/components/os/CloudHooksApp.tsx`
-- Replace simulated hooks with real configurable automations
-- Users can create rules with:
-  - **Trigger**: Select from event bus events (dropdown)
-  - **Condition**: Optional filter (e.g. "app name = terminal")
-  - **Actions**: One or more actions to execute:
-    - Open an app
-    - Close an app
-    - Show a notification with custom message
-    - Run a terminal command
-    - Copy text to clipboard
-    - Lock the screen
-    - Send a webhook (user provides URL, like Zapier integration)
-- Hooks saved to localStorage / cloud storage
-- Execution log shows real executions with timestamps
-- Enable/disable toggle per hook
-- Built-in templates:
-  - "When a file is uploaded, show a notification"
-  - "When calendar event starts, open the terminal"
-  - "When user signs in, run system diagnostics"
+#### Users Tab
+- Table listing all profiles: display name, email (from profile), role badges, join date
+- Search/filter users by name or email
+- Assign/remove roles (admin, moderator, user) via dropdown
+- Role changes call a secure edge function (not client-side RLS manipulation)
 
-### Integration points
-- **Desktop.tsx**: Initialize event bus, emit `app.opened`/`app.closed` events
-- **FilesApp.tsx**: Emit `file.uploaded`/`file.deleted`
-- **PrimeCalendarApp.tsx**: Emit `calendar.event.starting`
-- **LockScreen.tsx**: Emit `user.signed-in`/`user.signed-out`
+#### Waitlist Tab
+- View all waitlist signups (email, name, date)
+- Export as CSV
+- Approve/remove entries
+- Total count display
+
+#### Chat Moderation Tab
+- View recent chat messages across all channels
+- Delete inappropriate messages (requires a new DELETE policy for admins)
+- View message count per channel
+
+#### System Stats Tab
+- Total registered users count
+- Waitlist count
+- Total files stored (count + total size)
+- Chat messages count
+- Active users (signed in within last 24h based on profiles.updated_at)
+
+### New edge function: `supabase/functions/admin-actions/index.ts`
+- Verifies the calling user has the `admin` role via service role key
+- Endpoints:
+  - `GET /users` -- list all profiles with emails (joins auth.users)
+  - `POST /assign-role` -- assign a role to a user
+  - `POST /remove-role` -- remove a role from a user
+  - `GET /waitlist` -- list all waitlist entries
+  - `DELETE /waitlist/:id` -- remove a waitlist entry
+  - `DELETE /chat-message/:id` -- delete a chat message
+  - `GET /stats` -- aggregate system statistics
+- Uses `SUPABASE_SERVICE_ROLE_KEY` to bypass RLS for admin operations
+- Always validates the requesting user's admin role first
+
+---
+
+## 4. OS Wiring
+
+### `src/types/os.ts`
+- Add `'admin'` to the `AppType` union
+
+### `src/hooks/useWindowManager.ts`
+- Add default window size for admin: `[900, 600]`
+
+### `src/components/os/Desktop.tsx`
+- Import and render `AdminConsoleApp`
+- Pass `user` prop to AdminConsoleApp
+- Update auth state handler to also fetch and cache the user's profile from the `profiles` table
+- Store profile in state so it can be passed to Settings, Taskbar, etc.
+
+### `src/components/os/Taskbar.tsx`
+- Add Admin Console to allApps list with `ShieldCheck` icon
+- Only show it if the current user has the `admin` role (check via a lightweight state flag)
+
+### `src/components/os/DesktopIcons.tsx`
+- Add Admin Console under System category (conditionally visible for admins)
+
+### `src/components/os/GlobalSearch.tsx`
+- Add admin to search results (conditionally for admins)
+
+### `src/components/os/terminal/commands.ts`
+- Add `admin` to APP_MAP
+
+---
+
+## 5. First Admin Seeding
+
+Since there are no admins yet, the migration will include an instruction comment. After the first user signs in, their `user_id` can be manually inserted into `user_roles` via the database SQL runner to bootstrap the first admin. The edge function and Admin Console handle all subsequent role assignments.
 
 ---
 
@@ -180,31 +146,34 @@ Internal event bus that apps emit to and CloudHooks listens on. No external serv
 
 | File | Action |
 |------|--------|
-| `src/hooks/useGlobalShortcuts.ts` | Create -- keyboard shortcut system |
-| `src/hooks/useEventBus.ts` | Create -- pub/sub event bus for workflow automation |
-| `src/hooks/useCalendarReminders.ts` | Create -- reminder notification checker |
-| `src/components/os/ClipboardManager.tsx` | Create -- clipboard history panel |
-| `src/components/os/PrimeCalendarApp.tsx` | Rewrite -- add event CRUD, reminders, database persistence |
-| `src/components/os/FilesApp.tsx` | Edit -- add real upload/download/delete with cloud storage |
-| `src/components/os/CloudHooksApp.tsx` | Rewrite -- real event-driven automation engine |
-| `src/components/os/Desktop.tsx` | Edit -- wire shortcuts, event bus, calendar reminders |
-| `src/components/os/Taskbar.tsx` | Edit -- clipboard icon, today-events indicator |
-| `src/components/os/SettingsApp.tsx` | Edit -- shortcuts reference panel |
+| `src/components/os/AdminConsoleApp.tsx` | Create -- admin dashboard with users, waitlist, moderation, stats |
+| `supabase/functions/admin-actions/index.ts` | Create -- secure admin edge function |
+| `src/components/os/SettingsApp.tsx` | Edit -- profile reads/writes from database |
+| `src/components/os/Desktop.tsx` | Edit -- wire admin app, profile state |
+| `src/components/os/Taskbar.tsx` | Edit -- conditional admin icon |
+| `src/components/os/DesktopIcons.tsx` | Edit -- conditional admin icon |
+| `src/components/os/GlobalSearch.tsx` | Edit -- add admin to search |
+| `src/types/os.ts` | Edit -- add 'admin' to AppType |
+| `src/hooks/useWindowManager.ts` | Edit -- admin window size |
+| `src/components/os/terminal/commands.ts` | Edit -- add admin to APP_MAP |
 
 ### Database Changes
-- `calendar_events` table with RLS (user-scoped CRUD)
-- `file_metadata` table with RLS (user-scoped CRUD)
-- `user-files` storage bucket (private, user-scoped RLS)
-- Enable Realtime on `calendar_events`
+- `profiles` table with auto-creation trigger
+- `user_roles` table with `app_role` enum
+- `has_role()` security definer function
+- `handle_new_user()` trigger function
+- Updated `chat_messages` DELETE policy for admins
+- Enable Realtime on `profiles`
+
+### Edge Functions
+- `admin-actions` -- secure admin operations endpoint
 
 ---
 
 ## Technical Notes
 
-- **Global shortcuts** use a single `document.addEventListener('keydown')` with a Map lookup for efficiency. Modifier keys are checked via `e.ctrlKey`, `e.altKey`, `e.shiftKey`. The listener is only active when the OS is booted and unlocked to avoid conflicts with the lock screen.
-- **Clipboard manager** hooks into the native `copy` event on `document` to capture text. It cannot read clipboard contents on page load (browser security), only on user-initiated copy events.
-- **Event bus** is a lightweight in-memory pub/sub (no database needed). Workflow rules (hooks) are persisted to `user_data` via the existing cloud storage hook. The bus is initialized once in Desktop and passed to apps via props or a React context.
-- **File storage** uses the existing Supabase Storage API. Files are namespaced under `{user_id}/` paths for isolation. The RLS policies on `storage.objects` enforce that users can only access their own files.
-- **Calendar reminders** use `setInterval` checking every 30s. When the tab is in the background, browsers may throttle intervals, so reminders may fire slightly late -- this is acceptable for a web OS.
-- **Webhook support** in CloudHooks uses `fetch` with `mode: 'no-cors'` for Zapier-style integrations, same pattern as the existing Zapier knowledge base.
-
+- **Role checks are server-side only.** The `has_role()` function runs as security definer. The admin edge function uses the service role key to verify the caller's role before performing any action. Client-side role display is for UX convenience only -- all mutations are protected server-side.
+- **Profile auto-creation** uses a trigger on `auth.users` insert, so every Google sign-in automatically gets a profile row populated with their Google name and avatar.
+- **Admin bootstrapping** requires one manual SQL insert for the first admin. After that, admins can manage roles through the UI.
+- **Waitlist admin access** uses the edge function (service role) since the `waitlist` table has no SELECT policy for regular users.
+- **Chat moderation** adds a DELETE policy on `chat_messages` gated by `has_role(auth.uid(), 'admin')`.
