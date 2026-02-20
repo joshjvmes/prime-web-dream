@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { AppType, WindowState } from '@/types/os';
 import { OSNotification } from '@/hooks/useNotifications';
-import { Terminal, FolderTree, Activity, Cpu, Brain, Network, Code, HardDrive, Database, Zap, Settings, ChevronUp, Bell, X, Monitor, FileText, MessageSquare, Shield, Globe, Server, LayoutList, Image } from 'lucide-react';
+import { Terminal, FolderTree, Activity, Cpu, Brain, Network, Code, HardDrive, Database, Zap, Settings, ChevronUp, Bell, X, Monitor, FileText, MessageSquare, Shield, Globe, Server, LayoutList, Image, Search } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 
 interface TaskbarProps {
@@ -10,6 +10,7 @@ interface TaskbarProps {
   onFocusWindow: (id: string) => void;
   notifications?: OSNotification[];
   onDismissNotification?: (id: string) => void;
+  onSearch?: () => void;
 }
 
 const allApps: { app: AppType; title: string; icon: React.ReactNode; label: string }[] = [
@@ -34,7 +35,7 @@ const allApps: { app: AppType; title: string; icon: React.ReactNode; label: stri
   { app: 'settings', title: 'Settings', icon: <Settings size={18} />, label: 'Settings' },
 ];
 
-export default function Taskbar({ windows, onOpenApp, onFocusWindow, notifications = [], onDismissNotification }: TaskbarProps) {
+export default function Taskbar({ windows, onOpenApp, onFocusWindow, notifications = [], onDismissNotification, onSearch }: TaskbarProps) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
 
@@ -45,7 +46,7 @@ export default function Taskbar({ windows, onOpenApp, onFocusWindow, notificatio
       {/* PRIME Menu Button */}
       <Popover open={menuOpen} onOpenChange={setMenuOpen}>
         <PopoverTrigger asChild>
-          <button className="flex items-center gap-2 mr-4 pr-4 border-r border-border hover:bg-primary/10 rounded px-2 py-1 transition-colors">
+          <button aria-label="PRIME menu" className="flex items-center gap-2 mr-4 pr-4 border-r border-border hover:bg-primary/10 rounded px-2 py-1 transition-colors">
             <div className="w-5 h-5 rounded-sm bg-primary/20 border border-primary/40 flex items-center justify-center">
               <span className="font-display text-[8px] font-bold text-primary">P</span>
             </div>
@@ -77,6 +78,18 @@ export default function Taskbar({ windows, onOpenApp, onFocusWindow, notificatio
         </PopoverContent>
       </Popover>
 
+      {/* Search button */}
+      {onSearch && (
+        <button
+          onClick={onSearch}
+          aria-label="Global search (Ctrl+K)"
+          className="mr-3 p-1 rounded hover:bg-primary/10 text-muted-foreground hover:text-primary transition-colors"
+          title="Search (Ctrl+K)"
+        >
+          <Search size={14} />
+        </button>
+      )}
+
       {/* Open windows */}
       <div className="flex items-center gap-1 overflow-x-auto scrollbar-none">
         {openWindows.map(w => {
@@ -98,7 +111,7 @@ export default function Taskbar({ windows, onOpenApp, onFocusWindow, notificatio
         {/* Notification Center */}
         <Popover open={notifOpen} onOpenChange={setNotifOpen}>
           <PopoverTrigger asChild>
-            <button className="relative p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors">
+            <button aria-label="Notifications" className="relative p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors">
               <Bell size={14} />
               {notifications.length > 0 && (
                 <span className="absolute -top-0.5 -right-0.5 w-3 h-3 rounded-full bg-primary text-primary-foreground text-[7px] flex items-center justify-center font-bold">

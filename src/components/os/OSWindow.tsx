@@ -124,6 +124,8 @@ export default function OSWindow({ window: win, onClose, onMinimize, onMaximize,
       onMouseDown={() => onFocus(win.id)}
     >
       <div
+        role="dialog"
+        aria-label={win.title}
         className={`h-full flex flex-col rounded border overflow-hidden relative ${
           win.isFocused
             ? 'border-primary/40 glow-border'
@@ -146,18 +148,21 @@ export default function OSWindow({ window: win, onClose, onMinimize, onMaximize,
           <div className="flex items-center gap-1">
             <button
               onClick={() => onMinimize(win.id)}
+              aria-label="Minimize window"
               className="p-0.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
             >
               <Minus size={12} />
             </button>
             <button
               onClick={() => onMaximize(win.id)}
+              aria-label={win.isMaximized ? "Restore window" : "Maximize window"}
               className="p-0.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
             >
               {win.isMaximized ? <Minimize2 size={12} /> : <Maximize2 size={12} />}
             </button>
             <button
               onClick={() => onClose(win.id)}
+              aria-label="Close window"
               className="p-0.5 rounded hover:bg-destructive/20 text-muted-foreground hover:text-destructive transition-colors"
             >
               <X size={12} />

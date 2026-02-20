@@ -1,10 +1,12 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { AnimatePresence } from 'framer-motion';
 import { useWindowManager } from '@/hooks/useWindowManager';
 import { useNotifications } from '@/hooks/useNotifications';
 import BootSequence from '@/components/os/BootSequence';
 import Taskbar from '@/components/os/Taskbar';
 import OSWindow from '@/components/os/OSWindow';
+import GlobalSearch from '@/components/os/GlobalSearch';
+import QuickTour from '@/components/os/QuickTour';
 import TerminalApp from '@/components/os/TerminalApp';
 import FilesApp from '@/components/os/FilesApp';
 import ProcessesApp from '@/components/os/ProcessesApp';
@@ -30,13 +32,59 @@ import { AppType } from '@/types/os';
 
 export default function Desktop() {
   const [booted, setBooted] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [showTour, setShowTour] = useState(false);
   const { windows, openWindow, closeWindow, minimizeWindow, focusWindow, moveWindow, resizeWindow, maximizeWindow, snapWindow, tileAllWindows, cascadeWindows } = useWindowManager();
   const { notifications, dismissNotification, events, toggleEvent, updateEventMessage, addEvent, removeEvent } = useNotifications();
 
   const handleBootComplete = useCallback(() => {
     setBooted(true);
-    setTimeout(() => openWindow('terminal', 'Prime Shell (psh)'), 300);
+    const tourDone = localStorage.getItem('prime-os-tour-completed');
+    if (!tourDone) {
+      setShowTour(true);
+    } else {
+      setTimeout(() => openWindow('terminal', 'Prime Shell (psh)'), 300);
+    }
   }, [openWindow]);
+
+  const handleTourComplete = useCallback(() => {
+    setShowTour(false);
+  }, []);
+
+  const handleTourOpenTerminal = useCallback(() => {
+    setTimeout(() => openWindow('terminal', 'Prime Shell (psh)'), 200);
+  }, [openWindow]);
+
+  // Global keyboard shortcuts
+  useEffect(() => {
+    if (!booted) return;
+    const handler = (e: KeyboardEvent) => {
+      // Ctrl+K / Cmd+K — global search
+      if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+        e.preventDefault();
+        setSearchOpen(prev => !prev);
+        return;
+      }
+      // Ctrl+W — close focused window
+      if ((e.ctrlKey || e.metaKey) && e.key === 'w') {
+        e.preventDefault();
+        const focused = windows.find(w => w.isFocused);
+        if (focused) closeWindow(focused.id);
+        return;
+      }
+      // Alt+Tab — cycle windows
+      if (e.altKey && e.key === 'Tab') {
+        e.preventDefault();
+        const nonMin = windows.filter(w => !w.isMinimized);
+        if (nonMin.length < 2) return;
+        const focusedIdx = nonMin.findIndex(w => w.isFocused);
+        const next = nonMin[(focusedIdx + 1) % nonMin.length];
+        focusWindow(next.id);
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [booted, windows, closeWindow, focusWindow]);
 
   const closeWindowByApp = useCallback((app: string) => {
     const win = windows.find(w => w.app === app);
@@ -74,7 +122,7 @@ export default function Desktop() {
 
       {booted && (
         <>
-          <DesktopContextMenu onOpenApp={openWindow} onTileAll={tileAllWindows} onCascade={cascadeWindows}>
+          <DesktopContextMenu onOpenApp={openWindow} onTileAll={tileAllWindows} onCascade={cascadeWindows} onSearch={() => setSearchOpen(true)}>
             <div className="absolute inset-0 pb-10">
               <div className="absolute top-4 left-[90px] select-none">
                 <h1 className="font-display text-sm tracking-[0.3em] text-primary/30">PRIME OS</h1>
@@ -119,7 +167,22 @@ export default function Desktop() {
             onFocusWindow={focusWindow}
             notifications={notifications}
             onDismissNotification={dismissNotification}
+            onSearch={() => setSearchOpen(true)}
           />
+
+          <GlobalSearch
+            open={searchOpen}
+            onOpenChange={setSearchOpen}
+            windows={windows}
+            onOpenApp={openWindow}
+            onFocusWindow={focusWindow}
+            onTileAll={tileAllWindows}
+            onCascade={cascadeWindows}
+          />
+
+          {showTour && (
+            <QuickTour onComplete={handleTourComplete} onOpenTerminal={handleTourOpenTerminal} />
+          )}
         </>
       )}
     </div>
