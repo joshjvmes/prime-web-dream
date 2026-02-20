@@ -13,7 +13,7 @@ export interface WindowState {
   prevBounds?: { x: number; y: number; width: number; height: number };
 }
 
-export type AppType = 'terminal' | 'files' | 'processes' | 'sysinfo' | 'settings' | 'q3inference' | 'primenet' | 'geomc' | 'foldmem' | 'storage' | 'energy' | 'monitor' | 'editor' | 'chat' | 'security' | 'browser' | 'datacenter' | 'board' | 'gallery';
+export type AppType = 'terminal' | 'files' | 'processes' | 'sysinfo' | 'settings' | 'q3inference' | 'primenet' | 'geomc' | 'foldmem' | 'storage' | 'energy' | 'monitor' | 'editor' | 'chat' | 'security' | 'browser' | 'datacenter' | 'board' | 'gallery' | 'cloudhooks' | 'hypersphere';
 
 export interface QutritProcess {
   id: string;
