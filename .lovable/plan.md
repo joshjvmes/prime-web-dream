@@ -1,163 +1,201 @@
 
 
-# Connect All Upgraded Apps to Hyper AI and PrimeAgent
+# Deep Canvas Layers + Advanced Spreadsheet + AI Integration
 
 ## Overview
 
-Add 10 new AI tools to the `hyper-chat` edge function so Hyper can interact with PrimeSignals, PrimeVault, PrimeCanvas, PrimeBooking, PrimeComm, and PrimeAudio. Also upgrade PrimeAgent to recognize commands for all 6 apps.
+Upgrade PrimeCanvas with a proper layer system (add/remove/reorder layers, per-layer opacity and visibility, blend modes) and PrimeGrid with advanced features (cell formatting, charts, named ranges, multi-select). Then wire both apps into Hyper AI and PrimeAgent so the AI can programmatically create drawings and populate spreadsheets.
 
 ---
 
-## What Changes
+## 1. PrimeCanvas -- Layer System
 
-### 1. Edge Function: `hyper-chat/index.ts`
+### New Layer Architecture
 
-Add these new tool definitions to the existing `TOOLS` array:
+Replace the single-canvas approach with a multi-canvas stack where each layer is its own off-screen canvas composited onto a display canvas.
 
-| Tool | Description | Execution |
-|------|-------------|-----------|
-| `get_market_data` | Fetch live stock prices for given tickers | Server-side: calls `market-data` edge function |
-| `get_stock_chart` | Get historical price chart for a ticker | Server-side: calls `market-data` edge function |
-| `check_portfolio` | View the user's vault holdings with live prices | Server-side: reads `vault_holdings` + calls `market-data` |
-| `trade_stock` | Buy or sell a stock in the vault | Server-side: inserts/updates `vault_holdings` and `vault_transactions`, charges wallet |
-| `create_booking` | Book a resource with conflict detection | Server-side: calls `check_booking_conflict`, inserts into `bookings` |
-| `list_bookings` | List upcoming bookings | Server-side: reads `bookings` table |
-| `cancel_booking` | Cancel one of the user's bookings | Server-side: deletes from `bookings` |
-| `send_message` | Send a DM to another user via PrimeComm | Server-side: inserts into `chat_messages` |
-| `list_conversations` | List recent DM conversations | Server-side: reads `chat_messages` grouped by channel |
-| `control_audio` | Play, pause, skip, or change volume on PrimeAudio | Client-side: returns tool call for frontend EventBus |
-
-Update the system prompt to tell Hyper about these new capabilities:
-- Market data analysis and stock price lookup
-- Portfolio management (view holdings, buy/sell real stocks)
-- Resource booking with conflict awareness
-- Direct messaging to other users
-- Music/ambient audio control
-
-Add server-side execution functions for each tool, following the existing pattern used by `executeFinancialTool`.
-
-### 2. Frontend: `HypersphereApp.tsx`
-
-Add client-side handling for the new tool call responses:
-
-- `get_market_data` / `get_stock_chart` / `check_portfolio`: Display the data inline in the chat as formatted text (the edge function returns the reply string)
-- `trade_stock`: Emit `trade.executed` event, show confirmation
-- `create_booking` / `cancel_booking`: Emit new `booking.created` / `booking.cancelled` events
-- `list_bookings` / `list_conversations`: Display data inline
-- `send_message`: Emit `social.post.created` or similar event
-- `control_audio`: Emit a new `audio.control` EventBus event that PrimeAudio listens to
-
-Add new permission toggle: **Booking** (controls create/cancel booking)
-
-Update `AgentAction` type to include new action types.
-
-### 3. Frontend: `PrimeAgentApp.tsx`
-
-Expand the keyword parser and quick commands:
-
-New quick commands:
-- "Check Markets" -- opens PrimeSignals, fetches live ticker summary
-- "My Portfolio" -- opens PrimeVault, shows holdings
-- "Book Resource" -- opens PrimeBooking
-- "Play Music" -- opens PrimeAudio, starts playback
-- "Send Message" -- opens PrimeComm
-
-Add app titles for the 6 new apps to `APP_TITLES`:
+**Layer data model:**
 ```text
-signals: 'PrimeSignals', vault: 'PrimeVault', canvas: 'PrimeCanvas',
-booking: 'PrimeBooking', comm: 'PrimeComm', audio: 'PrimeAudio'
+Layer {
+  id: string
+  name: string
+  opacity: number (0-1)
+  visible: boolean
+  blendMode: string (normal, multiply, screen, overlay, etc.)
+  canvas: OffscreenCanvas (runtime only)
+}
 ```
 
-Add keyword detection for market/stock/price/portfolio/booking/schedule/music/draw/message/chat.
+**New UI -- Layers Panel** (right side, replaces Gallery when open):
+- Layer list with drag-to-reorder
+- Per-layer visibility toggle (eye icon)
+- Per-layer opacity slider
+- Blend mode dropdown per layer
+- Add / Delete / Duplicate / Merge Down buttons
+- Active layer highlight
+- Layer thumbnail preview (miniature render updated on draw)
 
-### 4. Frontend: `PrimeAudioApp.tsx`
+**Drawing changes:**
+- All drawing operations target the active layer's offscreen canvas
+- A composite function renders all visible layers (bottom-to-top) onto the main display canvas after every stroke
+- Undo/redo stores per-layer ImageData snapshots
+- Eraser erases on the active layer only (with transparency, not background color)
+- Clear clears active layer only (with option for "clear all layers")
 
-Add an EventBus listener for `audio.control` events so Hyper can remotely control playback:
+**New tools:**
+- Fill bucket (flood fill on active layer)
+- Color picker / eyedropper (sample from composite view)
+- Text tool (basic text placement on active layer)
+- Selection tool (rectangular select, move selected region)
 
-```text
-eventBus.on('audio.control', ({ action, track, volume }) => { ... })
-```
+**Transparency support:**
+- Canvas background becomes a checkerboard pattern (standard transparency indicator)
+- Each layer initialized with `clearRect` (transparent) instead of solid fill
+- Export PNG flattens all layers; export with transparency option available
 
-Supported actions: play, pause, skip, set-volume, play-track (by name).
+**Gallery integration:**
+- Save now stores layer data as JSON metadata alongside the flattened PNG
+- Load restores layers when metadata exists, otherwise loads as single layer
 
-### 5. EventBus: `useEventBus.ts`
+---
 
-Add new event types:
-```text
-'booking.created', 'booking.cancelled', 'audio.control', 'market.checked'
-```
+## 2. PrimeGrid -- Advanced Spreadsheet
+
+### New Features
+
+**Cell formatting:**
+- Bold, italic, text color, background color per cell
+- Number formatting (currency, percentage, decimal places)
+- Cell data model expands to store both value and format metadata
+- Format toolbar row below formula bar
+
+**Charts:**
+- Select a range, click "Chart" to insert a mini inline chart
+- Chart types: bar, line, pie (using recharts, already installed)
+- Charts stored as special objects in the workbook
+- Charts panel on the side to manage/edit charts
+
+**Named ranges:**
+- Define named ranges (e.g., "Revenue" = B2:B10)
+- Use named ranges in formulas: `=SUM(Revenue)`
+- Named range manager in a dropdown
+
+**New formulas:**
+- `CONCAT(A1, " ", B1)` -- string concatenation
+- `ROUND(val, decimals)` -- rounding
+- `ABS(val)` -- absolute value
+- `VLOOKUP(search, range, col_idx)` -- vertical lookup
+- `SPARKLINE(range)` -- inline mini chart in cell
+
+**Multi-cell selection:**
+- Click and drag to select a range
+- Status bar shows SUM, AVG, COUNT of selected range
+- Copy/paste selected range
+
+**Freeze rows/columns:**
+- Freeze header row (row 1) option
+- Frozen rows stay visible when scrolling
+
+---
+
+## 3. AI Integration -- Canvas Tools
+
+### New Hyper AI Tools
+
+**`draw_on_canvas`**
+- Parameters: `instructions` (string describing what to draw), `clear_first` (boolean)
+- Execution: Client-side tool. Returns instructions to the frontend, which uses Canvas 2D API to programmatically draw shapes, patterns, text based on parsed instructions
+- The AI generates a series of drawing commands (JSON): lines, rects, circles, arcs, text, fills with colors/positions/sizes
+- Frontend parses and executes on active canvas layer
+
+**`generate_canvas_art`**
+- Parameters: `style` (geometric, abstract, fractal, pattern, circuit), `palette` (warm, cool, neon, mono, prime)
+- Execution: Client-side procedural generation -- the frontend has preset algorithms for each style that create complex generative art
+- Styles: geometric grids, Fibonacci spirals, Voronoi patterns, circuit board traces, fractal trees
+
+### Canvas EventBus Integration
+
+- `canvas.draw` event: PrimeCanvasApp listens and executes drawing commands
+- `canvas.clear` event: clears active layer
+- `canvas.add-layer` event: adds a new layer
+- PrimeAgent "Generate Art" quick command added
+
+---
+
+## 4. AI Integration -- Spreadsheet Tools
+
+### New Hyper AI Tools
+
+**`create_spreadsheet`**
+- Parameters: `name` (string), `headers` (string[]), `rows` (string[][])
+- Execution: Client-side tool. Creates a new sheet in the active workbook and populates it with data
+- EventBus event: `spreadsheet.create`
+
+**`update_cells`**
+- Parameters: `sheet` (string), `cells` (Record of cell key to value, e.g. {"A1": "Revenue", "B1": "=SUM(B2:B10)"})
+- Execution: Client-side tool. Updates specific cells in a named sheet
+- EventBus event: `spreadsheet.update`
+
+**`read_spreadsheet`**
+- Parameters: `sheet` (string, optional)
+- Execution: Server-side -- reads from cloud storage (`useCloudStorage` key)
+- Returns formatted table of current spreadsheet data
+
+**`add_chart`**
+- Parameters: `sheet` (string), `range` (string like "A1:B5"), `chart_type` ("bar"|"line"|"pie"), `title` (string)
+- Execution: Client-side -- inserts a chart object
+- EventBus event: `spreadsheet.chart`
+
+### Spreadsheet EventBus Integration
+
+- `spreadsheet.create` event: PrimeGridApp listens, creates sheet with data
+- `spreadsheet.update` event: updates cells
+- `spreadsheet.chart` event: adds chart
+- PrimeAgent "Create Report" quick command added
+
+---
+
+## 5. Fix Existing Bug
+
+The `hyper-chat/index.ts` edge function references `EXTENDED_TOOLS` and `executeExtendedTool` which are never defined. These need to be added with implementations for the 10 extended tools (market data, portfolio, booking, messaging, audio) plus the new canvas/spreadsheet tools.
 
 ---
 
 ## Technical Details
 
-### New Tool Definitions (added to TOOLS array in hyper-chat)
+### EventBus New Event Types
 
-**get_market_data**
-- Parameters: `symbols` (string, comma-separated tickers, optional -- defaults to watchlist)
-- Server execution: calls `market-data?action=get-tickers&symbols=...`
-- Returns formatted price table as reply
-
-**get_stock_chart**
-- Parameters: `ticker` (string), `days` (number, default 7)
-- Server execution: calls `market-data?action=get-chart&ticker=...&from=...&to=...`
-- Returns summary with high/low/trend as reply
-
-**check_portfolio**
-- Parameters: none
-- Server execution: reads `vault_holdings` for user, fetches live prices from `market-data`
-- Returns portfolio summary with P/L as reply
-
-**trade_stock**
-- Parameters: `symbol` (string), `action` ("buy"|"sell"), `quantity` (number)
-- Server execution: fetches current price from `market-data`, charges/credits wallet via `prime-bank`, upserts `vault_holdings`, inserts `vault_transactions`
-- Returns trade confirmation as reply
-
-**create_booking**
-- Parameters: `resource` (string), `start` (ISO datetime), `duration_minutes` (number), `purpose` (string)
-- Server execution: calls `check_booking_conflict` RPC, inserts into `bookings`
-- Returns confirmation or conflict warning
-
-**list_bookings**
-- Parameters: `upcoming_only` (boolean, default true)
-- Server execution: reads `bookings` ordered by start_time
-- Returns formatted list
-
-**cancel_booking**
-- Parameters: `booking_id` (string) or `resource` + `date` for fuzzy match
-- Server execution: deletes from `bookings` (only user's own)
-- Returns confirmation
-
-**send_message**
-- Parameters: `to_name` (string), `message` (string)
-- Server execution: looks up user in `profiles`, inserts into `chat_messages` with channel `dm-{sorted_ids}`
-- Returns confirmation
-
-**list_conversations**
-- Parameters: none
-- Server execution: reads recent `chat_messages` for user, grouped by channel
-- Returns formatted conversation list
-
-**control_audio**
-- Parameters: `action` ("play"|"pause"|"skip"|"volume"), `track_name` (string, optional), `volume` (number, optional)
-- Client-side tool: returned to frontend, which emits EventBus event
-- PrimeAudio listens and responds
+```text
+'canvas.draw', 'canvas.clear', 'canvas.add-layer',
+'spreadsheet.create', 'spreadsheet.update', 'spreadsheet.chart'
+```
 
 ### Files to Modify
 
 | File | Change |
 |------|--------|
-| `supabase/functions/hyper-chat/index.ts` | Add 10 tool definitions, execution functions, update system prompt |
-| `src/components/os/HypersphereApp.tsx` | Handle new tool call responses, add permission toggle |
-| `src/components/os/PrimeAgentApp.tsx` | Add 6 apps to parser, new quick commands |
-| `src/components/os/PrimeAudioApp.tsx` | Add EventBus listener for remote control |
+| `src/components/os/PrimeCanvasApp.tsx` | Full rewrite: multi-layer system, new tools, transparency, EventBus listener |
+| `src/components/os/PrimeGridApp.tsx` | Cell formatting, charts, named ranges, multi-select, freeze rows, EventBus listener |
+| `supabase/functions/hyper-chat/index.ts` | Fix missing `EXTENDED_TOOLS`/`executeExtendedTool`, add 4 new tools (draw_on_canvas, generate_canvas_art, create_spreadsheet, update_cells, read_spreadsheet, add_chart) |
+| `src/components/os/HypersphereApp.tsx` | Handle new canvas/spreadsheet tool responses |
+| `src/components/os/PrimeAgentApp.tsx` | Add "Generate Art" and "Create Report" quick commands, expand keyword parser |
 | `src/hooks/useEventBus.ts` | Add new event types |
+
+### New Tool Definitions for hyper-chat
+
+**draw_on_canvas**: `{ instructions: string, clear_first?: boolean }` -- client-side, returns drawing command JSON
+**generate_canvas_art**: `{ style: string, palette?: string }` -- client-side, triggers procedural generation
+**create_spreadsheet**: `{ name: string, headers: string[], rows: string[][] }` -- client-side
+**update_cells**: `{ sheet: string, cells: Record<string, string> }` -- client-side
+**read_spreadsheet**: `{ sheet?: string }` -- server-side (reads from user_data cloud storage)
+**add_chart**: `{ sheet: string, range: string, chart_type: string, title?: string }` -- client-side
 
 ### Execution Order
 
 1. Update `useEventBus.ts` with new event types
-2. Update `hyper-chat/index.ts` with all new tools and execution logic
-3. Update `HypersphereApp.tsx` to handle new tool responses
-4. Update `PrimeAgentApp.tsx` with expanded commands
-5. Update `PrimeAudioApp.tsx` with EventBus listener
+2. Rewrite `PrimeCanvasApp.tsx` with layer system + EventBus listeners
+3. Upgrade `PrimeGridApp.tsx` with formatting, charts, multi-select + EventBus listeners
+4. Fix and extend `hyper-chat/index.ts` (add missing `EXTENDED_TOOLS`/`executeExtendedTool`, add 6 new tools)
+5. Update `HypersphereApp.tsx` to handle new tool responses
+6. Update `PrimeAgentApp.tsx` with new commands
 
