@@ -507,6 +507,385 @@ Deno.serve(async (req) => {
       return json({ success: true });
     }
 
+    // ── Forge Publish ──
+    if (action === "forge-publish") {
+      const user = await getUser(req);
+      if (!user) return err("Auth required", 401);
+      const body = await req.json();
+      const { name, description, icon, code, category, price, ipo_active, ipo_target } = body;
+      if (!name || !code) return err("Name and code required");
+
+      const insertData: Record<string, unknown> = {
+        creator_id: user.id, name, description: description || '', icon: icon || '🔧',
+        code, category: category || 'other', price: Number(price) || 0,
+        ipo_active: !!ipo_active, ipo_target: Number(ipo_target) || 0,
+      };
+
+      // If IPO, set initial share price based on target
+      if (ipo_active && ipo_target) {
+        insertData.share_price = Number(ipo_target) / 1000; // 1000 shares
+      }
+
+      const { data: listing, error: lErr } = await db.from("forge_listings").insert(insertData).select("*").single();
+      if (lErr) return err(lErr.message, 500);
+
+      // Give creator 30% founder shares
+      if (listing) {
+        await db.from("app_shares").insert({
+          user_id: user.id, listing_id: listing.id, shares: 300, avg_cost: 0,
+        });
+      }
+
+      return json(listing);
+    }
+
+    // ── Forge Install ──
+    if (action === "forge-install") {
+      const user = await getUser(req);
+      if (!user) return err("Auth required", 401);
+      const body = await req.json();
+      const { listing_id, price } = body;
+      const amount = Number(price);
+
+      if (amount > 0) {
+        const { data: userW } = await db.from("wallets").select("*").eq("user_id", user.id).maybeSingle();
+        if (!userW || Number(userW.os_balance) < amount) return err("Insufficient OS tokens");
+
+        // Get creator
+        const { data: listing } = await db.from("forge_listings").select("creator_id").eq("id", listing_id).single();
+        if (!listing) return err("Listing not found");
+
+        let { data: creatorW } = await db.from("wallets").select("*").eq("user_id", listing.creator_id).maybeSingle();
+        if (!creatorW) {
+          const { data: c } = await db.from("wallets").insert({ user_id: listing.creator_id, os_balance: 0, ix_balance: 0 }).select("*").single();
+          creatorW = c;
+        }
+
+        // Transfer OS
+        await db.from("wallets").update({ os_balance: Number(userW.os_balance) - amount }).eq("id", userW.id);
+        if (creatorW) await db.from("wallets").update({ os_balance: Number(creatorW.os_balance) + amount }).eq("id", creatorW.id);
+        await db.from("transactions").insert({
+          from_wallet_id: userW.id, to_wallet_id: creatorW?.id,
+          token_type: "OS", amount, tx_type: "transfer", description: `Forge install: ${listing_id}`,
+        });
+      }
+
+      // Increment installs + revenue
+      const { data: curr } = await db.from("forge_listings").select("installs, revenue").eq("id", listing_id).single();
+      if (curr) {
+        await db.from("forge_listings").update({
+          installs: (curr.installs || 0) + 1,
+          revenue: Number(curr.revenue || 0) + amount,
+        }).eq("id", listing_id);
+      }
+
+      return json({ success: true });
+    }
+
+    // ── Forge Invest (IPO) ──
+    if (action === "forge-invest") {
+      const user = await getUser(req);
+      if (!user) return err("Auth required", 401);
+      const body = await req.json();
+      const { listing_id, amount: rawAmount } = body;
+      const amount = Number(rawAmount);
+      if (!listing_id || !amount || amount <= 0) return err("Invalid params");
+
+      const { data: listing } = await db.from("forge_listings").select("*").eq("id", listing_id).single();
+      if (!listing || !listing.ipo_active) return err("No active IPO");
+
+      const { data: userW } = await db.from("wallets").select("*").eq("user_id", user.id).maybeSingle();
+      if (!userW || Number(userW.os_balance) < amount) return err("Insufficient OS tokens");
+
+      // Calculate shares bought
+      const sharePrice = Number(listing.share_price) || 1;
+      const sharesBought = Math.floor(amount / sharePrice);
+      if (sharesBought <= 0) return err("Amount too low for even 1 share");
+      const actualCost = sharesBought * sharePrice;
+
+      // Deduct from buyer
+      await db.from("wallets").update({ os_balance: Number(userW.os_balance) - actualCost }).eq("id", userW.id);
+
+      // Upsert shares
+      const { data: existing } = await db.from("app_shares").select("*").eq("user_id", user.id).eq("listing_id", listing_id).maybeSingle();
+      if (existing) {
+        const totalShares = existing.shares + sharesBought;
+        const newAvg = ((existing.avg_cost * existing.shares) + actualCost) / totalShares;
+        await db.from("app_shares").update({ shares: totalShares, avg_cost: newAvg }).eq("id", existing.id);
+      } else {
+        await db.from("app_shares").insert({ user_id: user.id, listing_id, shares: sharesBought, avg_cost: sharePrice });
+      }
+
+      // Update IPO raised
+      const newRaised = Number(listing.ipo_raised) + actualCost;
+      const updates: Record<string, unknown> = { ipo_raised: newRaised };
+      if (newRaised >= Number(listing.ipo_target)) {
+        updates.ipo_active = false; // IPO complete
+      }
+      await db.from("forge_listings").update(updates).eq("id", listing_id);
+
+      // Credit creator
+      let { data: creatorW } = await db.from("wallets").select("*").eq("user_id", listing.creator_id).maybeSingle();
+      if (!creatorW) {
+        const { data: c } = await db.from("wallets").insert({ user_id: listing.creator_id, os_balance: 0, ix_balance: 0 }).select("*").single();
+        creatorW = c;
+      }
+      if (creatorW) {
+        await db.from("wallets").update({ os_balance: Number(creatorW.os_balance) + actualCost }).eq("id", creatorW.id);
+      }
+
+      await db.from("transactions").insert({
+        from_wallet_id: userW.id, to_wallet_id: creatorW?.id,
+        token_type: "OS", amount: actualCost, tx_type: "transfer",
+        description: `IPO investment: ${listing.name} (${sharesBought} shares)`,
+      });
+
+      return json({ success: true, shares_bought: sharesBought });
+    }
+
+    // ── Share Order ──
+    if (action === "share-order") {
+      const user = await getUser(req);
+      if (!user) return err("Auth required", 401);
+      const body = await req.json();
+      const { listing_id, order_type, shares, price } = body;
+      if (!listing_id || !order_type || !shares || !price) return err("Invalid params");
+      const numShares = Number(shares);
+      const numPrice = Number(price);
+
+      // Validate
+      if (order_type === 'sell') {
+        const { data: holding } = await db.from("app_shares").select("shares").eq("user_id", user.id).eq("listing_id", listing_id).maybeSingle();
+        if (!holding || holding.shares < numShares) return err("Insufficient shares");
+      } else {
+        const totalCost = numShares * numPrice;
+        const { data: userW } = await db.from("wallets").select("os_balance").eq("user_id", user.id).maybeSingle();
+        if (!userW || Number(userW.os_balance) < totalCost) return err("Insufficient OS tokens");
+      }
+
+      const { data: order, error: oErr } = await db.from("share_orders").insert({
+        user_id: user.id, listing_id, order_type, shares: numShares, price: numPrice,
+      }).select("*").single();
+      if (oErr) return err(oErr.message, 500);
+
+      // Try to match orders
+      const oppositeType = order_type === 'buy' ? 'sell' : 'buy';
+      const { data: matches } = await db.from("share_orders")
+        .select("*")
+        .eq("listing_id", listing_id)
+        .eq("order_type", oppositeType)
+        .eq("status", "open")
+        .order("price", { ascending: order_type === 'buy' })
+        .limit(10);
+
+      if (matches && matches.length > 0) {
+        let remainingShares = numShares;
+        for (const match of matches) {
+          if (remainingShares <= 0) break;
+          const canTrade = order_type === 'buy' ? numPrice >= Number(match.price) : numPrice <= Number(match.price);
+          if (!canTrade) continue;
+
+          const tradeShares = Math.min(remainingShares, match.shares - match.filled);
+          const tradePrice = Number(match.price); // execute at the resting order's price
+          const tradeCost = tradeShares * tradePrice;
+
+          const buyerId = order_type === 'buy' ? user.id : match.user_id;
+          const sellerId = order_type === 'sell' ? user.id : match.user_id;
+
+          // Transfer OS
+          const { data: buyerW } = await db.from("wallets").select("*").eq("user_id", buyerId).maybeSingle();
+          const { data: sellerW } = await db.from("wallets").select("*").eq("user_id", sellerId).maybeSingle();
+          if (buyerW && sellerW) {
+            await db.from("wallets").update({ os_balance: Number(buyerW.os_balance) - tradeCost }).eq("id", buyerW.id);
+            await db.from("wallets").update({ os_balance: Number(sellerW.os_balance) + tradeCost }).eq("id", sellerW.id);
+
+            // Transfer shares
+            const { data: buyerShares } = await db.from("app_shares").select("*").eq("user_id", buyerId).eq("listing_id", listing_id).maybeSingle();
+            if (buyerShares) {
+              const total = buyerShares.shares + tradeShares;
+              const newAvg = ((buyerShares.avg_cost * buyerShares.shares) + tradeCost) / total;
+              await db.from("app_shares").update({ shares: total, avg_cost: newAvg }).eq("id", buyerShares.id);
+            } else {
+              await db.from("app_shares").insert({ user_id: buyerId, listing_id, shares: tradeShares, avg_cost: tradePrice });
+            }
+
+            const { data: sellerShares } = await db.from("app_shares").select("*").eq("user_id", sellerId).eq("listing_id", listing_id).maybeSingle();
+            if (sellerShares) {
+              const newShares = sellerShares.shares - tradeShares;
+              if (newShares <= 0) {
+                await db.from("app_shares").delete().eq("id", sellerShares.id);
+              } else {
+                await db.from("app_shares").update({ shares: newShares }).eq("id", sellerShares.id);
+              }
+            }
+
+            // Update share price on listing
+            await db.from("forge_listings").update({ share_price: tradePrice }).eq("id", listing_id);
+
+            await db.from("transactions").insert({
+              from_wallet_id: buyerW.id, to_wallet_id: sellerW.id,
+              token_type: "OS", amount: tradeCost, tx_type: "transfer",
+              description: `Share trade: ${tradeShares} shares @ ${tradePrice} OS`,
+            });
+          }
+
+          // Update orders
+          const newFilled = match.filled + tradeShares;
+          await db.from("share_orders").update({
+            filled: newFilled,
+            status: newFilled >= match.shares ? 'filled' : 'open',
+          }).eq("id", match.id);
+
+          remainingShares -= tradeShares;
+        }
+
+        // Update our order
+        const filled = numShares - remainingShares;
+        await db.from("share_orders").update({
+          filled,
+          status: filled >= numShares ? 'filled' : 'open',
+        }).eq("id", order!.id);
+      }
+
+      return json({ success: true, order_id: order!.id });
+    }
+
+    // ── Share Cancel ──
+    if (action === "share-cancel") {
+      const user = await getUser(req);
+      if (!user) return err("Auth required", 401);
+      const body = await req.json();
+      const { order_id } = body;
+      await db.from("share_orders").update({ status: "cancelled" }).eq("id", order_id).eq("user_id", user.id);
+      return json({ success: true });
+    }
+
+    // ── Bet Place ──
+    if (action === "bet-place") {
+      const user = await getUser(req);
+      if (!user) return err("Auth required", 401);
+      const body = await req.json();
+      const { market_id, side, amount: rawAmount } = body;
+      const amount = Number(rawAmount);
+      if (!market_id || !side || !amount || amount <= 0) return err("Invalid params");
+      if (side !== 'YES' && side !== 'NO') return err("Side must be YES or NO");
+
+      const { data: market } = await db.from("bet_markets").select("*").eq("id", market_id).single();
+      if (!market || market.status !== 'open') return err("Market not open");
+
+      const { data: userW } = await db.from("wallets").select("*").eq("user_id", user.id).maybeSingle();
+      if (!userW || Number(userW.os_balance) < amount) return err("Insufficient OS tokens");
+
+      const { data: sysW } = await db.from("wallets").select("*").eq("is_system", true).maybeSingle();
+
+      // Deduct from user
+      await db.from("wallets").update({ os_balance: Number(userW.os_balance) - amount }).eq("id", userW.id);
+      if (sysW) await db.from("wallets").update({ os_balance: Number(sysW.os_balance) + amount }).eq("id", sysW.id);
+
+      // Record bet
+      await db.from("bets").insert({ user_id: user.id, market_id, side, amount });
+
+      // Update pool
+      const poolCol = side === 'YES' ? 'yes_pool' : 'no_pool';
+      const currentPool = Number(market[poolCol === 'yes_pool' ? 'yes_pool' : 'no_pool']);
+      await db.from("bet_markets").update({ [poolCol]: currentPool + amount }).eq("id", market_id);
+
+      await db.from("transactions").insert({
+        from_wallet_id: userW.id, to_wallet_id: sysW?.id,
+        token_type: "OS", amount, tx_type: "transfer",
+        description: `Bet ${side} on: ${market.question.substring(0, 50)}`,
+      });
+
+      return json({ success: true });
+    }
+
+    // ── Bet Create Market ──
+    if (action === "bet-create-market") {
+      const user = await getUser(req);
+      if (!user) return err("Auth required", 401);
+      const body = await req.json();
+      const { question, category, listing_id, expiry } = body;
+      if (!question) return err("Question required");
+
+      const cost = 1000;
+      const { data: userW } = await db.from("wallets").select("*").eq("user_id", user.id).maybeSingle();
+      if (!userW || Number(userW.os_balance) < cost) return err("Need 1,000 OS to create a market");
+
+      const { data: sysW } = await db.from("wallets").select("*").eq("is_system", true).maybeSingle();
+      await db.from("wallets").update({ os_balance: Number(userW.os_balance) - cost }).eq("id", userW.id);
+      if (sysW) await db.from("wallets").update({ os_balance: Number(sysW.os_balance) + cost }).eq("id", sysW.id);
+
+      const { data: market, error: mErr } = await db.from("bet_markets").insert({
+        creator_id: user.id, question, category: category || 'general',
+        listing_id: listing_id || null, expiry: expiry || null,
+      }).select("*").single();
+      if (mErr) return err(mErr.message, 500);
+
+      await db.from("transactions").insert({
+        from_wallet_id: userW.id, to_wallet_id: sysW?.id,
+        token_type: "OS", amount: cost, tx_type: "transfer",
+        description: `Created market: ${question.substring(0, 50)}`,
+      });
+
+      return json(market);
+    }
+
+    // ── Bet Resolve ──
+    if (action === "bet-resolve") {
+      const user = await getUser(req);
+      if (!user) return err("Auth required", 401);
+      const body = await req.json();
+      const { market_id, outcome } = body;
+      if (!market_id || !outcome) return err("Invalid params");
+      if (outcome !== 'yes' && outcome !== 'no' && outcome !== 'cancelled') return err("Invalid outcome");
+
+      const { data: market } = await db.from("bet_markets").select("*").eq("id", market_id).single();
+      if (!market || market.status !== 'open') return err("Market not open");
+
+      // Only creator or admin can resolve
+      if (market.creator_id !== user.id && !(await isAdmin(user.id))) return err("Not authorized");
+
+      const totalPool = Number(market.yes_pool) + Number(market.no_pool);
+
+      if (outcome === 'cancelled') {
+        // Refund all bets
+        const { data: allBets } = await db.from("bets").select("*").eq("market_id", market_id);
+        for (const bet of (allBets || [])) {
+          const { data: bw } = await db.from("wallets").select("*").eq("user_id", bet.user_id).maybeSingle();
+          if (bw) {
+            await db.from("wallets").update({ os_balance: Number(bw.os_balance) + Number(bet.amount) }).eq("id", bw.id);
+          }
+        }
+        const { data: sysW } = await db.from("wallets").select("*").eq("is_system", true).maybeSingle();
+        if (sysW) await db.from("wallets").update({ os_balance: Number(sysW.os_balance) - totalPool }).eq("id", sysW.id);
+      } else {
+        // Distribute winnings
+        const winningSide = outcome === 'yes' ? 'YES' : 'NO';
+        const winningPool = outcome === 'yes' ? Number(market.yes_pool) : Number(market.no_pool);
+        if (winningPool > 0) {
+          const { data: winners } = await db.from("bets").select("*").eq("market_id", market_id).eq("side", winningSide);
+          const { data: sysW } = await db.from("wallets").select("*").eq("is_system", true).maybeSingle();
+          for (const bet of (winners || [])) {
+            const payout = (Number(bet.amount) / winningPool) * totalPool;
+            const { data: bw } = await db.from("wallets").select("*").eq("user_id", bet.user_id).maybeSingle();
+            if (bw && sysW) {
+              await db.from("wallets").update({ os_balance: Number(bw.os_balance) + payout }).eq("id", bw.id);
+              await db.from("wallets").update({ os_balance: Number(sysW.os_balance) - payout }).eq("id", sysW.id);
+              await db.from("transactions").insert({
+                from_wallet_id: sysW.id, to_wallet_id: bw.id,
+                token_type: "OS", amount: payout, tx_type: "reward",
+                description: `Bet payout: ${market.question.substring(0, 40)}`,
+              });
+            }
+            await db.from("bets").update({ claimed: true }).eq("id", bet.id);
+          }
+        }
+      }
+
+      await db.from("bet_markets").update({ status: outcome === 'cancelled' ? 'cancelled' : `resolved_${outcome}` }).eq("id", market_id);
+      return json({ success: true });
+    }
+
     return err("Unknown action: " + action);
   } catch (e) {
     return err(e instanceof Error ? e.message : "Internal error", 500);

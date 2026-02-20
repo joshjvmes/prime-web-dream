@@ -14,6 +14,129 @@ export type Database = {
   }
   public: {
     Tables: {
+      app_shares: {
+        Row: {
+          avg_cost: number
+          created_at: string
+          id: string
+          listing_id: string
+          shares: number
+          user_id: string
+        }
+        Insert: {
+          avg_cost?: number
+          created_at?: string
+          id?: string
+          listing_id: string
+          shares?: number
+          user_id: string
+        }
+        Update: {
+          avg_cost?: number
+          created_at?: string
+          id?: string
+          listing_id?: string
+          shares?: number
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "app_shares_listing_id_fkey"
+            columns: ["listing_id"]
+            isOneToOne: false
+            referencedRelation: "forge_listings"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      bet_markets: {
+        Row: {
+          category: string
+          created_at: string
+          creation_cost: number
+          creator_id: string
+          expiry: string | null
+          id: string
+          listing_id: string | null
+          no_pool: number
+          question: string
+          status: string
+          yes_pool: number
+        }
+        Insert: {
+          category?: string
+          created_at?: string
+          creation_cost?: number
+          creator_id: string
+          expiry?: string | null
+          id?: string
+          listing_id?: string | null
+          no_pool?: number
+          question: string
+          status?: string
+          yes_pool?: number
+        }
+        Update: {
+          category?: string
+          created_at?: string
+          creation_cost?: number
+          creator_id?: string
+          expiry?: string | null
+          id?: string
+          listing_id?: string | null
+          no_pool?: number
+          question?: string
+          status?: string
+          yes_pool?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bet_markets_listing_id_fkey"
+            columns: ["listing_id"]
+            isOneToOne: false
+            referencedRelation: "forge_listings"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      bets: {
+        Row: {
+          amount: number
+          claimed: boolean
+          created_at: string
+          id: string
+          market_id: string
+          side: string
+          user_id: string
+        }
+        Insert: {
+          amount: number
+          claimed?: boolean
+          created_at?: string
+          id?: string
+          market_id: string
+          side: string
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          claimed?: boolean
+          created_at?: string
+          id?: string
+          market_id?: string
+          side?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bets_market_id_fkey"
+            columns: ["market_id"]
+            isOneToOne: false
+            referencedRelation: "bet_markets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       calendar_events: {
         Row: {
           color: string
@@ -173,6 +296,72 @@ export type Database = {
         }
         Relationships: []
       }
+      forge_listings: {
+        Row: {
+          category: string
+          code: string
+          created_at: string
+          creator_id: string
+          description: string
+          icon: string
+          id: string
+          installs: number
+          ipo_active: boolean
+          ipo_raised: number
+          ipo_target: number
+          is_listed: boolean
+          name: string
+          price: number
+          revenue: number
+          share_price: number
+          total_shares: number
+          updated_at: string
+          version: number
+        }
+        Insert: {
+          category?: string
+          code: string
+          created_at?: string
+          creator_id: string
+          description?: string
+          icon?: string
+          id?: string
+          installs?: number
+          ipo_active?: boolean
+          ipo_raised?: number
+          ipo_target?: number
+          is_listed?: boolean
+          name: string
+          price?: number
+          revenue?: number
+          share_price?: number
+          total_shares?: number
+          updated_at?: string
+          version?: number
+        }
+        Update: {
+          category?: string
+          code?: string
+          created_at?: string
+          creator_id?: string
+          description?: string
+          icon?: string
+          id?: string
+          installs?: number
+          ipo_active?: boolean
+          ipo_raised?: number
+          ipo_target?: number
+          is_listed?: boolean
+          name?: string
+          price?: number
+          revenue?: number
+          share_price?: number
+          total_shares?: number
+          updated_at?: string
+          version?: number
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           avatar_url: string | null
@@ -205,6 +394,50 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      share_orders: {
+        Row: {
+          created_at: string
+          filled: number
+          id: string
+          listing_id: string
+          order_type: string
+          price: number
+          shares: number
+          status: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          filled?: number
+          id?: string
+          listing_id: string
+          order_type: string
+          price: number
+          shares: number
+          status?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          filled?: number
+          id?: string
+          listing_id?: string
+          order_type?: string
+          price?: number
+          shares?: number
+          status?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "share_orders_listing_id_fkey"
+            columns: ["listing_id"]
+            isOneToOne: false
+            referencedRelation: "forge_listings"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       transactions: {
         Row: {
