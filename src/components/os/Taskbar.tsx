@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { AppType, WindowState } from '@/types/os';
 import { OSNotification } from '@/hooks/useNotifications';
-import { Terminal, FolderTree, Activity, Cpu, Brain, Network, Code, HardDrive, Database, Zap, Settings, ChevronUp, Bell, X } from 'lucide-react';
+import { Terminal, FolderTree, Activity, Cpu, Brain, Network, Code, HardDrive, Database, Zap, Settings, ChevronUp, Bell, X, Monitor, FileText, MessageSquare, Shield } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 
 interface TaskbarProps {
@@ -23,6 +23,10 @@ const allApps: { app: AppType; title: string; icon: React.ReactNode; label: stri
   { app: 'energy', title: 'Energy Monitor', icon: <Zap size={18} />, label: 'Energy' },
   { app: 'processes', title: 'Qutrit Processes', icon: <Activity size={18} />, label: 'Processes' },
   { app: 'sysinfo', title: 'System Info', icon: <Cpu size={18} />, label: 'SysInfo' },
+  { app: 'monitor', title: 'System Monitor', icon: <Monitor size={18} />, label: 'Monitor' },
+  { app: 'editor', title: 'PrimeEdit', icon: <FileText size={18} />, label: 'Editor' },
+  { app: 'chat', title: 'PrimeChat', icon: <MessageSquare size={18} />, label: 'Chat' },
+  { app: 'security', title: 'Lattice Shield', icon: <Shield size={18} />, label: 'Security' },
   { app: 'settings', title: 'Settings', icon: <Settings size={18} />, label: 'Settings' },
 ];
 

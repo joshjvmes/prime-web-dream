@@ -17,14 +17,25 @@ export function useWindowManager() {
         );
       }
       const offset = prev.length * 30;
+      const getSize = (a: AppType): [number, number] => {
+        switch (a) {
+          case 'terminal': return [700, 450];
+          case 'monitor': return [750, 500];
+          case 'editor': return [780, 500];
+          case 'chat': return [650, 480];
+          case 'security': return [720, 520];
+          default: return [600, 420];
+        }
+      };
+      const [w, h] = getSize(app);
       const newWindow: WindowState = {
         id: `${app}-${Date.now()}`,
         title,
         app,
         x: 100 + offset,
         y: 60 + offset,
-        width: app === 'terminal' ? 700 : 600,
-        height: app === 'terminal' ? 450 : 420,
+        width: w,
+        height: h,
         isMinimized: false,
         isMaximized: false,
         isFocused: true,
