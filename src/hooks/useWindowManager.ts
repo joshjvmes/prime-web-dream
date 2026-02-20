@@ -24,6 +24,10 @@ export function useWindowManager() {
           case 'editor': return [780, 500];
           case 'chat': return [650, 480];
           case 'security': return [720, 520];
+          case 'browser': return [850, 550];
+          case 'datacenter': return [800, 550];
+          case 'board': return [750, 500];
+          case 'gallery': return [700, 480];
           default: return [600, 420];
         }
       };

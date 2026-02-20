@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { AppType, WindowState } from '@/types/os';
 import { OSNotification } from '@/hooks/useNotifications';
-import { Terminal, FolderTree, Activity, Cpu, Brain, Network, Code, HardDrive, Database, Zap, Settings, ChevronUp, Bell, X, Monitor, FileText, MessageSquare, Shield } from 'lucide-react';
+import { Terminal, FolderTree, Activity, Cpu, Brain, Network, Code, HardDrive, Database, Zap, Settings, ChevronUp, Bell, X, Monitor, FileText, MessageSquare, Shield, Globe, Server, LayoutList, Image } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 
 interface TaskbarProps {
@@ -27,6 +27,10 @@ const allApps: { app: AppType; title: string; icon: React.ReactNode; label: stri
   { app: 'editor', title: 'PrimeEdit', icon: <FileText size={18} />, label: 'Editor' },
   { app: 'chat', title: 'PrimeChat', icon: <MessageSquare size={18} />, label: 'Chat' },
   { app: 'security', title: 'Lattice Shield', icon: <Shield size={18} />, label: 'Security' },
+  { app: 'browser', title: 'PrimeBrowser', icon: <Globe size={18} />, label: 'Browser' },
+  { app: 'datacenter', title: 'LatticeCore', icon: <Server size={18} />, label: 'Data Center' },
+  { app: 'board', title: 'PrimeBoard', icon: <LayoutList size={18} />, label: 'Board' },
+  { app: 'gallery', title: 'PrimeGallery', icon: <Image size={18} />, label: 'Gallery' },
   { app: 'settings', title: 'Settings', icon: <Settings size={18} />, label: 'Settings' },
 ];
 

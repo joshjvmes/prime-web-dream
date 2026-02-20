@@ -20,6 +20,10 @@ import SystemMonitorApp from '@/components/os/SystemMonitorApp';
 import TextEditorApp from '@/components/os/TextEditorApp';
 import PrimeChatApp from '@/components/os/PrimeChatApp';
 import SecurityConsoleApp from '@/components/os/SecurityConsoleApp';
+import PrimeBrowserApp from '@/components/os/PrimeBrowserApp';
+import DataCenterApp from '@/components/os/DataCenterApp';
+import PrimeBoardApp from '@/components/os/PrimeBoardApp';
+import PrimeGalleryApp from '@/components/os/PrimeGalleryApp';
 import DesktopContextMenu from '@/components/os/DesktopContextMenu';
 import NotificationSystem from '@/components/os/NotificationSystem';
 import { AppType } from '@/types/os';
@@ -56,6 +60,10 @@ export default function Desktop() {
       case 'editor': return <TextEditorApp />;
       case 'chat': return <PrimeChatApp />;
       case 'security': return <SecurityConsoleApp />;
+      case 'browser': return <PrimeBrowserApp />;
+      case 'datacenter': return <DataCenterApp />;
+      case 'board': return <PrimeBoardApp />;
+      case 'gallery': return <PrimeGalleryApp />;
       default: return <div className="p-4 text-muted-foreground font-mono text-xs">App not found</div>;
     }
   };

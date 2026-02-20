@@ -1,4 +1,4 @@
-import { Terminal, FolderTree, Activity, Cpu, Brain, Network, Code, HardDrive, Database, Zap, Settings } from 'lucide-react';
+import { Terminal, FolderTree, Activity, Cpu, Brain, Network, Code, HardDrive, Database, Zap, Settings, Globe, Server, LayoutList, Image } from 'lucide-react';
 import { AppType } from '@/types/os';
 
 interface DesktopIconsProps {
@@ -17,6 +17,10 @@ const icons: { app: AppType; title: string; icon: React.ReactNode; label: string
   { app: 'processes', title: 'Qutrit Processes', icon: <Activity size={28} />, label: 'Processes' },
   { app: 'sysinfo', title: 'System Info', icon: <Cpu size={28} />, label: 'SysInfo' },
   { app: 'settings', title: 'Settings', icon: <Settings size={28} />, label: 'Settings' },
+  { app: 'browser', title: 'PrimeBrowser', icon: <Globe size={28} />, label: 'Browser' },
+  { app: 'datacenter', title: 'LatticeCore', icon: <Server size={28} />, label: 'Data Center' },
+  { app: 'board', title: 'PrimeBoard', icon: <LayoutList size={28} />, label: 'Board' },
+  { app: 'gallery', title: 'PrimeGallery', icon: <Image size={28} />, label: 'Gallery' },
 ];
 
 export default function DesktopIcons({ onOpenApp }: DesktopIconsProps) {
