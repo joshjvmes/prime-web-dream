@@ -1,127 +1,118 @@
 
-# PRIME OS: Games, Waitlist, Cloud Persistence & Real-Time Chat
+# PRIME OS: Living, Breathing AI-Driven System
 
 ## Overview
 
-Four major upgrades: embedded mini-games, a database-backed pre-signup waitlist on the landing page, persistent cloud storage for user data, and real-time multiplayer chat between actual users.
+Transform PRIME OS from a collection of apps into a sentient-feeling organism where the AI (Hyper) is the soul of the system. The terminal greets you on arrival, the OS generates ambient life events, and every surface breathes with AI-driven awareness.
 
 ---
 
-## 1. Mini-Games (PrimeArcade)
+## 1. AI-Powered Terminal Welcome
 
-A new app containing two themed games playable inside OS windows.
+When the terminal opens after boot, it automatically streams a personalized greeting from Hyper AI -- not a static message, but a real AI-generated welcome that references the time of day, what the user was doing last session, and suggests what to explore.
 
-**New file: `src/components/os/PrimeArcadeApp.tsx`**
+**Update: `src/components/os/TerminalApp.tsx`**
+- Add a new prop `isFirstOpen?: boolean` that Desktop passes as `true` on the first terminal open after boot
+- On mount, if `isFirstOpen` is true, call the `hyper-chat` edge function with a special system-level prompt asking for a short terminal greeting
+- Stream the AI response line-by-line into the terminal output (replacing the static WELCOME lines)
+- The greeting references: time of day, user profile name (from localStorage), and a random PRIME OS system tip
+- Falls back to the existing static WELCOME if the AI call fails or times out (3s timeout)
+- After the greeting streams in, show the normal `psh` prompt ready for input
 
-### Game 1: Lattice Minesweeper
-- Classic minesweeper reskinned with PRIME OS lore
-- "Mines" are "singularities" in the lattice grid
-- Numbers show nearby singularity count
-- Click to reveal, right-click to flag
-- Grid sizes: 8x8 (Easy), 12x12 (Medium), 16x16 (Hard)
-- Win/loss tracking saved to localStorage
-- Timer and singularity counter
-
-### Game 2: Qutrit Snake
-- Snake game on a grid where the snake collects "qutrits" (colored gems in 3 states)
-- Arrow key controls, growing snake, game-over on self-collision or wall
-- Score display with high-score persistence
-- Speed increases as snake grows
-- Themed with geometric visuals
-
-**UI:** Tab interface to switch between games within the arcade window.
+**Update: `src/components/os/Desktop.tsx`**
+- Track `firstTerminalOpened` state so only the very first terminal after boot gets the AI greeting
+- Pass `isFirstOpen` prop to TerminalApp in `renderApp`
 
 ---
 
-## 2. Pre-Signup Waitlist (Landing Page)
+## 2. Terminal `ask` Command -- Chat with Hyper from the Shell
 
-Add an email capture section to the landing page backed by a real database table.
+Add a new terminal command `ask <question>` that lets users talk to Hyper AI directly from the shell, with streaming responses rendered as terminal output.
 
-### Database
-- New table: `waitlist` with columns: `id` (uuid), `email` (text, unique), `name` (text, nullable), `created_at` (timestamptz)
-- RLS: allow anonymous inserts (for public signup), block reads/updates/deletes
-- A database function `get_waitlist_count()` returns the total count (no email exposure)
+**Update: `src/components/os/terminal/commands.ts`**
+- Add `ask` to `ALL_COMMANDS` list
+- Add `ask` case to `processCommand` that returns a special marker (like `'ai-ask'`)
 
-### Landing Page Updates (`src/pages/LandingPage.tsx`)
-- New section before the CTA: "Join the Waitlist"
-- Email input + optional name field + "Reserve Your Node" submit button
-- On submit: insert into waitlist table, show success animation
-- Live counter: "X operators have joined" using the count function
-- Duplicate email handling: friendly "You're already on the list!" message
-- Styled to match the existing geometric/dark aesthetic
+**Update: `src/components/os/TerminalApp.tsx`**
+- Detect the `'ai-ask'` return from processCommand
+- When triggered, stream from `hyper-chat` edge function and render response lines into the terminal
+- Show a `▸ Hyper is thinking...` indicator while waiting
+- The question is sent as a single user message (no conversation history needed in terminal mode)
 
 ---
 
-## 3. Persistent Cloud Storage
+## 3. Ambient System Pulse -- The OS Breathes
 
-Save user files, notes, settings, and app data to the database so everything persists across sessions and devices (requires Google sign-in).
+A background system that periodically generates small, organic "life signs" throughout the OS -- subtle notifications, status changes, and ambient activity that make the system feel alive even when idle.
 
-### Database
-- New table: `user_data` with columns: `id` (uuid), `user_id` (uuid, references auth.users), `key` (text), `value` (jsonb), `updated_at` (timestamptz)
-- Composite unique constraint on `(user_id, key)`
-- RLS: users can only read/write their own rows
+**New file: `src/hooks/useSystemPulse.ts`**
+- Generates periodic ambient events every 30-90 seconds (randomized)
+- Events are small system status updates like:
+  - "Lattice coherence optimized -- 0.3% efficiency gain"
+  - "FoldMem auto-compact cycle 4,097 complete"
+  - "PrimeNet geodesic route recalculated -- 2 hops saved"
+  - "Energy harvesting COP adjusted to 3.24"
+  - "Qutrit core #347 rebalanced to state |2>"
+- Pushes events as notifications (via existing notification system)
+- Only active when the OS is booted and unlocked
+- Configurable in Settings (on/off toggle, frequency slider)
+- Events are contextual -- different messages based on which apps are open
 
-### New hook: `src/hooks/useCloudStorage.ts`
-- `save(key, value)` -- upserts to `user_data`
-- `load(key)` -- reads from `user_data`
-- `loadAll()` -- gets all keys for current user
-- Falls back to localStorage when not signed in
-- Auto-syncs on sign-in: merges localStorage data into cloud
+**Update: `src/components/os/Desktop.tsx`**
+- Wire `useSystemPulse` with the notification system's `pushNotification` callback
+- Pass active apps list so pulse messages are contextual
 
-### Integration points
-- **Quick Notes widget**: save/load notes from cloud
-- **PrimeBoard**: persist kanban boards
-- **Settings**: sync preferences (wallpaper, PIN, widget positions)
-- **PrimeArcade**: sync high scores
-- Cloud sync indicator in the taskbar (shows sync status icon)
+**Update: `src/hooks/useNotifications.ts`**
+- Export `pushNotification` so it can be used by the pulse system
 
----
-
-## 4. Real-Time Multiplayer Chat
-
-Transform PrimeChat from simulated auto-responses into a real multi-user chat system.
-
-### Database
-- New table: `chat_messages` with columns: `id` (uuid), `channel` (text), `user_id` (uuid), `username` (text), `content` (text), `created_at` (timestamptz)
-- RLS: authenticated users can insert and read all messages
-- Enable realtime on `chat_messages`
-- New table: `chat_presence` with columns: `id` (uuid), `user_id` (uuid), `username` (text), `channel` (text), `last_seen` (timestamptz)
-- RLS: authenticated users can manage their own presence, read all
-
-### Rewrite: `src/components/os/PrimeChatApp.tsx`
-- When signed in: connects to real database channels via Supabase Realtime
-- Messages stream in live from all connected users
-- Channel list: #general, #primenet-ops, #lattice-sec, #dev (same as before)
-- Username comes from Google profile or Settings profile name
-- Typing indicator using Supabase Realtime presence
-- Message history loaded from database (last 100 per channel)
-- When NOT signed in: falls back to the existing simulated auto-response mode
-- Online user count per channel shown in sidebar
+**Update: `src/components/os/SettingsApp.tsx`**
+- Add "System Pulse" toggle under a new "Ambience" section: enable/disable, frequency (calm/normal/active)
 
 ---
 
-## Integration & Wiring
+## 4. Hyper Proactive Tips -- AI That Reaches Out
 
-### `src/types/os.ts`
-- Add `'arcade'` to `AppType` union
+Hyper occasionally sends proactive suggestions as notifications based on what you're doing, making the AI feel like it's watching and helping.
 
-### `src/hooks/useWindowManager.ts`
-- Add default size for arcade: `[700, 520]`
+**Update: `src/hooks/useSystemPulse.ts`** (extend the pulse system)
+- Every 2-5 minutes, if enabled, send a request to `hyper-chat` with context about what apps are currently open
+- The AI generates a short, contextual tip or suggestion (1-2 sentences)
+- Examples:
+  - If terminal is open: "Try `q3 infer` with comma-separated data for pattern classification"
+  - If energy monitor is open: "COP readings above 3.5 indicate optimal dimensional coupling"
+  - If no apps are open: "The lattice is quiet. Would you like me to run diagnostics?"
+- Displayed as a special "Hyper" notification with a distinct style
+- Rate-limited to max 1 AI tip every 3 minutes to avoid API overuse
+- Can be toggled separately from ambient pulse in Settings
 
-### `src/components/os/Desktop.tsx`
-- Import `PrimeArcadeApp`, add to `renderApp`
+---
 
-### `src/components/os/Taskbar.tsx`
-- Add arcade to `allApps` list with Gamepad2 icon
+## 5. Boot Sequence Enhancement -- AI Announces Arrival
 
-### `src/components/os/DesktopIcons.tsx`
-- Add arcade under the Media category
+After the existing boot sequence completes, add a brief AI-powered "system ready" announcement that streams into view before the desktop appears.
 
-### `src/components/os/GlobalSearch.tsx`
-- Add arcade to the search list
+**Update: `src/components/os/BootSequence.tsx`**
+- After the existing boot lines finish, add 2-3 more lines that are dynamically generated:
+  - Line 1: `"Hyper AI: Online. Good [morning/afternoon/evening], [username]."`
+  - Line 2: A short AI-generated system status quote (pre-fetched or from a small pool)
+  - Line 3: `"All lattice nodes synchronized. The manifold awaits."`
+- These are locally generated (no API call needed during boot -- keep it fast)
+- Username pulled from localStorage profile
 
-### `src/components/os/terminal/commands.ts`
-- Add `arcade` / `games` to APP_MAP
+---
+
+## 6. Desktop Ambient Indicators
+
+Small visual touches that make the desktop feel alive.
+
+**Update: `src/components/os/Desktop.tsx`**
+- Add a subtle "system heartbeat" indicator near the PRIME OS title: a tiny dot that pulses every few seconds
+- Add a slowly incrementing "lattice operations" counter in the corner (counts up from boot, purely cosmetic)
+- The existing "lattice: P11 / fold: 11D to 4D" text gets a subtle breathing opacity animation
+
+**Update: `src/components/os/Taskbar.tsx`**
+- Add a tiny animated "pulse" dot in the system tray area that glows gently, indicating "system alive"
+- Shows a tooltip on hover: "Lattice pulse: nominal" or similar
 
 ---
 
@@ -129,32 +120,21 @@ Transform PrimeChat from simulated auto-responses into a real multi-user chat sy
 
 | File | Action |
 |------|--------|
-| `src/components/os/PrimeArcadeApp.tsx` | Create -- minesweeper + snake games |
-| `src/hooks/useCloudStorage.ts` | Create -- cloud persistence hook |
-| `src/pages/LandingPage.tsx` | Edit -- add waitlist section with email capture |
-| `src/components/os/PrimeChatApp.tsx` | Rewrite -- real-time multiplayer chat |
-| `src/components/os/Desktop.tsx` | Edit -- wire arcade app |
-| `src/components/os/Taskbar.tsx` | Edit -- add arcade to app list |
-| `src/components/os/DesktopIcons.tsx` | Edit -- add arcade icon |
-| `src/components/os/GlobalSearch.tsx` | Edit -- add arcade to search |
-| `src/components/os/DesktopWidgets.tsx` | Edit -- use cloud storage for notes |
-| `src/types/os.ts` | Edit -- add 'arcade' to AppType |
-| `src/hooks/useWindowManager.ts` | Edit -- add arcade window size |
-| `src/components/os/terminal/commands.ts` | Edit -- add arcade to APP_MAP |
-
-### Database Migrations
-- `waitlist` table (public inserts, no reads)
-- `user_data` table (per-user CRUD with RLS)
-- `chat_messages` table (authenticated insert/read, realtime enabled)
-- `chat_presence` table (presence tracking)
-- `get_waitlist_count()` function
+| `src/hooks/useSystemPulse.ts` | Create -- ambient event generator + AI tip system |
+| `src/components/os/TerminalApp.tsx` | Edit -- AI greeting on first open, `ask` command streaming |
+| `src/components/os/terminal/commands.ts` | Edit -- add `ask` command |
+| `src/components/os/Desktop.tsx` | Edit -- wire pulse system, first-terminal tracking, ambient visuals |
+| `src/components/os/BootSequence.tsx` | Edit -- personalized boot completion message |
+| `src/components/os/Taskbar.tsx` | Edit -- alive indicator dot |
+| `src/hooks/useNotifications.ts` | Edit -- export pushNotification for pulse system |
+| `src/components/os/SettingsApp.tsx` | Edit -- ambience settings (pulse toggle, AI tips toggle, frequency) |
 
 ---
 
 ## Technical Notes
 
-- **Waitlist** uses anonymous inserts with RLS -- no auth required to sign up, but emails are never exposed via the API
-- **Cloud storage** gracefully degrades to localStorage for guest users, syncs up when they sign in
-- **Real-time chat** uses Supabase Realtime postgres_changes for message streaming and presence channels for typing indicators
-- **Games** are purely client-side with optional cloud high-score sync
-- All new tables include proper RLS policies scoped to authenticated users (except waitlist which allows anon inserts)
+- **AI greeting in terminal** uses the existing `hyper-chat` edge function with a short, focused prompt. A 3-second timeout ensures boot never feels slow -- if AI is unavailable, the classic static welcome appears instantly.
+- **`ask` command** streams SSE responses into terminal lines, reusing the same typewriter queue mechanism already in TerminalApp.
+- **System Pulse** is purely local (randomized messages from a curated pool). Only the **AI Tips** feature makes API calls, and those are rate-limited to 1 per 3 minutes max.
+- **No new edge functions needed** -- everything reuses the existing `hyper-chat` function.
+- **No database changes** -- all ambient state is ephemeral or stored in localStorage.
