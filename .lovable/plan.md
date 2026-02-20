@@ -1,94 +1,180 @@
 
 
-# Adaptive Mobile UI for Prime OS
+# Upgrade 6 Mockup Apps to Full Utility
 
 ## Overview
 
-Replace the windowed desktop experience with a mobile-friendly app launcher on phones and a simplified desktop on tablets. The OS retains its identity and aesthetic but adapts to touch-first interaction patterns.
+Transform six mockup-level apps into fully functional utilities by adding real data feeds, database persistence, and browser APIs. The Polygon.io API key will be stored as a backend secret for real market data powering PrimeSignals and PrimeVault.
 
 ---
 
-## Breakpoints
+## 1. PrimeSignals -- Live Market Data
 
-| Device | Width | Behavior |
-|--------|-------|----------|
-| Mobile | < 768px | Full-screen app launcher with icon grid, single full-screen app at a time, bottom tab bar |
-| Tablet | 768px - 1024px | Simplified desktop: windows auto-maximize, compact taskbar, touch-friendly controls |
-| Desktop | > 1024px | Current experience (unchanged) |
+**Goal**: Replace hardcoded fake tickers with real stock/crypto prices from Polygon.io.
+
+### Backend
+
+- Store `POLYGON_API_KEY` as a secret
+- New edge function: `market-data/index.ts`
+  - `get-tickers`: Fetches real-time grouped daily bars from Polygon (`/v2/aggs/grouped/locale/us/market/stocks/{date}`) for a curated watchlist (AAPL, TSLA, NVDA, AMZN, MSFT, GOOG, META, AMD)
+  - `get-snapshot`: Fetches ticker snapshots (`/v2/snapshot/locale/us/markets/stocks/tickers`) for live price + change data
+  - `get-chart`: Fetches aggregate bars (`/v2/aggs/ticker/{ticker}/range/1/hour/{from}/{to}`) for individual stock charts
+  - 5-minute client-side cache to avoid hitting API limits
+- Register in `config.toml` with `verify_jwt = false`
+
+### Frontend Changes (`PrimeSignalsApp.tsx`)
+
+- Replace `TICKER_BASE` with live data fetched on mount via the edge function
+- Replace random ticker interval with periodic refresh (every 60s) from the API
+- Signal detail chart uses real historical bars instead of `generateSignalChart()`
+- Add a "LIVE" badge when data is fresh, "DELAYED" when cached
+- Keep the existing signals system (entry/target/stop) but overlay real price data
+- Add loading skeleton while fetching
 
 ---
 
-## What Changes
+## 2. PrimeVault -- Persistent Portfolio
 
-### 1. New Component: `MobileLauncher.tsx`
+**Goal**: Save holdings to the database and pull live prices from the same market-data function.
 
-A phone-optimized home screen that replaces the windowed desktop on small screens:
+### Database Migration
 
-- **App grid**: 4-column icon grid organized by category (reuses the existing `categories` array from DesktopIcons)
-- **Single-tap to open** (not double-click like desktop icons)
-- **Full-screen apps**: When an app opens, it takes the entire screen with a top bar showing the app name and a back button
-- **Bottom navigation bar**: Replaces the taskbar with a minimal dock showing 4-5 pinned apps (Terminal, Hyper AI, Chat, Settings) plus an "All Apps" button
-- **Swipe down** from top to see notifications
-- **Status bar** at top: time, workspace indicator, notification count
-- No window dragging, resizing, or snapping -- everything is full-screen
+New table: `vault_holdings`
 
-### 2. New Component: `MobileAppView.tsx`
+| Column | Type | Purpose |
+|--------|------|---------|
+| id | uuid (PK) | |
+| user_id | uuid | Owner |
+| symbol | text | Ticker symbol |
+| name | text | Display name |
+| category | text | Asset category |
+| quantity | numeric | Shares held |
+| avg_cost | numeric | Average cost basis |
+| created_at | timestamptz | |
+| updated_at | timestamptz | |
 
-A full-screen wrapper for apps on mobile:
+RLS: Users can CRUD own holdings only.
 
-- Top bar with back arrow, app title, and a minimize (home) button
-- The app component renders inside a full-height scrollable container
-- Swipe-right gesture to go back to the launcher (optional, nice to have)
+New table: `vault_transactions`
 
-### 3. Updated: `Desktop.tsx`
+| Column | Type | Purpose |
+|--------|------|---------|
+| id | uuid (PK) | |
+| user_id | uuid | Owner |
+| symbol | text | Ticker |
+| tx_type | text | 'buy' or 'sell' |
+| quantity | numeric | |
+| price | numeric | Execution price |
+| created_at | timestamptz | |
 
-The main Desktop component will detect the screen size and render different layouts:
+RLS: Users can insert and read own transactions.
 
-- **Mobile (< 768px)**: Render `MobileLauncher` instead of the windowed desktop. The window manager still tracks open apps but windows are always maximized and only one is visible at a time.
-- **Tablet (768-1024px)**: Render the normal desktop but with auto-maximized windows and larger touch targets on the taskbar (taller buttons, bigger icons).
-- **Desktop (> 1024px)**: No changes.
+### Frontend Changes (`PrimeVaultApp.tsx`)
 
-The `useIsMobile` hook already exists. We'll extend it or create a `useDeviceClass` hook that returns `'mobile' | 'tablet' | 'desktop'`.
+- Load holdings from `vault_holdings` table on mount (fall back to hardcoded data for guests)
+- Fetch live prices from the `market-data` edge function for current holdings
+- "Buy" and "Sell" buttons on the holdings tab that update the database
+- Transactions tab reads from `vault_transactions` instead of hardcoded array
+- Performance chart uses real historical data from Polygon aggregates
+- Allocation pie chart computed from live data
+- Use `useCloudStorage` pattern for guest fallback
 
-### 4. New Hook: `useDeviceClass.ts`
+---
 
-```text
-Returns 'mobile' (< 768px), 'tablet' (768-1024px), or 'desktop' (> 1024px)
-Uses window.matchMedia for efficiency
-```
+## 3. PrimeCanvas -- Cloud Save
 
-### 5. Updated: `useWindowManager.ts`
+**Goal**: Save and load drawings to/from cloud storage.
 
-- On mobile, `openWindow` always sets `isMaximized: true`
-- On mobile, only one window is visible at a time (the most recently focused)
-- Window position/size defaults adjusted for tablet (larger initial sizes, centered)
+### Backend
 
-### 6. Updated: `Taskbar.tsx`
+- Use existing `user-files` storage bucket for canvas images
+- Use `user_data` table (key: `canvas-saves`) to store save metadata (name, thumbnail path, created_at)
 
-- **Mobile**: Hidden entirely (replaced by MobileLauncher's bottom nav)
-- **Tablet**: Taller (h-12 instead of h-10), larger icons (size 18 instead of 14), always show window titles (no `hidden sm:inline`)
+### Frontend Changes (`PrimeCanvasApp.tsx`)
 
-### 7. Updated: `OSWindow.tsx`
+- "Save" button: exports canvas to PNG blob, uploads to `user-files` bucket under `canvas/{userId}/{timestamp}.png`, saves metadata to `user_data`
+- "Load" button: opens a modal listing saved canvases with thumbnails, click to load
+- "Gallery" panel replaces the static Layers panel (layers were non-functional)
+- Auto-save every 2 minutes if changes detected (debounced)
+- Guest users: saves to localStorage as base64 (existing pattern)
+- Show save status indicator ("Saved" / "Unsaved changes")
 
-- **Mobile**: No title bar drag handle, no resize handles, always full-screen
-- **Tablet**: Drag enabled but snap zones are larger (easier touch targets)
+---
 
-### 8. Updated: `LockScreen.tsx`
+## 4. PrimeBooking -- Database-Backed Scheduling
 
-- Already mostly responsive (uses flexbox centering)
-- Increase touch target sizes for PIN input on mobile
-- Make the swipe-up unlock gesture area larger on touch devices
+**Goal**: Persist bookings and add conflict detection.
 
-### 9. Updated: `DesktopIcons.tsx`
+### Database Migration
 
-- **Mobile**: Not rendered (MobileLauncher replaces it)
-- **Tablet**: Wider icon column (100px instead of 84px), larger icons, single-tap instead of double-click
+New table: `bookings`
 
-### 10. CSS Additions in `index.css`
+| Column | Type | Purpose |
+|--------|------|---------|
+| id | uuid (PK) | |
+| user_id | uuid | Creator |
+| resource | text | Resource name |
+| start_time | timestamptz | Booking start |
+| end_time | timestamptz | Booking end |
+| purpose | text | Description |
+| priority | text | low/medium/high |
+| created_at | timestamptz | |
 
-- Add touch-action utilities for mobile
-- Safe area insets for notched phones (`env(safe-area-inset-*)`)
-- Disable scan-lines effect on mobile (performance)
+RLS: All authenticated users can view all bookings (shared resource visibility). Users can insert, update, and delete own bookings.
+
+Add a database function `check_booking_conflict` that checks for overlapping bookings on the same resource.
+
+### Frontend Changes (`PrimeBookingApp.tsx`)
+
+- Load bookings from database on mount
+- Create booking writes to database with conflict check
+- Cancel booking deletes from database
+- Real-time subscription: `ALTER PUBLICATION supabase_realtime ADD TABLE public.bookings` so all users see updates live
+- Show conflict warning when creating overlapping bookings
+- Add "Booked by: [username]" display using profiles table
+- Guest fallback to localStorage
+
+---
+
+## 5. PrimeComm -- Real Messaging
+
+**Goal**: Enable real user-to-user messaging using the existing `chat_messages` infrastructure.
+
+### Frontend Changes (`PrimeCommApp.tsx`)
+
+- Replace hardcoded `CONTACTS` with real users from `profiles` table
+- Replace hardcoded `THREADS` with messages from `chat_messages` table (using channel = `dm-{sortedUserIds}`)
+- Message input box at the bottom of conversations that inserts into `chat_messages`
+- Real-time subscription on `chat_messages` for live message delivery
+- "Calls" tab: keep as decorative (VoIP is out of scope) but show call history from a simple log
+- Contact list shows online status from `chat_presence` table
+- Unread message count badges on contacts
+- Guest mode: show demo data with a "Sign in to message" prompt
+
+---
+
+## 6. PrimeAudio -- Procedural Synth Engine
+
+**Goal**: Generate real audio using the Web Audio API instead of silent visual-only playback.
+
+### Frontend Changes (`PrimeAudioApp.tsx`)
+
+- Create an `AudioContext` on first play interaction
+- Each track generates a unique procedural soundscape using oscillators + filters:
+  - "Harmonic Fold": layered sine waves with slow LFO modulation
+  - "Qutrit Resonance": three detuned oscillators (qutrit = 3-state)
+  - "Geodesic Flow": filtered noise with resonant sweeps
+  - "Adinkra Pulse": rhythmic kick pattern with sub-bass
+  - "Fibonacci Drift": arpeggiated sequence following Fibonacci intervals
+  - "Dimensional Echo": delay-feedback chain with reverb
+  - "Prime Spiral": frequency spiral through prime-numbered harmonics
+  - "Over-Unity Hum": deep drone with harmonic overtones
+- Volume slider controls `GainNode`
+- Progress bar reflects actual playback position
+- Waveform visualization driven by `AnalyserNode` (real FFT data instead of Math.sin)
+- Equalizer bars show real frequency spectrum data
+- Play/pause actually starts/stops audio
+- Track skip crossfades between soundscapes
 
 ---
 
@@ -98,63 +184,41 @@ Uses window.matchMedia for efficiency
 
 | File | Purpose |
 |------|---------|
-| `src/hooks/useDeviceClass.ts` | Returns 'mobile', 'tablet', or 'desktop' based on viewport width |
-| `src/components/os/MobileLauncher.tsx` | Mobile home screen with app grid and bottom nav |
-| `src/components/os/MobileAppView.tsx` | Full-screen app wrapper with back navigation |
+| `supabase/functions/market-data/index.ts` | Polygon.io proxy for live market data |
+| Database migration | `vault_holdings`, `vault_transactions`, `bookings` tables |
 
 ### Files to Modify
 
 | File | Change |
 |------|---------|
-| `src/components/os/Desktop.tsx` | Conditionally render MobileLauncher on mobile, pass device class to child components |
-| `src/hooks/useWindowManager.ts` | Accept device class, force maximize on mobile, single-visible-app on mobile |
-| `src/components/os/Taskbar.tsx` | Hide on mobile, enlarge on tablet |
-| `src/components/os/OSWindow.tsx` | Disable drag/resize on mobile, full-screen mode |
-| `src/components/os/DesktopIcons.tsx` | Hide on mobile, single-tap on tablet |
-| `src/components/os/LockScreen.tsx` | Larger touch targets on mobile |
-| `src/index.css` | Safe area insets, mobile touch utilities |
+| `src/components/os/PrimeSignalsApp.tsx` | Live tickers, real charts, API integration |
+| `src/components/os/PrimeVaultApp.tsx` | DB persistence, live prices, buy/sell |
+| `src/components/os/PrimeCanvasApp.tsx` | Cloud save/load, gallery panel |
+| `src/components/os/PrimeBookingApp.tsx` | DB CRUD, realtime, conflict detection |
+| `src/components/os/PrimeCommApp.tsx` | Real messaging via chat_messages |
+| `src/components/os/PrimeAudioApp.tsx` | Web Audio API synth engine |
+| `supabase/config.toml` | Register market-data function |
 
-### Mobile Launcher Layout
+### Secret
 
-```text
-+---------------------------+
-| 10:30 AM    WS1    [3] bell|  <- Status bar
-+---------------------------+
-|                           |
-|  [Terminal] [Files]       |
-|  [Hyper AI] [Chat]       |
-|  [Browser]  [Calendar]   |
-|  [Mail]     [Settings]   |
-|  ...                     |  <- Scrollable icon grid
-|                           |
-+---------------------------+
-| [Term] [AI] [Chat] [All] |  <- Bottom dock
-+---------------------------+
-```
+- `POLYGON_API_KEY`: stored as backend secret, used only in the `market-data` edge function
 
-### How Apps Look on Mobile
+### API Rate Limiting Strategy
 
-```text
-+---------------------------+
-| <- Terminal         [Home]|  <- App top bar
-+---------------------------+
-|                           |
-|  (full app content here)  |
-|  (scrollable)             |
-|                           |
-+---------------------------+
-```
+Polygon.io free tier allows 5 calls/minute. The edge function will:
+- Cache responses in-memory for 5 minutes
+- Batch ticker requests using grouped endpoints
+- Frontend polls every 60 seconds (not real-time WebSocket)
 
-### Touch Considerations
+### Execution Order
 
-- All interactive elements will be at least 44x44px on mobile (Apple HIG)
-- Bottom navigation uses safe-area-inset-bottom for notched phones
-- Long-press on app icons shows a tooltip with the full app name
-- No hover states relied upon -- all interactions work with tap
-
-### Performance
-
-- Scan-line CSS effect disabled on mobile (saves GPU)
-- Desktop widgets hidden on mobile (less DOM)
-- Framer Motion animations simplified on mobile (shorter durations, fewer spring physics)
+1. Store the Polygon API key as a secret
+2. Create database migration (3 new tables + RLS + realtime)
+3. Build the `market-data` edge function
+4. Update PrimeSignals (depends on market-data)
+5. Update PrimeVault (depends on market-data + new tables)
+6. Update PrimeCanvas (independent)
+7. Update PrimeBooking (depends on new tables)
+8. Update PrimeComm (uses existing tables)
+9. Update PrimeAudio (fully independent, no backend)
 
