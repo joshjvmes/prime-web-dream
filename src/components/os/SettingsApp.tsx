@@ -100,6 +100,9 @@ export default function SettingsApp({ notifEvents = [], onToggleEvent, onUpdateM
   const [profileTitle, setProfileTitle] = useState(() => {
     try { const p = localStorage.getItem('prime-os-profile'); return p ? JSON.parse(p).title || '' : ''; } catch { return ''; }
   });
+  const [profileBio, setProfileBio] = useState('');
+  const [userRoles, setUserRoles] = useState<string[]>([]);
+  const [profileLoaded, setProfileLoaded] = useState(false);
   const [settings, setSettings] = useState<SettingsState>(() => {
     try { const saved = localStorage.getItem('prime-os-settings'); return saved ? { ...DEFAULTS, ...JSON.parse(saved) } : DEFAULTS; } catch { return DEFAULTS; }
   });
@@ -176,9 +179,35 @@ export default function SettingsApp({ notifEvents = [], onToggleEvent, onUpdateM
     <h3 className="font-display text-[10px] tracking-wider uppercase text-muted-foreground mb-2 mt-3 first:mt-0">{children}</h3>
   );
 
-  const saveProfile = (name: string, title: string) => {
+  const saveProfile = (name: string, title: string, bio?: string) => {
     localStorage.setItem('prime-os-profile', JSON.stringify({ name, title }));
+    // Also save to database if signed in
+    if (user) {
+      supabase.from('profiles').update({
+        display_name: name || null,
+        title: title || 'Operator',
+        bio: bio !== undefined ? bio : profileBio,
+      }).eq('user_id', user.id).then(() => {});
+    }
   };
+
+  // Load profile from database when user is signed in
+  useEffect(() => {
+    if (!user || profileLoaded) return;
+    supabase.from('profiles').select('display_name, title, bio').eq('user_id', user.id).maybeSingle()
+      .then(({ data }) => {
+        if (data) {
+          if (data.display_name) setProfileName(data.display_name);
+          if (data.title) setProfileTitle(data.title);
+          if (data.bio) setProfileBio(data.bio);
+        }
+        setProfileLoaded(true);
+      });
+    supabase.from('user_roles').select('role').eq('user_id', user.id)
+      .then(({ data }) => {
+        if (data) setUserRoles(data.map(r => r.role));
+      });
+  }, [user, profileLoaded]);
 
   const renderPanel = () => {
     switch (activePanel) {
@@ -210,7 +239,17 @@ export default function SettingsApp({ notifEvents = [], onToggleEvent, onUpdateM
             </div>
             {user && (
               <div className="mb-3 p-2 rounded border border-primary/20 bg-primary/5">
-                <p className="text-[10px] text-primary font-display tracking-wider">SIGNED IN WITH GOOGLE</p>
+                <div className="flex items-center gap-2">
+                  <p className="text-[10px] text-primary font-display tracking-wider">SIGNED IN WITH GOOGLE</p>
+                  {userRoles.map(r => (
+                    <span key={r} className={`px-1.5 py-0.5 rounded text-[8px] font-display tracking-wider uppercase ${
+                      r === 'admin' ? 'bg-primary/20 text-primary' : r === 'moderator' ? 'bg-amber-500/20 text-amber-400' : 'bg-muted text-muted-foreground'
+                    }`}>{r}</span>
+                  ))}
+                </div>
+                {user.created_at && (
+                  <p className="text-[9px] text-muted-foreground/50 mt-1">Member since {new Date(user.created_at).toLocaleDateString()}</p>
+                )}
                 <button
                   onClick={() => supabase.auth.signOut()}
                   className="mt-2 flex items-center gap-1.5 px-3 py-1 rounded border border-destructive/30 text-destructive text-[10px] font-display tracking-wider hover:bg-destructive/10 transition-colors"
@@ -231,6 +270,13 @@ export default function SettingsApp({ notifEvents = [], onToggleEvent, onUpdateM
                 <input value={profileTitle} onChange={e => { setProfileTitle(e.target.value); saveProfile(profileName, e.target.value); }}
                   placeholder="Geometric Engineer" className="w-full bg-background border border-border rounded px-2 py-1.5 text-xs text-foreground placeholder:text-muted-foreground/50" />
               </div>
+              {user && (
+                <div>
+                  <label className="font-body text-xs text-card-foreground block mb-1">Bio</label>
+                  <textarea value={profileBio} onChange={e => { setProfileBio(e.target.value); saveProfile(profileName, profileTitle, e.target.value); }}
+                    placeholder="Tell us about yourself..." rows={3} className="w-full bg-background border border-border rounded px-2 py-1.5 text-xs text-foreground placeholder:text-muted-foreground/50 resize-none" />
+                </div>
+              )}
             </div>
           </div>
         );

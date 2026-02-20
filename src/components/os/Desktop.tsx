@@ -61,6 +61,7 @@ import PrimeRoboticsApp from '@/components/os/PrimeRoboticsApp';
 import PrimeBookingApp from '@/components/os/PrimeBookingApp';
 import PrimeIoTApp from '@/components/os/PrimeIoTApp';
 import PrimeArcadeApp from '@/components/os/PrimeArcadeApp';
+import AdminConsoleApp from '@/components/os/AdminConsoleApp';
 import DesktopContextMenu from '@/components/os/DesktopContextMenu';
 import NotificationSystem from '@/components/os/NotificationSystem';
 import { AppType } from '@/types/os';
@@ -91,6 +92,7 @@ const APP_NAME_MAP: Record<string, { app: AppType; title: string }> = {
   'vault': { app: 'vault', title: 'PrimeVault' },
   'arcade': { app: 'arcade', title: 'PrimeArcade' },
   'games': { app: 'arcade', title: 'PrimeArcade' },
+  'admin': { app: 'admin', title: 'Admin Console' },
 };
 
 export default function Desktop() {
@@ -101,6 +103,7 @@ export default function Desktop() {
   const [aboutOpen, setAboutOpen] = useState(false);
   const [clipboardOpen, setClipboardOpen] = useState(false);
   const [user, setUser] = useState<User | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
   const [voiceEnabled, setVoiceEnabled] = useState(() => {
     try { return localStorage.getItem('prime-os-voice-enabled') === 'true'; } catch { return false; }
   });
@@ -207,8 +210,23 @@ export default function Desktop() {
             localStorage.setItem('prime-os-profile', JSON.stringify({ ...existing, name, avatar }));
           } catch {}
         }
+        // Check admin role
+        supabase.from('user_roles').select('role').eq('user_id', session.user.id).eq('role', 'admin').maybeSingle()
+          .then(({ data }) => setIsAdmin(!!data));
+        // Ensure profile exists (for users who signed up before trigger)
+        supabase.from('profiles').select('id').eq('user_id', session.user.id).maybeSingle()
+          .then(({ data: profile }) => {
+            if (!profile) {
+              supabase.from('profiles').insert({
+                user_id: session.user.id,
+                display_name: name || null,
+                avatar_url: avatar || null,
+              }).then(() => {});
+            }
+          });
       } else {
         eventBus.emit('user.signed-out', {});
+        setIsAdmin(false);
       }
     });
     supabase.auth.getSession().then(({ data: { session } }) => setUser(session?.user ?? null));
@@ -350,6 +368,7 @@ export default function Desktop() {
       case 'booking': return <PrimeBookingApp />;
       case 'iot': return <PrimeIoTApp />;
       case 'arcade': return <PrimeArcadeApp />;
+      case 'admin': return <AdminConsoleApp />;
       default: return <div className="p-4 text-muted-foreground font-mono text-xs">App not found</div>;
     }
   };
@@ -435,6 +454,7 @@ export default function Desktop() {
             voiceState={{ isListening: voice.isListening, lastCommand: voice.lastCommand, supported: voice.supported }}
             onToggleVoice={toggleVoice}
             onToggleClipboard={() => setClipboardOpen(prev => !prev)}
+            isAdmin={isAdmin}
           />
 
           <GlobalSearch

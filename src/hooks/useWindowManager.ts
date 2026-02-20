@@ -53,6 +53,7 @@ export function useWindowManager() {
           case 'booking': return [850, 550];
           case 'iot': return [800, 520];
           case 'arcade': return [700, 520];
+          case 'admin': return [900, 600];
           default: return [600, 420];
         }
       };

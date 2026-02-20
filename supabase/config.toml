@@ -2,3 +2,6 @@ project_id = "dysaloaowuomqctsuxys"
 
 [functions.hyper-chat]
 verify_jwt = false
+
+[functions.admin-actions]
+verify_jwt = false
