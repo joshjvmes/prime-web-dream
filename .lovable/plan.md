@@ -1,99 +1,98 @@
 
 
-# PRIME OS Enhancements
+# PRIME OS: Autonomous Agent, Robotics, Booking & IoT
 
 ## Overview
-Add missing features to make PRIME OS feel more complete: an About modal, user profile/customization, two new apps (Social Media and Email), fix minimized window behavior in the taskbar, and surface keyboard shortcuts better.
+
+Add four major features to PRIME OS: an autonomous AI agent that can operate the entire system, plus three new application modules for robotics control, booking/scheduling, and IoT device management.
 
 ---
 
-## 1. Fix: Minimized Windows in Taskbar
+## 1. PrimeAgent -- Autonomous System Operator
 
-**Problem:** The taskbar only shows non-minimized windows. When you minimize a window, it vanishes from the taskbar with no way to restore it.
+A new app that acts as the "brain" of PRIME OS. Unlike the existing Hyper AI (which is a simple keyword-matching chatbot), PrimeAgent is an autonomous agent with a task queue, action log, and the ability to open/close apps, run terminal commands, manage windows, and orchestrate multi-step workflows.
 
-**Fix in `src/components/os/Taskbar.tsx`:**
-- Show ALL windows (not just non-minimized) in the taskbar strip
-- Style minimized windows differently (dimmed/outlined instead of filled) so they're visually distinct
-- Clicking a minimized window in the taskbar restores and focuses it (already handled by `focusWindow` which sets `isMinimized: false`)
+**New file: `src/components/os/PrimeAgentApp.tsx`**
 
----
+- Chat interface where you give the agent high-level instructions (e.g. "Run diagnostics, check energy status, and open the security console")
+- The agent breaks instructions into discrete tasks shown in a task queue panel
+- Each task executes simulated actions: opening apps, running terminal commands, reading system state
+- Live action log shows what the agent is doing step-by-step with typewriter output
+- Quick command buttons: "Full System Check", "Secure All", "Optimize Energy", "Deploy Build"
+- The agent uses the existing `onOpenApp` / `onCloseApp` callbacks to actually open and close windows
+- Simulated multi-step workflows with delays between steps for immersion
+- Agent "personality" as a geometric operations coordinator
 
-## 2. User Profile & Customization
-
-**Add a "Profile" panel to Settings (`src/components/os/SettingsApp.tsx`):**
-- New panel with a User icon in the sidebar
-- Fields: Display Name, Title/Role (e.g. "Geometric Engineer"), Avatar initials
-- All persisted to localStorage alongside existing settings
-- The display name appears in the taskbar greeting area and the About modal
-
-**Changes:**
-- `src/components/os/SettingsApp.tsx` -- add `profile` panel with name/title fields
-- `src/components/os/Taskbar.tsx` -- show user greeting (e.g. "Operator: [Name]") near the clock
+**Architecture:**
+- An internal action system maps natural-language-like instructions to sequences of operations
+- Each operation is a typed action: `open-app`, `run-command`, `check-status`, `report`
+- The agent processes its queue with configurable delays, streaming results back to the chat
+- No external AI API needed -- this is a sophisticated rule-based agent with pattern matching and pre-built workflows
 
 ---
 
-## 3. About PRIME OS Modal
+## 2. PrimeRobotics -- Robotics Control Interface
 
-**New component: `src/components/os/AboutModal.tsx`**
-- Triggered from the PRIME menu (new "About" item at the bottom) and from Settings About panel
-- Displays:
-  - Rocket Logic Global logo (the SVG already in `/public/rocket-logic-silver.svg`)
-  - "PRIME OS v2.0"
-  - "Geometric Computing Interface"
-  - "Built by Rocket Logic Global"
-  - System specs summary (Qutrit Kernel, 11D Architecture, T3-649)
-  - Version/build info
-- Styled as a centered dialog overlay, matching the OS aesthetic
+**New file: `src/components/os/PrimeRoboticsApp.tsx`**
 
-**Changes:**
-- New file: `src/components/os/AboutModal.tsx`
-- `src/components/os/Taskbar.tsx` -- add "About PRIME OS" button at bottom of PRIME menu
-- `src/components/os/Desktop.tsx` -- wire up the about modal state
+- Dashboard showing a fleet of simulated robotic units (drones, arms, rovers)
+- Each unit has: name, type, status (idle/active/charging/error), battery level, current task, coordinates
+- Control panel for selected unit: Start/Stop/Recall, assign task, view telemetry
+- Telemetry view with simulated live data (position, speed, battery drain)
+- Task assignment: select from predefined tasks (patrol, scan, transport, calibrate)
+- Fleet overview grid with status indicators
+- Simulated real-time updates via intervals
 
 ---
 
-## 4. New App: PrimeMail (Email Client)
+## 3. PrimeBooking -- Scheduling & Reservation System
 
-**New file: `src/components/os/PrimeMailApp.tsx`**
-- Simulated email client with inbox, sent, drafts folders
-- Pre-populated with a few themed emails (system alerts, welcome message from Rocket Logic, etc.)
-- Compose view with To/Subject/Body fields
-- Read view showing email content
+**New file: `src/components/os/PrimeBookingApp.tsx`**
 
-**Integration:**
-- `src/types/os.ts` -- add `'mail'` to AppType
-- `src/components/os/Desktop.tsx` -- import and add to renderApp switch
-- `src/components/os/Taskbar.tsx` -- add to allApps list with Mail icon
-- `src/hooks/useWindowManager.ts` -- add default size for mail app
+- Calendar-based booking interface for resources (labs, compute clusters, meeting rooms, equipment)
+- Resource list sidebar with availability indicators
+- Day/week view showing time slots with existing bookings
+- Create booking form: resource, date, time range, purpose, priority
+- Existing bookings shown as colored blocks on the timeline
+- Cancel/modify bookings
+- Pre-populated with themed bookings (lattice calibration, qutrit maintenance window, energy lab access)
 
 ---
 
-## 5. New App: PrimeSocial (Social Media Module)
+## 4. PrimeIoT -- IoT Device Management
 
-**New file: `src/components/os/PrimeSocialApp.tsx`**
-- Social feed interface with posts from "PRIME OS community"
-- Pre-populated with themed posts (system updates, geometric computing discussions)
-- Like/comment interactions (local state only)
-- Compose new post area
-- Profile sidebar showing user info from Settings
+**New file: `src/components/os/PrimeIoTApp.tsx`**
 
-**Integration:**
-- `src/types/os.ts` -- add `'social'` to AppType
-- `src/components/os/Desktop.tsx` -- import and add to renderApp switch
-- `src/components/os/Taskbar.tsx` -- add to allApps list with Users icon
-- `src/hooks/useWindowManager.ts` -- add default size for social app
+- Device dashboard showing connected IoT devices grouped by zone (Lab A, Server Room, Energy Wing, Perimeter)
+- Device types: sensors (temp, humidity, pressure, radiation), actuators (valves, switches, motors), cameras
+- Each device shows: name, type, zone, status (online/offline/warning), last reading, battery
+- Device detail panel: historical readings as a mini sparkline, toggle on/off, set thresholds
+- Alert panel showing devices with readings outside thresholds
+- Simulated live sensor data updates via intervals
+- Zone map view showing device locations on a schematic grid
 
 ---
 
-## 6. Keyboard Shortcuts Enhancement
+## Integration & Wiring
 
-**Improve discoverability in `src/components/os/SettingsApp.tsx`:**
-- Expand the keyboard shortcuts list to include all current shortcuts
-- Add a "Keyboard Shortcuts" quick-access from the PRIME menu (opens Settings directly to keyboard panel)
+### `src/types/os.ts`
+- Add `'agent'`, `'robotics'`, `'booking'`, `'iot'` to the `AppType` union
 
-**Add new shortcuts in `src/components/os/Desktop.tsx`:**
-- `Ctrl+M` -- minimize focused window
-- `Ctrl+Shift+M` -- maximize/restore focused window
+### `src/hooks/useWindowManager.ts`
+- Add default window sizes for the four new apps
+
+### `src/components/os/Desktop.tsx`
+- Import and wire all four new components into `renderApp`
+- Pass `onOpenApp` and `onCloseApp` to PrimeAgentApp
+
+### `src/components/os/Taskbar.tsx`
+- Add all four apps to the `allApps` list with appropriate icons (Bot, Cog, CalendarCheck, Wifi)
+
+### `src/components/os/DesktopIcons.tsx`
+- Add icons for the new apps
+
+### `src/components/os/terminal/commands.ts`
+- Add `agent`, `robotics`, `booking`, `iot` to the `APP_MAP` so they can be opened from the terminal
 
 ---
 
@@ -101,12 +100,14 @@ Add missing features to make PRIME OS feel more complete: an About modal, user p
 
 | File | Action |
 |------|--------|
-| `src/types/os.ts` | Edit -- add `'mail'` and `'social'` to AppType |
-| `src/components/os/AboutModal.tsx` | Create -- About PRIME OS dialog |
-| `src/components/os/PrimeMailApp.tsx` | Create -- Email client app |
-| `src/components/os/PrimeSocialApp.tsx` | Create -- Social media app |
-| `src/components/os/SettingsApp.tsx` | Edit -- add Profile panel, expand keyboard shortcuts |
-| `src/components/os/Taskbar.tsx` | Edit -- show minimized windows, add user greeting, About menu item |
-| `src/components/os/Desktop.tsx` | Edit -- wire new apps, about modal, new keyboard shortcuts |
-| `src/hooks/useWindowManager.ts` | Edit -- add sizes for mail/social apps |
+| `src/types/os.ts` | Edit -- add 4 new AppType values |
+| `src/components/os/PrimeAgentApp.tsx` | Create -- autonomous agent interface |
+| `src/components/os/PrimeRoboticsApp.tsx` | Create -- robotics fleet control |
+| `src/components/os/PrimeBookingApp.tsx` | Create -- booking/scheduling system |
+| `src/components/os/PrimeIoTApp.tsx` | Create -- IoT device management |
+| `src/hooks/useWindowManager.ts` | Edit -- add window sizes |
+| `src/components/os/Desktop.tsx` | Edit -- import & wire new apps |
+| `src/components/os/Taskbar.tsx` | Edit -- add to app list |
+| `src/components/os/DesktopIcons.tsx` | Edit -- add desktop icons |
+| `src/components/os/terminal/commands.ts` | Edit -- add to APP_MAP |
 
