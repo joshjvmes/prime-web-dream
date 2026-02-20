@@ -98,6 +98,10 @@ const APP_MAP: Record<string, { app: string; title: string }> = {
   editor: { app: 'editor', title: 'PrimeEdit' },
   chat: { app: 'chat', title: 'PrimeChat' },
   security: { app: 'security', title: 'Lattice Shield' },
+  browser: { app: 'browser', title: 'PrimeBrowser' },
+  datacenter: { app: 'datacenter', title: 'LatticeCore' },
+  board: { app: 'board', title: 'PrimeBoard' },
+  gallery: { app: 'gallery', title: 'PrimeGallery' },
 };
 
 // Boot timestamp for uptime
