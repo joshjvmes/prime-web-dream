@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { AppType, WindowState } from '@/types/os';
 import { OSNotification } from '@/hooks/useNotifications';
-import { Terminal, FolderTree, Activity, Cpu, Brain, Network, Code, HardDrive, Database, Zap, Settings, ChevronUp, Bell, X, Monitor, FileText, MessageSquare, Shield, Globe, Server, LayoutList, Image, Search, Link2, Orbit } from 'lucide-react';
+import { Terminal, FolderTree, Activity, Cpu, Brain, Network, Code, HardDrive, Database, Zap, Settings, ChevronUp, Bell, X, Monitor, FileText, MessageSquare, Shield, Globe, Server, LayoutList, Image, Search, Link2, Orbit, CalendarDays, Moon } from 'lucide-react';
+import { startOfMonth, endOfMonth, eachDayOfInterval, getDay, isToday, isSameMonth, format } from 'date-fns';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 
 interface TaskbarProps {
@@ -34,6 +35,7 @@ const allApps: { app: AppType; title: string; icon: React.ReactNode; label: stri
   { app: 'gallery', title: 'PrimeGallery', icon: <Image size={18} />, label: 'Gallery' },
   { app: 'cloudhooks', title: 'Cloud Hooks', icon: <Link2 size={18} />, label: 'Cloud Hooks' },
   { app: 'hypersphere', title: 'Hyper AI', icon: <Orbit size={18} />, label: 'Hyper AI' },
+  { app: 'calendar', title: 'Prime Calendar', icon: <CalendarDays size={18} />, label: 'Calendar' },
   { app: 'settings', title: 'Settings', icon: <Settings size={18} />, label: 'Settings' },
 ];
 
@@ -163,14 +165,30 @@ export default function Taskbar({ windows, onOpenApp, onFocusWindow, notificatio
           <span className="w-1.5 h-1.5 rounded-full bg-prime-green animate-pulse-glow" />
           <span>649 cores</span>
         </div>
-        <ClockDisplay />
+        <ClockPopover onOpenApp={onOpenApp} />
       </div>
     </div>
   );
 }
 
-function ClockDisplay() {
+// Moon phase helpers
+const SYNODIC_PERIOD = 29.53058867;
+const KNOWN_NEW_MOON = new Date(2000, 0, 6, 18, 14);
+const MOON_NAMES = ['New Moon', 'Waxing Crescent', 'First Quarter', 'Waxing Gibbous', 'Full Moon', 'Waning Gibbous', 'Last Quarter', 'Waning Crescent'];
+const MOON_ICONS_CHAR = ['🌑', '🌒', '🌓', '🌔', '🌕', '🌖', '🌗', '🌘'];
+
+function getMoonPhaseIdx(date: Date): number {
+  const diff = date.getTime() - KNOWN_NEW_MOON.getTime();
+  const days = diff / (1000 * 60 * 60 * 24);
+  const phase = ((days % SYNODIC_PERIOD) + SYNODIC_PERIOD) % SYNODIC_PERIOD;
+  return Math.floor(phase / (SYNODIC_PERIOD / 8)) % 8;
+}
+
+const MINI_WEEKDAYS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+
+function ClockPopover({ onOpenApp }: { onOpenApp: (app: AppType, title: string) => void }) {
   const [time, setTime] = useState('');
+  const [clockOpen, setClockOpen] = useState(false);
 
   useEffect(() => {
     const update = () => setTime(new Date().toLocaleTimeString('en-US', { hour12: false }));
@@ -179,5 +197,51 @@ function ClockDisplay() {
     return () => clearInterval(id);
   }, []);
 
-  return <span className="text-[10px] font-mono text-muted-foreground">{time}</span>;
+  const now = new Date();
+  const moonIdx = getMoonPhaseIdx(now);
+  const monthStart = startOfMonth(now);
+  const monthEnd = endOfMonth(now);
+  const days = eachDayOfInterval({ start: monthStart, end: monthEnd });
+  const startPad = getDay(monthStart);
+
+  return (
+    <Popover open={clockOpen} onOpenChange={setClockOpen}>
+      <PopoverTrigger asChild>
+        <button className="text-[10px] font-mono text-muted-foreground hover:text-foreground transition-colors">{time}</button>
+      </PopoverTrigger>
+      <PopoverContent side="top" align="end" sideOffset={8} className="w-52 p-3 bg-card/95 backdrop-blur-md border-border z-[200]">
+        <p className="text-[10px] text-muted-foreground">{format(now, 'EEEE, MMMM d, yyyy')}</p>
+        <p className="font-mono text-lg text-foreground mt-0.5">{time}</p>
+
+        <div className="flex items-center gap-1.5 mt-2 text-[10px] text-muted-foreground">
+          <span>{MOON_ICONS_CHAR[moonIdx]}</span>
+          <span>{MOON_NAMES[moonIdx]}</span>
+        </div>
+
+        {/* Mini calendar */}
+        <div className="mt-2 border-t border-border pt-2">
+          <div className="grid grid-cols-7 gap-px mb-0.5">
+            {MINI_WEEKDAYS.map((d, i) => (
+              <span key={i} className="text-center text-[8px] text-muted-foreground/50">{d}</span>
+            ))}
+          </div>
+          <div className="grid grid-cols-7 gap-px">
+            {Array.from({ length: startPad }).map((_, i) => <span key={`p${i}`} />)}
+            {days.map(day => (
+              <span key={day.getDate()} className={`text-center text-[8px] rounded-sm py-px ${isToday(day) ? 'bg-primary/20 text-primary font-bold' : 'text-muted-foreground'}`}>
+                {day.getDate()}
+              </span>
+            ))}
+          </div>
+        </div>
+
+        <button
+          onClick={() => { onOpenApp('calendar', 'Prime Calendar'); setClockOpen(false); }}
+          className="mt-2 w-full text-[9px] py-1 rounded border border-primary/30 text-primary hover:bg-primary/10 transition-colors font-display tracking-wider uppercase"
+        >
+          Open Calendar
+        </button>
+      </PopoverContent>
+    </Popover>
+  );
 }

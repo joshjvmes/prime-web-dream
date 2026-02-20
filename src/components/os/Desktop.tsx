@@ -28,16 +28,19 @@ import PrimeBoardApp from '@/components/os/PrimeBoardApp';
 import PrimeGalleryApp from '@/components/os/PrimeGalleryApp';
 import CloudHooksApp from '@/components/os/CloudHooksApp';
 import HypersphereApp from '@/components/os/HypersphereApp';
+import PrimeCalendarApp from '@/components/os/PrimeCalendarApp';
 import DesktopContextMenu from '@/components/os/DesktopContextMenu';
 import NotificationSystem from '@/components/os/NotificationSystem';
 import { AppType } from '@/types/os';
+import { useMemo } from 'react';
 
 export default function Desktop() {
   const [booted, setBooted] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [showTour, setShowTour] = useState(false);
   const { windows, openWindow, closeWindow, minimizeWindow, focusWindow, moveWindow, resizeWindow, maximizeWindow, snapWindow, tileAllWindows, cascadeWindows } = useWindowManager();
-  const { notifications, dismissNotification, events, toggleEvent, updateEventMessage, addEvent, removeEvent } = useNotifications();
+  const activeApps = useMemo(() => windows.filter(w => !w.isMinimized).map(w => w.app), [windows]);
+  const { notifications, dismissNotification, events, toggleEvent, updateEventMessage, addEvent, removeEvent } = useNotifications(activeApps);
 
   const handleBootComplete = useCallback(() => {
     setBooted(true);
@@ -116,6 +119,7 @@ export default function Desktop() {
       case 'gallery': return <PrimeGalleryApp />;
       case 'cloudhooks': return <CloudHooksApp />;
       case 'hypersphere': return <HypersphereApp />;
+      case 'calendar': return <PrimeCalendarApp />;
       default: return <div className="p-4 text-muted-foreground font-mono text-xs">App not found</div>;
     }
   };

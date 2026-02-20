@@ -30,6 +30,7 @@ export function useWindowManager() {
           case 'gallery': return [700, 480];
           case 'cloudhooks': return [800, 520];
           case 'hypersphere': return [500, 550];
+          case 'calendar': return [700, 520];
           default: return [600, 420];
         }
       };
