@@ -28,11 +28,17 @@ export const HELP_TEXT = [
   '  storage info      — Show Prime Storage capacity',
   '  psh debug <proc>  — Live process inspector',
   '  primenet trace    — Packet trace mode',
+  '  primenet scan [t] — Network security scanner',
+  '  disk              — Interactive disk analyzer',
   '  open <app>        — Open an app window',
   '  kill <app>        — Close an app window',
   '  export VAR=val    — Set environment variable',
   '  env               — List environment variables',
   '  grep <pattern>    — Filter piped input',
+  '  uptime            — System uptime',
+  '  whoami            — Current user',
+  '  date              — Current timestamp',
+  '  history           — Show command history',
   '',
   'Operators: cmd1 | cmd2 (pipe)  cmd1 ; cmd2 (chain)',
   'Tab for autocomplete. $VAR for variable substitution.',
@@ -62,8 +68,9 @@ export const ALL_COMMANDS = [
   'flow_to', 'fold_read', 'fold_write', 'prime_dist', 'waltz',
   'q3 infer', 'q3 train', 'geomc', 'geomc repl',
   'foldmem stats', 'energy status', 'storage info',
-  'psh debug', 'primenet trace',
-  'open', 'kill', 'export', 'env', 'grep',
+  'psh debug', 'primenet trace', 'primenet scan',
+  'disk', 'open', 'kill', 'export', 'env', 'grep',
+  'uptime', 'whoami', 'date', 'history',
 ];
 
 export type CommandContext = {
@@ -71,6 +78,7 @@ export type CommandContext = {
   setEnvVars: (vars: Record<string, string>) => void;
   onOpenApp?: (app: string, title: string) => void;
   onCloseApp?: (id: string) => void;
+  history?: string[];
 };
 
 const APP_MAP: Record<string, { app: string; title: string }> = {
@@ -88,6 +96,9 @@ const APP_MAP: Record<string, { app: string; title: string }> = {
   settings: { app: 'settings', title: 'Settings' },
 };
 
+// Boot timestamp for uptime
+const BOOT_TIME = Date.now();
+
 /** Process a single command (no pipes/chains). Returns lines or null (for clear). */
 export function processCommand(cmd: string, ctx: CommandContext): string[] | null | 'mode' {
   const parts = cmd.trim().split(/\s+/);
@@ -103,6 +114,22 @@ export function processCommand(cmd: string, ctx: CommandContext): string[] | nul
       return SYSINFO;
     case 'echo':
       return [args || ''];
+    case 'uptime': {
+      const ms = Date.now() - BOOT_TIME;
+      const s = Math.floor(ms / 1000);
+      const m = Math.floor(s / 60);
+      const h = Math.floor(m / 60);
+      return [`▸ up ${h}h ${m % 60}m ${s % 60}s, load average: ${(0.3 + Math.random() * 0.5).toFixed(2)}, ${(0.2 + Math.random() * 0.3).toFixed(2)}, ${(0.1 + Math.random() * 0.2).toFixed(2)}`, ''];
+    }
+    case 'whoami':
+      return ['josh@prime-os (uid=1000, gid=100, lattice=P¹¹)', ''];
+    case 'date':
+      return [`${new Date().toISOString()} [QK epoch: ${Math.floor(Date.now() / 1000)}]`, ''];
+    case 'history': {
+      const hist = ctx.history ?? [];
+      if (hist.length === 0) return ['No command history.', ''];
+      return [...hist.slice(0, 20).map((h, i) => `  ${String(i + 1).padStart(3)}  ${h}`), ''];
+    }
     case 'env':
       return Object.entries(ctx.envVars).length === 0
         ? ['No environment variables set.', '']
@@ -129,6 +156,8 @@ export function processCommand(cmd: string, ctx: CommandContext): string[] | nul
       ctx.onCloseApp?.(mapped.app);
       return [`▸ Closed ${mapped.title}`, ''];
     }
+    case 'disk':
+      return 'mode';
     case 'qstat':
       return [
         'QUTRIT PROCESS TABLE',
@@ -187,7 +216,7 @@ export function processCommand(cmd: string, ctx: CommandContext): string[] | nul
       ];
     }
     case 'q3':
-      if (parts[1] === 'train') return 'mode'; // Signal to enter mode
+      if (parts[1] === 'train') return 'mode';
       if (parts[1] === 'infer') {
         const data = parts.slice(2).join(' ') || '42,17,89';
         return [
@@ -208,6 +237,7 @@ export function processCommand(cmd: string, ctx: CommandContext): string[] | nul
       return [`psh: unknown subcommand "${parts[1]}"`, ''];
     case 'primenet':
       if (parts[1] === 'trace') return 'mode';
+      if (parts[1] === 'scan') return 'mode';
       return [`primenet: unknown subcommand "${parts[1]}"`, ''];
     case 'netstat':
       return [

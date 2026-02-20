@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { EnergyMode } from '@/types/os';
 
@@ -9,55 +9,87 @@ const MODES: EnergyMode[] = [
   { name: 'Thermal', cop: 2.1, input: 200, output: 420, efficiency: 78 },
 ];
 
+interface HistoryPoint { time: number; cop: number; output: number; }
+
 export default function EnergyMonitorApp() {
   const [activeMode, setActiveMode] = useState(0);
-  const [cop, setCop] = useState(1.0);
-  const [tick, setTick] = useState(0);
+  const [cop, setCop] = useState(3.2);
+  const [inputPower, setInputPower] = useState(100);
+  const [history, setHistory] = useState<HistoryPoint[]>([]);
+  const [harvesting, setHarvesting] = useState(true);
+  const tickRef = useRef(0);
 
   const mode = MODES[activeMode];
+  const actualOutput = Math.round(inputPower * cop);
 
   useEffect(() => {
+    if (!harvesting) return;
     const id = setInterval(() => {
-      setTick(t => t + 1);
-      setCop(MODES[activeMode].cop + (Math.random() - 0.5) * 0.2);
+      tickRef.current++;
+      const newCop = MODES[activeMode].cop + (Math.random() - 0.5) * 0.3;
+      setCop(newCop);
+      setHistory(prev => {
+        const point = { time: tickRef.current, cop: newCop, output: Math.round(inputPower * newCop) };
+        return [...prev, point].slice(-30);
+      });
     }, 1000);
     return () => clearInterval(id);
+  }, [activeMode, inputPower, harvesting]);
+
+  // Reset history on mode change
+  useEffect(() => {
+    setHistory([]);
+    setCop(MODES[activeMode].cop);
+    setInputPower(MODES[activeMode].input);
   }, [activeMode]);
+
+  // Mini sparkline
+  const sparklinePath = history.length > 1
+    ? history.map((p, i) => {
+        const x = (i / (history.length - 1)) * 100;
+        const y = 100 - ((p.cop / 5) * 100);
+        return `${i === 0 ? 'M' : 'L'} ${x} ${y}`;
+      }).join(' ')
+    : '';
 
   return (
     <div className="h-full flex flex-col bg-background text-xs font-mono p-3 overflow-y-auto">
-      <div className="font-display text-[10px] tracking-wider text-primary uppercase mb-3">
-        Energy Monitor — Over-Unity Harvesting
+      <div className="flex items-center justify-between mb-3">
+        <div className="font-display text-[10px] tracking-wider text-primary uppercase">
+          Energy Monitor — Over-Unity Harvesting
+        </div>
+        <button
+          onClick={() => setHarvesting(!harvesting)}
+          className={`px-2 py-0.5 rounded border text-[9px] font-display tracking-wider transition-all ${
+            harvesting ? 'border-prime-green/30 text-prime-green' : 'border-destructive/30 text-destructive'
+          }`}
+        >
+          {harvesting ? 'ACTIVE' : 'OFFLINE'}
+        </button>
       </div>
 
       {/* COP Gauge */}
       <div className="flex items-center justify-center mb-3">
         <div className="relative w-32 h-32">
           <svg viewBox="0 0 100 100" className="w-full h-full">
-            {/* Background arc */}
             <circle cx={50} cy={50} r={40} fill="none" stroke="hsl(var(--muted))" strokeWidth={6}
               strokeDasharray="188.5" strokeDashoffset="62.8" transform="rotate(135 50 50)" />
-            {/* Value arc */}
             <circle cx={50} cy={50} r={40} fill="none" stroke="hsl(var(--primary))" strokeWidth={6}
               strokeDasharray="188.5"
               strokeDashoffset={188.5 - (Math.min(cop / 5, 1) * 125.7)}
               transform="rotate(135 50 50)"
               strokeLinecap="round"
+              className="transition-all duration-500"
             />
-            {/* Over-unity marker */}
             <circle cx={50} cy={50} r={40} fill="none" stroke="hsl(var(--destructive))" strokeWidth={1}
               strokeDasharray="1 187.5" strokeDashoffset={-25.1} transform="rotate(135 50 50)" opacity={0.5} />
             <text x={50} y={45} textAnchor="middle" fontSize="14" fontFamily="Orbitron"
               fill={cop > 1 ? 'hsl(142 70% 45%)' : 'hsl(var(--foreground))'}>
               {cop.toFixed(2)}
             </text>
-            <text x={50} y={58} textAnchor="middle" fontSize="6" fill="hsl(var(--muted-foreground))">
-              COP
-            </text>
+            <text x={50} y={58} textAnchor="middle" fontSize="6" fill="hsl(var(--muted-foreground))">COP</text>
             {cop > 1 && (
-              <text x={50} y={68} textAnchor="middle" fontSize="5" fill="hsl(142 70% 45%)">
-                OVER-UNITY
-              </text>
+              <text x={50} y={68} textAnchor="middle" fontSize="5" fill="hsl(142 70% 45%)">OVER-UNITY</text>
             )}
           </svg>
         </div>
@@ -75,11 +107,27 @@ export default function EnergyMonitorApp() {
         ))}
       </div>
 
+      {/* Input power slider */}
+      <div className="mb-3 p-2 border border-border rounded bg-muted/20">
+        <div className="flex items-center justify-between mb-1">
+          <span className="text-[9px] text-muted-foreground">Input Power</span>
+          <span className="text-[10px] text-prime-amber font-display">{inputPower}W</span>
+        </div>
+        <input
+          type="range"
+          min={10}
+          max={500}
+          value={inputPower}
+          onChange={e => setInputPower(+e.target.value)}
+          className="w-full h-1 appearance-none bg-muted rounded-full cursor-pointer accent-primary [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-primary"
+        />
+      </div>
+
       {/* Energy flow */}
       <div className="flex items-center justify-between mb-3 p-2 border border-border rounded bg-muted/20">
         <div className="text-center">
           <div className="text-[9px] text-muted-foreground">Input</div>
-          <div className="text-sm font-display text-prime-amber">{mode.input}W</div>
+          <div className="text-sm font-display text-prime-amber">{inputPower}W</div>
         </div>
         <div className="flex items-center gap-1">
           <motion.div animate={{ x: [0, 8, 0] }} transition={{ duration: 1.5, repeat: Infinity }}
@@ -92,9 +140,25 @@ export default function EnergyMonitorApp() {
         </div>
         <div className="text-center">
           <div className="text-[9px] text-muted-foreground">Output</div>
-          <div className="text-sm font-display text-prime-green">{mode.output}W</div>
+          <div className="text-sm font-display text-prime-green">{actualOutput}W</div>
         </div>
       </div>
+
+      {/* COP History sparkline */}
+      {history.length > 2 && (
+        <div className="mb-3 p-2 border border-border rounded bg-muted/20">
+          <div className="text-[9px] text-muted-foreground mb-1">COP History</div>
+          <svg viewBox="0 0 100 40" className="w-full h-8" preserveAspectRatio="none">
+            {/* Over-unity line */}
+            <line x1="0" y1={40 - (1/5)*40} x2="100" y2={40 - (1/5)*40} stroke="hsl(var(--destructive))" strokeWidth="0.5" strokeDasharray="2 2" opacity="0.4" />
+            <path d={history.map((p, i) => {
+              const x = (i / (history.length - 1)) * 100;
+              const y = 40 - ((p.cop / 5) * 40);
+              return `${i === 0 ? 'M' : 'L'} ${x} ${Math.max(0, Math.min(40, y))}`;
+            }).join(' ')} fill="none" stroke="hsl(var(--primary))" strokeWidth="1" />
+          </svg>
+        </div>
+      )}
 
       {/* Comparison */}
       <div className="space-y-2">

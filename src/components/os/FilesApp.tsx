@@ -1,8 +1,9 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { PrimeFile } from '@/types/os';
-import { ChevronRight, ChevronDown, FileText, Folder, Hexagon, Search } from 'lucide-react';
+import { ChevronRight, ChevronDown, FileText, Folder, Hexagon, Search, Plus, Trash2, Edit3, FolderPlus, Eye, ArrowLeft } from 'lucide-react';
 
-const fileTree: PrimeFile[] = [
+// Mutable file tree stored in state
+const DEFAULT_TREE: PrimeFile[] = [
   {
     name: '⟨system, kernel⟩',
     semanticTags: ['system', 'kernel'],
@@ -55,6 +56,61 @@ const fileTree: PrimeFile[] = [
   },
 ];
 
+const PRIMES = [2,3,5,7,11,13,17,19,23,29,31,37,41,43,47,53,59,61,67,71,73,79,83,89,97];
+
+function randomCoord(): string {
+  const p = Array.from({length: 3}, () => PRIMES[Math.floor(Math.random()*PRIMES.length)]);
+  return `⟨${p.join(',')},...⟩`;
+}
+
+function randomSize(): string {
+  return `${(Math.random()*50+0.5).toFixed(1)}K qt`;
+}
+
+// File content simulation
+function generateFileContent(file: PrimeFile): string[] {
+  if (file.type === 'manifold') {
+    return [
+      `; Manifold descriptor: ${file.name}`,
+      `; Coordinate: ${file.coord}`,
+      `; Children: ${file.children?.length ?? 0} regions`,
+      '',
+      'MANIFOLD_HEADER {',
+      `  curvature: ${file.curvature.toFixed(4)}`,
+      `  torsion:   ${file.torsion.toFixed(4)}`,
+      `  topology:  connected, orientable`,
+      `  dim:       11 → 4 (folded)`,
+      '}',
+    ];
+  }
+  if (file.type === 'fold') {
+    return [
+      `; Fold data: ${file.name}`,
+      `; Size: ${file.size}`,
+      '',
+      'BEGIN FOLD_STREAM',
+      `  κ = ${file.curvature.toFixed(4)}`,
+      `  τ = ${file.torsion.toFixed(4)}`,
+      `  encoding: adinkra_11d`,
+      '',
+      '  0x4F 0x72 0x69 0x67 0x61 0x6D 0x69',
+      '  0x50 0x72 0x69 0x6D 0x65 0x46 0x6F',
+      '  [... qutrit stream continues ...]',
+      'END FOLD_STREAM',
+    ];
+  }
+  return [
+    `; Region: ${file.name}`,
+    `; Tags: ${file.semanticTags.join(', ')}`,
+    '',
+    'REGION_DATA {',
+    `  coord: ${file.coord}`,
+    `  size:  ${file.size}`,
+    `  access: owner(d<R_o), group(d<R_g)`,
+    '}',
+  ];
+}
+
 function flattenFiles(files: PrimeFile[]): PrimeFile[] {
   const result: PrimeFile[] = [];
   for (const f of files) {
@@ -69,19 +125,31 @@ function computeRelevance(file: PrimeFile, query: string): number {
   const tags = file.semanticTags.join(' ').toLowerCase();
   const name = file.name.toLowerCase();
   let score = 0;
-  const words = q.split(/\s+/);
-  for (const w of words) {
+  for (const w of q.split(/\s+/)) {
     if (tags.includes(w)) score += 0.5;
     if (name.includes(w)) score += 0.3;
   }
   return Math.min(score, 1);
 }
 
+// Deep clone helper
+function cloneTree(tree: PrimeFile[]): PrimeFile[] {
+  return tree.map(f => ({ ...f, children: f.children ? cloneTree(f.children) : undefined }));
+}
+
 export default function FilesApp() {
+  const [fileTree, setFileTree] = useState<PrimeFile[]>(() => cloneTree(DEFAULT_TREE));
   const [selected, setSelected] = useState<PrimeFile | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [previewFile, setPreviewFile] = useState<PrimeFile | null>(null);
+  const [breadcrumb, setBreadcrumb] = useState<PrimeFile[]>([]);
+  const [renamingFile, setRenamingFile] = useState<PrimeFile | null>(null);
+  const [renameText, setRenameText] = useState('');
+  const [showCreateDialog, setShowCreateDialog] = useState<'file' | 'folder' | null>(null);
+  const [createName, setCreateName] = useState('');
+  const [confirmDelete, setConfirmDelete] = useState<PrimeFile | null>(null);
 
-  const allFiles = useMemo(() => flattenFiles(fileTree), []);
+  const allFiles = useMemo(() => flattenFiles(fileTree), [fileTree]);
   const searchResults = useMemo(() => {
     if (!searchQuery.trim()) return null;
     return allFiles
@@ -90,24 +158,167 @@ export default function FilesApp() {
       .sort((a, b) => b.relevance - a.relevance);
   }, [searchQuery, allFiles]);
 
+  // Get the current folder contents based on breadcrumb
+  const currentItems = useMemo(() => {
+    if (breadcrumb.length === 0) return fileTree;
+    const last = breadcrumb[breadcrumb.length - 1];
+    return last.children ?? [];
+  }, [breadcrumb, fileTree]);
+
+  const navigateInto = useCallback((file: PrimeFile) => {
+    if (file.type === 'manifold' && file.children) {
+      setBreadcrumb(prev => [...prev, file]);
+      setSelected(null);
+    }
+  }, []);
+
+  const navigateUp = useCallback(() => {
+    setBreadcrumb(prev => prev.slice(0, -1));
+    setSelected(null);
+  }, []);
+
+  const navigateToBreadcrumb = useCallback((idx: number) => {
+    setBreadcrumb(prev => prev.slice(0, idx + 1));
+    setSelected(null);
+  }, []);
+
+  // Recursive helpers for CRUD
+  const addToTree = useCallback((tree: PrimeFile[], parent: PrimeFile | null, newFile: PrimeFile): PrimeFile[] => {
+    if (!parent) return [...tree, newFile];
+    return tree.map(f => {
+      if (f === parent) return { ...f, children: [...(f.children ?? []), newFile] };
+      if (f.children) return { ...f, children: addToTree(f.children, parent, newFile) };
+      return f;
+    });
+  }, []);
+
+  const removeFromTree = useCallback((tree: PrimeFile[], target: PrimeFile): PrimeFile[] => {
+    return tree.filter(f => f !== target).map(f => {
+      if (f.children) return { ...f, children: removeFromTree(f.children, target) };
+      return f;
+    });
+  }, []);
+
+  const renameInTree = useCallback((tree: PrimeFile[], target: PrimeFile, newName: string): PrimeFile[] => {
+    return tree.map(f => {
+      if (f === target) {
+        const tags = newName.replace(/[⟨⟩]/g, '').split(',').map(s => s.trim()).filter(Boolean);
+        return { ...f, name: newName, semanticTags: tags.length > 0 ? tags : f.semanticTags };
+      }
+      if (f.children) return { ...f, children: renameInTree(f.children, target, newName) };
+      return f;
+    });
+  }, []);
+
+  const handleCreate = useCallback((type: 'file' | 'folder') => {
+    if (!createName.trim()) return;
+    const tags = createName.split(',').map(s => s.trim()).filter(Boolean);
+    const name = `⟨${tags.join(', ')}⟩`;
+    const parent = breadcrumb.length > 0 ? breadcrumb[breadcrumb.length - 1] : null;
+    const newFile: PrimeFile = {
+      name,
+      semanticTags: tags,
+      coord: randomCoord(),
+      type: type === 'folder' ? 'manifold' : 'region',
+      size: type === 'folder' ? '∞' : randomSize(),
+      curvature: Math.random(),
+      torsion: Math.random(),
+      children: type === 'folder' ? [] : undefined,
+    };
+    setFileTree(prev => addToTree(prev, parent, newFile));
+    setShowCreateDialog(null);
+    setCreateName('');
+  }, [createName, breadcrumb, addToTree]);
+
+  const handleDelete = useCallback(() => {
+    if (!confirmDelete) return;
+    setFileTree(prev => removeFromTree(prev, confirmDelete));
+    if (selected === confirmDelete) setSelected(null);
+    if (previewFile === confirmDelete) setPreviewFile(null);
+    setConfirmDelete(null);
+  }, [confirmDelete, selected, previewFile, removeFromTree]);
+
+  const handleRename = useCallback(() => {
+    if (!renamingFile || !renameText.trim()) return;
+    setFileTree(prev => renameInTree(prev, renamingFile, renameText));
+    setRenamingFile(null);
+    setRenameText('');
+  }, [renamingFile, renameText, renameInTree]);
+
   return (
     <div className="h-full flex flex-col bg-background text-xs font-mono">
-      {/* Semantic search bar */}
-      <div className="p-2 border-b border-border">
+      {/* Toolbar */}
+      <div className="p-2 border-b border-border flex items-center gap-1.5">
+        {breadcrumb.length > 0 && (
+          <button onClick={navigateUp} className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground" title="Go back">
+            <ArrowLeft size={12} />
+          </button>
+        )}
+        <div className="flex items-center gap-1 flex-1 min-w-0 overflow-hidden">
+          <button onClick={() => { setBreadcrumb([]); setSelected(null); }} className="text-[10px] text-primary hover:underline shrink-0">/</button>
+          {breadcrumb.map((bc, i) => (
+            <span key={i} className="flex items-center gap-1 shrink-0">
+              <ChevronRight size={8} className="text-muted-foreground" />
+              <button onClick={() => navigateToBreadcrumb(i)} className="text-[10px] text-primary/70 hover:text-primary hover:underline truncate max-w-20">
+                {bc.semanticTags[0]}
+              </button>
+            </span>
+          ))}
+        </div>
+        <button onClick={() => setShowCreateDialog('file')} className="p-1 rounded hover:bg-primary/10 text-muted-foreground hover:text-primary" title="New file">
+          <Plus size={12} />
+        </button>
+        <button onClick={() => setShowCreateDialog('folder')} className="p-1 rounded hover:bg-primary/10 text-muted-foreground hover:text-primary" title="New folder">
+          <FolderPlus size={12} />
+        </button>
+      </div>
+
+      {/* Search */}
+      <div className="px-2 py-1.5 border-b border-border">
         <div className="flex items-center gap-2 bg-muted/30 border border-border rounded px-2 py-1">
           <Search size={12} className="text-muted-foreground shrink-0" />
           <input
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
-            placeholder="Semantic search (e.g. kernel memory)..."
+            placeholder="Semantic search..."
             className="flex-1 bg-transparent outline-none text-foreground text-[11px]"
             spellCheck={false}
           />
-          {searchQuery && (
-            <span className="text-[9px] text-prime-cyan shrink-0">0.6ms</span>
-          )}
+          {searchQuery && <span className="text-[9px] text-primary shrink-0">0.6ms</span>}
         </div>
       </div>
+
+      {/* Create dialog */}
+      {showCreateDialog && (
+        <div className="px-2 py-2 border-b border-primary/20 bg-primary/5">
+          <p className="text-[9px] text-primary font-display tracking-wider uppercase mb-1">
+            New {showCreateDialog === 'folder' ? 'Manifold' : 'Region'}
+          </p>
+          <div className="flex gap-1.5">
+            <input
+              value={createName}
+              onChange={e => setCreateName(e.target.value)}
+              placeholder="tag1, tag2, tag3..."
+              className="flex-1 bg-background border border-border rounded px-1.5 py-1 text-[10px] text-foreground"
+              autoFocus
+              onKeyDown={e => { if (e.key === 'Enter') handleCreate(showCreateDialog); if (e.key === 'Escape') setShowCreateDialog(null); }}
+            />
+            <button onClick={() => handleCreate(showCreateDialog)} className="px-2 py-1 rounded border border-primary/30 text-primary text-[10px] hover:bg-primary/10">Create</button>
+            <button onClick={() => setShowCreateDialog(null)} className="px-2 py-1 rounded border border-border text-muted-foreground text-[10px] hover:text-foreground">Cancel</button>
+          </div>
+        </div>
+      )}
+
+      {/* Delete confirmation */}
+      {confirmDelete && (
+        <div className="px-2 py-2 border-b border-destructive/20 bg-destructive/5">
+          <p className="text-[9px] text-destructive mb-1">Delete "{confirmDelete.name}"?</p>
+          <div className="flex gap-1.5">
+            <button onClick={handleDelete} className="px-2 py-1 rounded border border-destructive/30 text-destructive text-[10px] hover:bg-destructive/10">Delete</button>
+            <button onClick={() => setConfirmDelete(null)} className="px-2 py-1 rounded border border-border text-muted-foreground text-[10px]">Cancel</button>
+          </div>
+        </div>
+      )}
 
       <div className="flex-1 flex overflow-hidden">
         {/* Tree or search results */}
@@ -133,19 +344,56 @@ export default function FilesApp() {
                 <div className="text-muted-foreground text-center mt-4">No regions found</div>
               )}
             </>
+          ) : previewFile ? (
+            /* File preview */
+            <div className="h-full flex flex-col">
+              <div className="flex items-center gap-2 mb-2">
+                <button onClick={() => setPreviewFile(null)} className="text-primary hover:underline text-[10px]">← Back</button>
+                <span className="text-[10px] font-display tracking-wider text-muted-foreground uppercase truncate">{previewFile.name}</span>
+              </div>
+              <div className="flex-1 bg-background/50 border border-border rounded p-2 overflow-y-auto">
+                {generateFileContent(previewFile).map((line, i) => (
+                  <div key={i} className={`leading-relaxed ${
+                    line.startsWith(';') ? 'text-muted-foreground' : 
+                    line.startsWith('  ') ? 'text-prime-cyan' : 'text-card-foreground'
+                  }`}>
+                    <span className="text-muted-foreground/40 mr-2 select-none">{String(i+1).padStart(2)}</span>
+                    {line || '\u00A0'}
+                  </div>
+                ))}
+              </div>
+            </div>
           ) : (
+            /* Folder view */
             <>
               <div className="text-[10px] font-display tracking-wider text-muted-foreground mb-2 uppercase">
-                Prime Manifold
+                {breadcrumb.length > 0 ? breadcrumb[breadcrumb.length-1].name : 'Prime Manifold'}
               </div>
-              {fileTree.map((f, i) => (
-                <FileNode key={i} file={f} depth={0} onSelect={setSelected} selected={selected} />
+              {currentItems.map((f, i) => (
+                <FileNode
+                  key={`${f.name}-${i}`}
+                  file={f}
+                  onSelect={setSelected}
+                  selected={selected}
+                  onDoubleClick={navigateInto}
+                  onRename={(file) => { setRenamingFile(file); setRenameText(file.name); }}
+                  onDelete={(file) => setConfirmDelete(file)}
+                  onPreview={(file) => setPreviewFile(file)}
+                  renamingFile={renamingFile}
+                  renameText={renameText}
+                  onRenameChange={setRenameText}
+                  onRenameSubmit={handleRename}
+                  onRenameCancel={() => setRenamingFile(null)}
+                />
               ))}
+              {currentItems.length === 0 && (
+                <div className="text-muted-foreground text-center mt-4 text-[10px]">Empty manifold</div>
+              )}
             </>
           )}
         </div>
 
-        {/* Detail */}
+        {/* Detail panel */}
         <div className="w-1/2 p-3 overflow-y-auto">
           {selected ? (
             <div className="space-y-3">
@@ -168,6 +416,27 @@ export default function FilesApp() {
                   <span className="text-prime-amber text-[10px]">● group (d &lt; R_group)</span>
                 </div>
               </div>
+              {/* Actions */}
+              <div className="flex gap-1.5 pt-2">
+                <button
+                  onClick={() => setPreviewFile(selected)}
+                  className="flex items-center gap-1 px-2 py-1 rounded border border-primary/30 text-primary text-[10px] hover:bg-primary/10"
+                >
+                  <Eye size={10} /> Preview
+                </button>
+                <button
+                  onClick={() => { setRenamingFile(selected); setRenameText(selected.name); }}
+                  className="flex items-center gap-1 px-2 py-1 rounded border border-border text-muted-foreground text-[10px] hover:text-foreground"
+                >
+                  <Edit3 size={10} /> Rename
+                </button>
+                <button
+                  onClick={() => setConfirmDelete(selected)}
+                  className="flex items-center gap-1 px-2 py-1 rounded border border-destructive/30 text-destructive/70 text-[10px] hover:text-destructive hover:bg-destructive/5"
+                >
+                  <Trash2 size={10} /> Delete
+                </button>
+              </div>
             </div>
           ) : (
             <div className="text-muted-foreground text-center mt-8">
@@ -189,36 +458,61 @@ function Row({ label, value }: { label: string; value: string }) {
   );
 }
 
-function FileNode({ file, depth, onSelect, selected }: { file: PrimeFile; depth: number; onSelect: (f: PrimeFile) => void; selected: PrimeFile | null }) {
-  const [open, setOpen] = useState(depth === 0);
-  const hasChildren = file.children && file.children.length > 0;
+interface FileNodeProps {
+  file: PrimeFile;
+  onSelect: (f: PrimeFile) => void;
+  selected: PrimeFile | null;
+  onDoubleClick: (f: PrimeFile) => void;
+  onRename: (f: PrimeFile) => void;
+  onDelete: (f: PrimeFile) => void;
+  onPreview: (f: PrimeFile) => void;
+  renamingFile: PrimeFile | null;
+  renameText: string;
+  onRenameChange: (v: string) => void;
+  onRenameSubmit: () => void;
+  onRenameCancel: () => void;
+}
+
+function FileNode({ file, onSelect, selected, onDoubleClick, onRename, onDelete, onPreview, renamingFile, renameText, onRenameChange, onRenameSubmit, onRenameCancel }: FileNodeProps) {
   const isSelected = selected === file;
+  const isRenaming = renamingFile === file;
   const Icon = file.type === 'manifold' ? Folder : file.type === 'fold' ? Hexagon : FileText;
+  const hasChildren = file.type === 'manifold';
 
   return (
-    <div>
-      <div
-        className={`flex items-center gap-1 py-0.5 px-1 rounded cursor-pointer hover:bg-muted/50 ${
-          isSelected ? 'bg-primary/10 text-primary' : 'text-card-foreground'
-        }`}
-        style={{ paddingLeft: depth * 12 + 4 }}
-        onClick={() => {
-          onSelect(file);
-          if (hasChildren) setOpen(!open);
-        }}
-      >
-        {hasChildren ? (
-          open ? <ChevronDown size={10} className="text-muted-foreground" /> : <ChevronRight size={10} className="text-muted-foreground" />
-        ) : (
-          <span className="w-[10px]" />
-        )}
-        <Icon size={12} className={file.type === 'manifold' ? 'text-prime-amber' : 'text-prime-cyan'} />
-        <span className="truncate">{file.name}</span>
-        <span className="ml-auto text-muted-foreground text-[9px]">{file.size}</span>
-      </div>
-      {open && file.children?.map((c, i) => (
-        <FileNode key={i} file={c} depth={depth + 1} onSelect={onSelect} selected={selected} />
-      ))}
+    <div
+      className={`group flex items-center gap-1.5 py-1 px-1.5 rounded cursor-pointer hover:bg-muted/50 ${
+        isSelected ? 'bg-primary/10 text-primary' : 'text-card-foreground'
+      }`}
+      onClick={() => onSelect(file)}
+      onDoubleClick={() => onDoubleClick(file)}
+    >
+      {hasChildren ? <ChevronRight size={10} className="text-muted-foreground shrink-0" /> : <span className="w-[10px] shrink-0" />}
+      <Icon size={12} className={`shrink-0 ${file.type === 'manifold' ? 'text-prime-amber' : 'text-prime-cyan'}`} />
+      {isRenaming ? (
+        <input
+          value={renameText}
+          onChange={e => onRenameChange(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter') onRenameSubmit(); if (e.key === 'Escape') onRenameCancel(); }}
+          onBlur={onRenameSubmit}
+          className="flex-1 bg-background border border-primary/30 rounded px-1 py-0.5 text-[10px] text-foreground outline-none"
+          autoFocus
+          onClick={e => e.stopPropagation()}
+        />
+      ) : (
+        <span className="truncate flex-1">{file.name}</span>
+      )}
+      <span className="ml-auto text-muted-foreground text-[9px] shrink-0">{file.size}</span>
+      {/* Hover actions */}
+      {!isRenaming && (
+        <div className="hidden group-hover:flex items-center gap-0.5 shrink-0">
+          {file.type !== 'manifold' && (
+            <button onClick={e => { e.stopPropagation(); onPreview(file); }} className="p-0.5 text-muted-foreground hover:text-primary" title="Preview"><Eye size={10} /></button>
+          )}
+          <button onClick={e => { e.stopPropagation(); onRename(file); }} className="p-0.5 text-muted-foreground hover:text-foreground" title="Rename"><Edit3 size={10} /></button>
+          <button onClick={e => { e.stopPropagation(); onDelete(file); }} className="p-0.5 text-muted-foreground hover:text-destructive" title="Delete"><Trash2 size={10} /></button>
+        </div>
+      )}
     </div>
   );
 }

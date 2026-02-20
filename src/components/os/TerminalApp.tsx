@@ -7,6 +7,8 @@ import {
   enterDebug, generateDebugLine,
   enterGeomcRepl, handleGeomcReplInput,
   enterTrace, generateTraceLine,
+  enterScan, generateScanLine,
+  enterDisk, handleDiskInput,
 } from './terminal/modes';
 
 interface TerminalAppProps {
@@ -55,7 +57,7 @@ export default function TerminalApp({ onOpenApp, onCloseApp }: TerminalAppProps)
     };
   }, []);
 
-  // Start/stop streaming intervals for debug and trace modes
+  // Start/stop streaming intervals for debug, trace, and scan modes
   useEffect(() => {
     if (modeState.mode === 'debug') {
       intervalRef.current = setInterval(() => {
@@ -65,6 +67,18 @@ export default function TerminalApp({ onOpenApp, onCloseApp }: TerminalAppProps)
       intervalRef.current = setInterval(() => {
         setLines(prev => [...prev, generateTraceLine()]);
       }, 500);
+    } else if (modeState.mode === 'scan') {
+      let progress = modeState.scanProgress;
+      intervalRef.current = setInterval(() => {
+        const result = generateScanLine(modeState.scanTarget, progress);
+        setLines(prev => [...prev, result.line]);
+        progress = result.progress;
+        if (result.done) {
+          setModeState(prev => ({ ...prev, mode: 'normal' }));
+        } else {
+          setModeState(prev => ({ ...prev, scanProgress: result.progress }));
+        }
+      }, 600);
     } else {
       if (intervalRef.current) {
         clearInterval(intervalRef.current);
@@ -77,13 +91,14 @@ export default function TerminalApp({ onOpenApp, onCloseApp }: TerminalAppProps)
         intervalRef.current = null;
       }
     };
-  }, [modeState.mode, modeState.debugProcess]);
+  }, [modeState.mode, modeState.debugProcess, modeState.scanTarget, modeState.scanProgress]);
 
   const ctx: CommandContext = {
     envVars,
     setEnvVars,
     onOpenApp,
     onCloseApp,
+    history,
   };
 
   const enterMode = useCallback((rawCmd: string) => {
@@ -104,6 +119,14 @@ export default function TerminalApp({ onOpenApp, onCloseApp }: TerminalAppProps)
       setModeState(prev => ({ ...prev, ...r.state }));
     } else if (cmd === 'primenet' && parts[1] === 'trace') {
       const r = enterTrace();
+      setOutputQueue(r.lines);
+      setModeState(prev => ({ ...prev, ...r.state }));
+    } else if (cmd === 'primenet' && parts[1] === 'scan') {
+      const r = enterScan(parts[2]);
+      setOutputQueue(r.lines);
+      setModeState(prev => ({ ...prev, ...r.state }));
+    } else if (cmd === 'disk') {
+      const r = enterDisk();
       setOutputQueue(r.lines);
       setModeState(prev => ({ ...prev, ...r.state }));
     }
@@ -144,6 +167,21 @@ export default function TerminalApp({ onOpenApp, onCloseApp }: TerminalAppProps)
         }
         break;
       }
+      case 'scan': {
+        if (cmd.toLowerCase() === 'stop') {
+          setModeState(prev => ({ ...prev, mode: 'normal' }));
+          setLines(prev => [...prev, '▸ Scan aborted.', '']);
+        }
+        break;
+      }
+      case 'disk': {
+        const r = handleDiskInput(cmd);
+        setOutputQueue(r.lines);
+        if (r.exit) {
+          setModeState(prev => ({ ...prev, mode: 'normal' }));
+        }
+        break;
+      }
     }
   }, [modeState]);
 
@@ -179,7 +217,6 @@ export default function TerminalApp({ onOpenApp, onCloseApp }: TerminalAppProps)
     }
 
     if (result.output.length > 0) {
-      // Use typewriter for longer outputs
       if (result.output.length > 4) {
         setOutputQueue(result.output);
       } else {
@@ -244,7 +281,7 @@ export default function TerminalApp({ onOpenApp, onCloseApp }: TerminalAppProps)
         <div
           key={i}
           className={
-            line.startsWith('psh ▸') || line.startsWith('q3-train ▸') || line.startsWith('debug ▸') || line.startsWith('geomc ▸') || line.startsWith('trace ▸')
+            line.startsWith('psh ▸') || line.startsWith('q3-train ▸') || line.startsWith('debug ▸') || line.startsWith('geomc ▸') || line.startsWith('trace ▸') || line.startsWith('scan ▸') || line.startsWith('disk ▸')
               ? 'text-primary'
               : line.startsWith('▸') || line.startsWith('═')
               ? 'text-prime-cyan'
@@ -254,6 +291,8 @@ export default function TerminalApp({ onOpenApp, onCloseApp }: TerminalAppProps)
               ? 'text-green-400'
               : line.includes('✗')
               ? 'text-red-400'
+              : line.startsWith('  [!]')
+              ? 'text-prime-amber'
               : 'text-card-foreground'
           }
         >
