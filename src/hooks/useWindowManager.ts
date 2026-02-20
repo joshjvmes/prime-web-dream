@@ -5,18 +5,20 @@ let nextZIndex = 10;
 
 export function useWindowManager() {
   const [windows, setWindows] = useState<WindowState[]>([]);
+  const [activeWorkspace, setActiveWorkspace] = useState(1);
 
   const openWindow = useCallback((app: AppType, title: string) => {
     setWindows(prev => {
       const existing = prev.find(w => w.app === app);
       if (existing) {
+        // If in different workspace, move it to current
         return prev.map(w =>
           w.id === existing.id
-            ? { ...w, isMinimized: false, isFocused: true, zIndex: ++nextZIndex }
+            ? { ...w, isMinimized: false, isFocused: true, zIndex: ++nextZIndex, workspace: activeWorkspace }
             : { ...w, isFocused: false }
         );
       }
-      const offset = prev.length * 30;
+      const offset = prev.filter(w => w.workspace === activeWorkspace).length * 30;
       const getSize = (a: AppType): [number, number] => {
         switch (a) {
           case 'terminal': return [700, 450];
@@ -66,10 +68,11 @@ export function useWindowManager() {
         isMaximized: false,
         isFocused: true,
         zIndex: ++nextZIndex,
+        workspace: activeWorkspace,
       };
       return [...prev.map(w => ({ ...w, isFocused: false })), newWindow];
     });
-  }, []);
+  }, [activeWorkspace]);
 
   const closeWindow = useCallback((id: string) => {
     setWindows(prev => prev.filter(w => w.id !== id));
@@ -82,12 +85,19 @@ export function useWindowManager() {
   }, []);
 
   const focusWindow = useCallback((id: string) => {
-    setWindows(prev => prev.map(w =>
-      w.id === id
-        ? { ...w, isFocused: true, isMinimized: false, zIndex: ++nextZIndex }
-        : { ...w, isFocused: false }
-    ));
-  }, []);
+    setWindows(prev => {
+      const win = prev.find(w => w.id === id);
+      if (win && win.workspace !== activeWorkspace) {
+        // Switch to that workspace
+        setActiveWorkspace(win.workspace);
+      }
+      return prev.map(w =>
+        w.id === id
+          ? { ...w, isFocused: true, isMinimized: false, zIndex: ++nextZIndex }
+          : { ...w, isFocused: false }
+      );
+    });
+  }, [activeWorkspace]);
 
   const moveWindow = useCallback((id: string, x: number, y: number) => {
     setWindows(prev => prev.map(w =>
@@ -105,7 +115,6 @@ export function useWindowManager() {
     setWindows(prev => prev.map(w => {
       if (w.id !== id) return { ...w, isFocused: false };
       if (w.isMaximized) {
-        // Restore
         return {
           ...w,
           x: w.prevBounds?.x ?? 100,
@@ -118,7 +127,6 @@ export function useWindowManager() {
           prevBounds: undefined,
         };
       }
-      // Maximize
       return {
         ...w,
         prevBounds: { x: w.x, y: w.y, width: w.width, height: w.height },
@@ -154,7 +162,7 @@ export function useWindowManager() {
 
   const tileAllWindows = useCallback(() => {
     setWindows(prev => {
-      const visible = prev.filter(w => !w.isMinimized);
+      const visible = prev.filter(w => !w.isMinimized && w.workspace === activeWorkspace);
       if (visible.length === 0) return prev;
       const cols = Math.ceil(Math.sqrt(visible.length));
       const rows = Math.ceil(visible.length / cols);
@@ -162,26 +170,46 @@ export function useWindowManager() {
       const h = (window.innerHeight - 40) / rows;
       let idx = 0;
       return prev.map(win => {
-        if (win.isMinimized) return win;
+        if (win.isMinimized || win.workspace !== activeWorkspace) return win;
         const col = idx % cols;
         const row = Math.floor(idx / cols);
         idx++;
         return { ...win, x: col * w, y: row * h, width: w, height: h, isMaximized: false, isFocused: false, zIndex: ++nextZIndex };
       });
     });
-  }, []);
+  }, [activeWorkspace]);
 
   const cascadeWindows = useCallback(() => {
     setWindows(prev => {
       let idx = 0;
       return prev.map(win => {
-        if (win.isMinimized) return win;
+        if (win.isMinimized || win.workspace !== activeWorkspace) return win;
         const offset = idx * 30;
         idx++;
         return { ...win, x: 80 + offset, y: 40 + offset, width: 600, height: 420, isMaximized: false, isFocused: false, zIndex: ++nextZIndex };
       });
     });
+  }, [activeWorkspace]);
+
+  const switchWorkspace = useCallback((ws: number) => {
+    setActiveWorkspace(ws);
+    // Unfocus all when switching
+    setWindows(prev => prev.map(w => ({ ...w, isFocused: false })));
   }, []);
 
-  return { windows, openWindow, closeWindow, minimizeWindow, focusWindow, moveWindow, resizeWindow, maximizeWindow, snapWindow, tileAllWindows, cascadeWindows };
+  const moveWindowToWorkspace = useCallback((id: string, ws: number) => {
+    setWindows(prev => prev.map(w =>
+      w.id === id ? { ...w, workspace: ws } : w
+    ));
+  }, []);
+
+  const getWindowCountsByWorkspace = useCallback(() => {
+    return [1, 2, 3, 4].map(ws => windows.filter(w => w.workspace === ws && !w.isMinimized).length);
+  }, [windows]);
+
+  return {
+    windows, openWindow, closeWindow, minimizeWindow, focusWindow, moveWindow, resizeWindow, maximizeWindow, snapWindow,
+    tileAllWindows, cascadeWindows,
+    activeWorkspace, switchWorkspace, moveWindowToWorkspace, getWindowCountsByWorkspace,
+  };
 }
