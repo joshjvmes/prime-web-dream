@@ -106,6 +106,7 @@ const APP_MAP: Record<string, { app: string; title: string }> = {
   hooks: { app: 'cloudhooks', title: 'Cloud Hooks' },
   hypersphere: { app: 'hypersphere', title: 'Hyper AI' },
   hyper: { app: 'hypersphere', title: 'Hyper AI' },
+  calendar: { app: 'calendar', title: 'Prime Calendar' },
 };
 
 // Boot timestamp for uptime
