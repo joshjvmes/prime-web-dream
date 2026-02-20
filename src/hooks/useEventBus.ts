@@ -17,6 +17,10 @@ export const EVENT_TYPES = [
   'wallet.transfer',
   'trade.executed',
   'bet.placed',
+  'booking.created',
+  'booking.cancelled',
+  'audio.control',
+  'market.checked',
 ] as const;
 
 export type EventType = typeof EVENT_TYPES[number];

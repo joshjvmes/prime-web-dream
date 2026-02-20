@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Play, Pause, SkipBack, SkipForward, Shuffle, Repeat, Volume2 } from 'lucide-react';
+import { eventBus } from '@/hooks/useEventBus';
 import { Slider } from '@/components/ui/slider';
 import { ScrollArea } from '@/components/ui/scroll-area';
 
@@ -450,6 +451,48 @@ export default function PrimeAudioApp() {
       }
     };
   }, []);
+
+  // EventBus listener for remote audio control (from Hyper AI)
+  useEffect(() => {
+    const handleAudioControl = (payload: any) => {
+      if (!payload?.action) return;
+      switch (payload.action) {
+        case 'play':
+          if (payload.track_name) {
+            const idx = TRACKS.findIndex(t => t.title.toLowerCase().includes(String(payload.track_name).toLowerCase()));
+            if (idx >= 0) {
+              setCurrentTrack(idx);
+              setProgress(0);
+              startSound(idx, 0);
+              setPlaying(true);
+              return;
+            }
+          }
+          if (!playing) {
+            startSound(currentTrack, progress);
+            setPlaying(true);
+          }
+          break;
+        case 'pause':
+          if (playing) {
+            stopSound();
+            setPlaying(false);
+          }
+          break;
+        case 'skip':
+          nextTrack();
+          break;
+        case 'volume':
+          if (typeof payload.volume === 'number') {
+            setVolume(Math.max(0, Math.min(100, payload.volume)));
+          }
+          break;
+      }
+    };
+    eventBus.on('audio.control', handleAudioControl);
+    return () => { eventBus.off('audio.control', handleAudioControl); };
+  }, [playing, currentTrack, progress, startSound, stopSound, nextTrack]);
+
 
   return (
     <div className="flex h-full bg-background font-mono text-xs">

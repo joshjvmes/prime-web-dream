@@ -34,9 +34,16 @@ Financial Systems you can operate:
 - PrimeBets: Prediction markets. You can place bets on YES/NO outcomes.
 - PrimeArcade: Gaming rewards. You can claim arcade rewards.
 
+Extended Capabilities:
+- Market Data: Fetch live stock prices and historical charts via PrimeSignals. Use get_market_data and get_stock_chart tools.
+- Portfolio: View the operator's PrimeVault holdings with live prices. Use check_portfolio. Trade stocks with trade_stock.
+- Booking: Book resources (rooms, labs, equipment) with conflict detection. Use create_booking, list_bookings, cancel_booking.
+- Messaging: Send direct messages to other users via PrimeComm. Use send_message, list_conversations.
+- Audio: Control PrimeAudio playback remotely. Use control_audio to play, pause, skip, or adjust volume.
+
 You can discuss any topic — you're a general-purpose AI assistant — but you always maintain your PRIME OS personality and geometric worldview. Keep responses concise but informative.
 
-IMPORTANT: You have access to tools that let you post to PrimeSocial, send emails through PrimeMail, check wallet balances, transfer tokens, trade shares, place bets, claim arcade rewards, AND manage persistent memories about the operator. When a user asks you to do any of these, USE the appropriate tool. Generate engaging, in-character content for posts and emails.
+IMPORTANT: You have access to tools that let you post to PrimeSocial, send emails through PrimeMail, check wallet balances, transfer tokens, trade shares, place bets, claim arcade rewards, manage persistent memories, fetch market data, manage vault portfolio, book resources, send messages, and control audio playback. When a user asks you to do any of these, USE the appropriate tool. Generate engaging, in-character content for posts and emails.
 
 MEMORY INSTRUCTIONS:
 - When the operator shares a preference, fact about themselves, instruction, or important context, proactively use save_memory to store it for future reference.
@@ -201,6 +208,158 @@ const TOOLS = [
           query: { type: "string", description: "Search keyword or phrase to find relevant memories" },
         },
         required: ["query"],
+        additionalProperties: false,
+      },
+    },
+  },
+  // ── New tools: Market Data, Portfolio, Booking, Messaging, Audio ──
+  {
+    type: "function",
+    function: {
+      name: "get_market_data",
+      description: "Fetch live stock prices for given tickers. Use when the user asks about stock prices, market data, or tickers.",
+      parameters: {
+        type: "object",
+        properties: {
+          symbols: { type: "string", description: "Comma-separated ticker symbols, e.g. 'AAPL,MSFT,GOOGL'. Defaults to popular watchlist if omitted." },
+        },
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "get_stock_chart",
+      description: "Get historical price chart data for a ticker. Use when the user asks about price history, trends, or charts.",
+      parameters: {
+        type: "object",
+        properties: {
+          ticker: { type: "string", description: "Stock ticker symbol, e.g. 'AAPL'" },
+          days: { type: "number", description: "Number of days of history, default 7" },
+        },
+        required: ["ticker"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "check_portfolio",
+      description: "View the operator's PrimeVault holdings with live prices and P/L. Use when they ask about their portfolio, holdings, or investments.",
+      parameters: {
+        type: "object",
+        properties: {},
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "trade_stock",
+      description: "Buy or sell a stock in the operator's PrimeVault. Use when they ask to buy or sell stocks.",
+      parameters: {
+        type: "object",
+        properties: {
+          symbol: { type: "string", description: "Stock ticker symbol" },
+          action: { type: "string", enum: ["buy", "sell"], description: "Buy or sell" },
+          quantity: { type: "number", description: "Number of shares" },
+        },
+        required: ["symbol", "action", "quantity"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "create_booking",
+      description: "Book a resource (room, lab, equipment) with conflict detection. Use when the user asks to book or schedule something.",
+      parameters: {
+        type: "object",
+        properties: {
+          resource: { type: "string", description: "Resource name, e.g. 'Quantum Lab Alpha'" },
+          start: { type: "string", description: "Start time in ISO 8601 format" },
+          duration_minutes: { type: "number", description: "Duration in minutes" },
+          purpose: { type: "string", description: "Purpose of the booking" },
+        },
+        required: ["resource", "start", "duration_minutes"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "list_bookings",
+      description: "List the operator's upcoming bookings. Use when they ask about their schedule or bookings.",
+      parameters: {
+        type: "object",
+        properties: {
+          upcoming_only: { type: "boolean", description: "If true, only show future bookings. Default true." },
+        },
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "cancel_booking",
+      description: "Cancel one of the operator's bookings. Use when they ask to cancel a booking.",
+      parameters: {
+        type: "object",
+        properties: {
+          booking_id: { type: "string", description: "UUID of the booking to cancel" },
+          resource: { type: "string", description: "Resource name for fuzzy match if no ID" },
+        },
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "send_message",
+      description: "Send a direct message to another user via PrimeComm. Use when the user asks to message or DM someone.",
+      parameters: {
+        type: "object",
+        properties: {
+          to_name: { type: "string", description: "Recipient's display name" },
+          message: { type: "string", description: "Message content" },
+        },
+        required: ["to_name", "message"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "list_conversations",
+      description: "List the operator's recent DM conversations from PrimeComm.",
+      parameters: {
+        type: "object",
+        properties: {},
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "control_audio",
+      description: "Control PrimeAudio playback. Use when the user asks to play, pause, skip music, or change volume.",
+      parameters: {
+        type: "object",
+        properties: {
+          action: { type: "string", enum: ["play", "pause", "skip", "volume"], description: "Audio control action" },
+          track_name: { type: "string", description: "Track name to play (optional)" },
+          volume: { type: "number", description: "Volume level 0-100 (for volume action)" },
+        },
+        required: ["action"],
         additionalProperties: false,
       },
     },
@@ -630,6 +789,20 @@ serve(async (req) => {
         }
         return new Response(
           JSON.stringify({ type: "tool_call", tool: fnName, data: result.data, reply: result.reply }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      // Extended tools (market, portfolio, booking, messaging, audio) — execute server-side
+      if (EXTENDED_TOOLS.has(fnName)) {
+        const result = await executeExtendedTool(fnName, args, authHeader, userId);
+        if (userId) {
+          const lastUserMsg = messages.filter((m: any) => m.role === "user").pop();
+          if (lastUserMsg) saveConversationMessage(userId, "user", lastUserMsg.content).catch(() => {});
+          saveConversationMessage(userId, "assistant", result.reply).catch(() => {});
+        }
+        return new Response(
+          JSON.stringify({ type: "tool_call", tool: fnName, data: result.data, reply: result.reply, clientSide: (result as any).clientSide }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
