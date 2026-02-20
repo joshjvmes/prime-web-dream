@@ -1,98 +1,106 @@
 
 
-# AI Agent Monitoring, Controls, and Cross-Agent Collaboration
+# Cross-Agent Commerce, Gaming, Trading, and Wallet Tools for Hyper
 
 ## Overview
 
-Enhance the existing Hyper-to-Social/Mail pipeline with three new capabilities: (1) a visible Agent Activity Log that tracks every autonomous action, (2) user controls to enable/disable agent permissions, and (3) cross-agent collaboration where AI personas from PrimeSocial can trigger replies and email threads with Hyper, creating a living multi-agent ecosystem.
+Expand Hyper's autonomous capabilities beyond social/mail to include the full PRIME OS economy. Hyper will be able to check wallet balances, transfer tokens, trade shares on the Forge marketplace, place bets on prediction markets, and claim arcade rewards -- all via AI tool calling. The user tells Hyper what to do, and Hyper interacts with the financial systems on their behalf.
 
----
+## What Changes
 
-## Part 1: Agent Activity Log
+### 1. New Hyper Tools (Backend)
 
-A new section in HypersphereApp that shows a scrollable log of all autonomous actions Hyper has taken (posts made, emails sent), so the user has full visibility.
+**File: `supabase/functions/hyper-chat/index.ts`**
 
-### Changes to `src/components/os/HypersphereApp.tsx`
-- Add an `agentActions` state array tracking `{ type: 'post' | 'email', summary: string, timestamp: Date }`
-- When a tool call response is received, push an entry to `agentActions`
-- Add a collapsible "Agent Activity" panel above the input area showing the last 10 actions with timestamps and type icons
-- Include a count badge on the panel header showing total actions this session
+Add 6 new tool definitions to the TOOLS array:
 
----
+| Tool | Description | Parameters |
+|------|-------------|------------|
+| `check_balance` | Check the operator's wallet balance | (none) |
+| `transfer_tokens` | Send OS or IX to another user | `to_name`, `amount`, `token_type` |
+| `buy_shares` | Buy shares in a Forge app | `app_name`, `amount` |
+| `sell_shares` | Sell shares in a Forge app | `app_name`, `shares` |
+| `place_bet` | Place a bet on a prediction market | `market_question`, `side` (YES/NO), `amount` |
+| `play_arcade` | Claim an arcade game reward | `game`, `score` |
 
-## Part 2: Agent Permission Controls
+For tools that need real backend interaction (balance, transfer, shares, bets), the edge function will call `prime-bank` directly using the service role key, since the user's auth token is passed through. The hyper-chat function will:
 
-Toggle switches letting the user enable/disable Hyper's ability to post to social and send emails.
+1. Detect tool calls as before (phase 1 non-streaming check)
+2. For financial tools, execute the action server-side by calling prime-bank
+3. Return a JSON response with the result and a conversational reply
 
-### Changes to `src/components/os/HypersphereApp.tsx`
-- Add `permissions` state: `{ canPost: boolean, canEmail: boolean }` (both default `true`)
-- Render two small toggle switches in the header area next to the Hypersphere visualization: "Social" and "Mail"
-- When a tool call response arrives, check permissions before emitting on the EventBus. If disabled, show a message like "Social posting is currently disabled by operator" instead of executing the action
-- Store permissions in localStorage so they persist across sessions
+Update the system prompt to inform Hyper about its financial capabilities.
 
----
+### 2. Frontend Tool Call Handling
 
-## Part 3: Cross-Agent Collaboration
+**File: `src/components/os/HypersphereApp.tsx`**
 
-Allow the AI-generated personas (from `ai-social`) to interact with Hyper's posts and vice versa by sharing context between the generation systems.
+Extend the tool call handling to support the new tools:
 
-### Changes to `src/hooks/useEventBus.ts`
-- Add new event type: `agent.action.logged` for broadcasting action logs across the OS
+- `check_balance` -- Display balance info in chat (no EventBus needed)
+- `transfer_tokens` -- Show confirmation, log to agent activity
+- `buy_shares` / `sell_shares` -- Show trade confirmation, log activity
+- `place_bet` -- Show bet confirmation, log activity
+- `play_arcade` -- Show reward confirmation, log activity
 
-### Changes to `src/components/os/PrimeSocialApp.tsx`
-- When Hyper posts arrive via EventBus, auto-generate 1-2 AI persona replies after a short delay (2-3 seconds) by calling `ai-social` with a new action `generate-replies` that includes the original post content as context
-- This creates the illusion of other agents reacting to Hyper's posts in real time
+Add new permission toggles:
+- "Wallet" toggle (controls transfer, trading, betting)
 
-### Changes to `src/components/os/PrimeMailApp.tsx`
-- When Hyper sends an email via EventBus, auto-generate a reply email from the recipient persona after a delay (3-5 seconds) by calling `ai-social` with a new action `generate-reply-email` that includes the original email as context
-- The reply appears as a new unread email, creating back-and-forth agent conversations
+Add new quick action buttons:
+- "Check Balance" -- asks Hyper to check wallet
+- "Portfolio" -- asks Hyper about share holdings
 
-### Changes to `supabase/functions/ai-social/index.ts`
-- Add two new actions:
-  - `generate-replies`: Takes a `postContent` and `postAuthor` parameter, returns 1-2 reply comments from other personas reacting to that post
-  - `generate-reply-email`: Takes `originalEmail` (from, to, subject, body) parameter, returns a single reply email from the recipient persona
-- Add corresponding tool definitions for structured output
-- The reply generation uses the same persona roster and system prompt, with additional context about the content being replied to
+Extend `AgentAction` type to include `'trade' | 'wallet' | 'bet' | 'game'` alongside existing `'post' | 'email'`.
 
----
+### 3. EventBus Updates
 
-## Part 4: Agent Activity Desktop Widget
+**File: `src/hooks/useEventBus.ts`**
 
-A small desktop widget that shows real-time agent activity across the OS.
+Add new event types:
+- `wallet.transfer` -- for broadcasting transfers
+- `trade.executed` -- for share trades
+- `bet.placed` -- for bets
 
-### Changes to `src/components/os/DesktopWidgets.tsx`
-- Add `agentLog: boolean` to `WidgetState` (default: false)
-- Create an `AgentLogWidget` that subscribes to `agent.action.logged` on the EventBus
-- Shows the last 5 agent actions (icon, summary, time) in a compact list
-- Includes a count of total actions this session
+### 4. Confirm ai-social Actions
 
----
+**File: `supabase/functions/ai-social/index.ts`**
+
+The `generate-replies` and `generate-reply-email` actions are already implemented with structured tool calling output. No changes needed -- these are already live and working. The plan simply confirms they're properly exposed:
+
+- `generate-replies`: accepts `postContent` + `postAuthor`, returns `{ replies: [{ author, text }] }`
+- `generate-reply-email`: accepts `originalEmail` (from/to/subject/body), returns `{ email: { from, to, subject, body } }`
+
+Both use dedicated tool definitions with `additionalProperties: false` for clean structured output.
 
 ## Technical Details
+
+### Backend Tool Execution Flow
+
+When Hyper decides to use a financial tool:
+
+1. `hyper-chat` receives the tool call from the AI model
+2. It forwards the user's auth token to `prime-bank` (extracted from the original request)
+3. `prime-bank` executes the action (balance check, transfer, trade, bet)
+4. `hyper-chat` returns the result as JSON: `{ type: "tool_call", tool: "check_balance", data: { os_balance: 50000, ... }, reply: "Your balance is..." }`
+5. Frontend displays the reply and logs the action
+
+### Auth Token Forwarding
+
+The `hyper-chat` function will extract the `Authorization` header from the incoming request and pass it through when calling `prime-bank`. This ensures all financial operations are authenticated as the actual user.
+
+### Permission Gating
+
+A single "Wallet" permission toggle controls all financial tools (transfer, trade, bet). Balance checks are always allowed. If disabled, Hyper responds with "Financial operations are currently disabled by operator."
 
 ### Files to Modify
 
 | File | Change |
 |------|--------|
-| `src/components/os/HypersphereApp.tsx` | Add activity log panel, permission toggles, emit `agent.action.logged` events |
-| `src/components/os/PrimeSocialApp.tsx` | Auto-generate AI replies to Hyper posts after delay |
-| `src/components/os/PrimeMailApp.tsx` | Auto-generate email replies to Hyper emails after delay |
-| `src/hooks/useEventBus.ts` | Add `agent.action.logged` event type |
-| `src/components/os/DesktopWidgets.tsx` | Add `AgentLogWidget` |
-| `supabase/functions/ai-social/index.ts` | Add `generate-replies` and `generate-reply-email` actions |
+| `supabase/functions/hyper-chat/index.ts` | Add 6 financial tool definitions, server-side prime-bank calls, auth forwarding |
+| `src/components/os/HypersphereApp.tsx` | Handle new tool responses, add Wallet permission toggle, new quick actions, extended action types |
+| `src/hooks/useEventBus.ts` | Add `wallet.transfer`, `trade.executed`, `bet.placed` event types |
 
 ### No Database Changes Required
 
-All state is ephemeral (React state + EventBus). Permissions persist via localStorage only.
-
-### Cross-Agent Flow
-
-When a user tells Hyper "Post about energy metrics":
-1. Hyper calls `hyper-chat` which returns a tool call with post content
-2. HypersphereApp emits `social.post.created` (post appears in PrimeSocial) and `agent.action.logged`
-3. PrimeSocialApp detects it's a Hyper post, waits 2-3 seconds, then calls `ai-social?action=generate-replies` with the post content
-4. 1-2 AI persona comments appear on Hyper's post (e.g., "Q3-Inference: Fascinating metrics, Hyper. I'm seeing correlated patterns in fold 7.")
-5. The AgentLogWidget updates to show the activity
-
-Same pattern for emails: Hyper sends an email to "Dr. Kael Voss", and after a delay, a reply from Dr. Voss appears in the inbox.
+All financial operations use existing `prime-bank` actions and existing tables (wallets, transactions, app_shares, bets, bet_markets). No new tables or migrations needed.
 
