@@ -37,7 +37,11 @@ export function executeWithPipesAndChains(
       const result = processCommand(segment, ctx);
 
       if (result === 'mode') {
-        // Return early — caller handles mode entry
+        allOutput.push(...(pipedLines ?? []));
+        return { output: allOutput, enterMode: segment };
+      }
+
+      if (result === 'ai-ask') {
         allOutput.push(...(pipedLines ?? []));
         return { output: allOutput, enterMode: segment };
       }

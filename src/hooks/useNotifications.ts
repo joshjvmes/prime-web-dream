@@ -159,5 +159,5 @@ export function useNotifications(activeApps: AppType[] = []) {
     setEvents(prev => prev.filter(e => e.id !== id));
   }, []);
 
-  return { notifications, dismissNotification, events, toggleEvent, updateEventMessage, addEvent, removeEvent };
+  return { notifications, dismissNotification, pushNotification, events, toggleEvent, updateEventMessage, addEvent, removeEvent };
 }

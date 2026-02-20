@@ -14,9 +14,10 @@ import {
 interface TerminalAppProps {
   onOpenApp?: (app: string, title: string) => void;
   onCloseApp?: (id: string) => void;
+  isFirstOpen?: boolean;
 }
 
-export default function TerminalApp({ onOpenApp, onCloseApp }: TerminalAppProps) {
+export default function TerminalApp({ onOpenApp, onCloseApp, isFirstOpen }: TerminalAppProps) {
   const [lines, setLines] = useState<string[]>([...WELCOME]);
   const [input, setInput] = useState('');
   const [history, setHistory] = useState<string[]>([]);
@@ -26,6 +27,7 @@ export default function TerminalApp({ onOpenApp, onCloseApp }: TerminalAppProps)
   const [outputQueue, setOutputQueue] = useState<string[]>([]);
   const [isStreaming, setIsStreaming] = useState(false);
   const [tabSuggestions, setTabSuggestions] = useState<string[] | null>(null);
+  const [aiStreaming, setAiStreaming] = useState(false);
 
   const endRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -57,6 +59,90 @@ export default function TerminalApp({ onOpenApp, onCloseApp }: TerminalAppProps)
     };
   }, []);
 
+  // AI streaming helper
+  const streamAiResponse = useCallback(async (prompt: string, systemNote?: string) => {
+    setAiStreaming(true);
+    setLines(prev => [...prev, '▸ Hyper is thinking...']);
+    try {
+      const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID;
+      const apiKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 10000);
+
+      const userMessage = systemNote
+        ? `${systemNote}\n\nUser: ${prompt}`
+        : prompt;
+
+      const res = await fetch(
+        `https://${projectId}.supabase.co/functions/v1/hyper-chat`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'apikey': apiKey },
+          body: JSON.stringify({ messages: [{ role: 'user', content: userMessage }] }),
+          signal: controller.signal,
+        }
+      );
+      clearTimeout(timeout);
+
+      if (!res.ok) throw new Error('AI unavailable');
+
+      // Remove the "thinking" line
+      setLines(prev => prev.slice(0, -1));
+
+      const reader = res.body?.getReader();
+      if (!reader) throw new Error('No stream');
+      const decoder = new TextDecoder();
+      let currentLine = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        const chunk = decoder.decode(value, { stream: true });
+        for (const line of chunk.split('\n')) {
+          if (!line.startsWith('data: ') || line.includes('[DONE]')) continue;
+          try {
+            const json = JSON.parse(line.slice(6));
+            const delta = json.choices?.[0]?.delta?.content;
+            if (delta) {
+              for (const char of delta) {
+                if (char === '\n') {
+                  const finalLine = currentLine;
+                  setLines(prev => [...prev, `  ${finalLine}`]);
+                  currentLine = '';
+                } else {
+                  currentLine += char;
+                }
+              }
+            }
+          } catch {}
+        }
+      }
+      if (currentLine) {
+        const finalLine = currentLine;
+        setLines(prev => [...prev, `  ${finalLine}`]);
+      }
+      setLines(prev => [...prev, '']);
+    } catch {
+      setLines(prev => {
+        const cleaned = prev[prev.length - 1] === '▸ Hyper is thinking...' ? prev.slice(0, -1) : prev;
+        return [...cleaned, '  [Hyper unavailable — lattice connection timeout]', ''];
+      });
+    } finally {
+      setAiStreaming(false);
+    }
+  }, []);
+
+  // AI greeting on first terminal open
+  useEffect(() => {
+    if (!isFirstOpen) return;
+    const name = (() => {
+      try { const p = localStorage.getItem('prime-os-profile'); return p ? JSON.parse(p).name || '' : ''; } catch { return ''; }
+    })();
+    const h = new Date().getHours();
+    const greeting = h < 12 ? 'morning' : h < 17 ? 'afternoon' : 'evening';
+    const prompt = `You are greeting the user in a terminal shell. It's ${greeting}. ${name ? `Their name is ${name}.` : ''} Give a warm, short (2-3 lines) personalized welcome to PRIME OS. Mention one system tip or suggestion. Stay in character as Hyper, the geometric AI. No markdown formatting.`;
+    streamAiResponse(prompt);
+  }, [isFirstOpen, streamAiResponse]);
   // Start/stop streaming intervals for debug, trace, and scan modes
   useEffect(() => {
     if (modeState.mode === 'debug') {
@@ -213,7 +299,16 @@ export default function TerminalApp({ onOpenApp, onCloseApp }: TerminalAppProps)
     }
 
     if (result.enterMode) {
-      enterMode(result.enterMode);
+      const parts = result.enterMode.trim().split(/\s+/);
+      if (parts[0]?.toLowerCase() === 'ask') {
+        // AI ask command
+        const question = parts.slice(1).join(' ');
+        if (question) {
+          streamAiResponse(question, 'The user is asking a question from the PRIME OS terminal shell. Answer concisely. No markdown formatting, plain text only.');
+        }
+      } else {
+        enterMode(result.enterMode);
+      }
     }
 
     if (result.output.length > 0) {
@@ -314,7 +409,8 @@ export default function TerminalApp({ onOpenApp, onCloseApp }: TerminalAppProps)
           className="flex-1 bg-transparent outline-none text-foreground caret-primary"
           autoFocus
           spellCheck={false}
-          disabled={isStreaming}
+          disabled={isStreaming || aiStreaming}
+          placeholder={aiStreaming ? 'Hyper is responding...' : ''}
         />
       </div>
       <div ref={endRef} />

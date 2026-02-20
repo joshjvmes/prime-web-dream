@@ -1,9 +1,10 @@
-import { useState, useCallback, useEffect, useMemo } from 'react';
-import { AnimatePresence } from 'framer-motion';
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
 import { useWindowManager } from '@/hooks/useWindowManager';
 import { useNotifications } from '@/hooks/useNotifications';
 import { useIdleTimeout } from '@/hooks/useIdleTimeout';
 import { useVoiceControl } from '@/hooks/useVoiceControl';
+import { useSystemPulse } from '@/hooks/useSystemPulse';
 import { supabase } from '@/integrations/supabase/client';
 import type { User } from '@supabase/supabase-js';
 import LockScreen from '@/components/os/LockScreen';
@@ -99,6 +100,9 @@ export default function Desktop() {
   const [voiceEnabled, setVoiceEnabled] = useState(() => {
     try { return localStorage.getItem('prime-os-voice-enabled') === 'true'; } catch { return false; }
   });
+  const firstTerminalRef = useRef(true);
+  const latticeOpsRef = useRef(0);
+  const [latticeOps, setLatticeOps] = useState(0);
 
   const {
     windows, openWindow, closeWindow, minimizeWindow, focusWindow, moveWindow, resizeWindow,
@@ -108,8 +112,20 @@ export default function Desktop() {
 
   const visibleWindows = useMemo(() => windows.filter(w => w.workspace === activeWorkspace), [windows, activeWorkspace]);
   const activeApps = useMemo(() => visibleWindows.filter(w => !w.isMinimized).map(w => w.app), [visibleWindows]);
-  const { notifications, dismissNotification, events, toggleEvent, updateEventMessage, addEvent, removeEvent } = useNotifications(activeApps);
+  const { notifications, dismissNotification, pushNotification, events, toggleEvent, updateEventMessage, addEvent, removeEvent } = useNotifications(activeApps);
 
+  // System pulse - ambient life signs
+  useSystemPulse(pushNotification, activeApps, booted && !locked);
+
+  // Lattice ops counter
+  useEffect(() => {
+    if (!booted || locked) return;
+    const id = setInterval(() => {
+      latticeOpsRef.current += Math.floor(3 + Math.random() * 12);
+      setLatticeOps(latticeOpsRef.current);
+    }, 2000);
+    return () => clearInterval(id);
+  }, [booted, locked]);
   const handleUnlock = useCallback(() => setLocked(false), []);
   const handleLock = useCallback(() => setLocked(true), []);
 
@@ -248,7 +264,11 @@ export default function Desktop() {
 
   const renderApp = (app: AppType) => {
     switch (app) {
-      case 'terminal': return <TerminalApp onOpenApp={openWindow} onCloseApp={closeWindowByApp} />;
+      case 'terminal': {
+        const isFirst = firstTerminalRef.current;
+        if (isFirst) firstTerminalRef.current = false;
+        return <TerminalApp onOpenApp={openWindow} onCloseApp={closeWindowByApp} isFirstOpen={isFirst} />;
+      }
       case 'files': return <FilesApp />;
       case 'processes': return <ProcessesApp />;
       case 'sysinfo': return <SysInfoApp />;
@@ -303,16 +323,40 @@ export default function Desktop() {
         <>
           <DesktopContextMenu onOpenApp={openWindow} onTileAll={tileAllWindows} onCascade={cascadeWindows} onSearch={() => setSearchOpen(true)}>
             <div className="absolute inset-0 pb-10">
-              <div className="absolute top-4 left-[90px] select-none">
-                <h1 className="font-display text-sm tracking-[0.3em] text-primary/30">PRIME OS</h1>
-                <p className="font-mono text-[9px] text-muted-foreground/40 mt-0.5">
-                  Geometric Computing • T3-649 • WS {activeWorkspace}
-                </p>
+              <div className="absolute top-4 left-[90px] select-none flex items-center gap-2">
+                <div>
+                  <div className="flex items-center gap-1.5">
+                    <motion.div
+                      className="w-1.5 h-1.5 rounded-full bg-primary"
+                      animate={{ opacity: [0.3, 1, 0.3], scale: [0.8, 1.1, 0.8] }}
+                      transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
+                    />
+                    <h1 className="font-display text-sm tracking-[0.3em] text-primary/30">PRIME OS</h1>
+                  </div>
+                  <p className="font-mono text-[9px] text-muted-foreground/40 mt-0.5">
+                    Geometric Computing • T3-649 • WS {activeWorkspace}
+                  </p>
+                </div>
               </div>
 
               <div className="absolute top-4 right-4 text-right select-none">
-                <p className="font-mono text-[9px] text-muted-foreground/30">lattice: P¹¹</p>
-                <p className="font-mono text-[9px] text-muted-foreground/30">fold: 11D → 4D</p>
+                <motion.p
+                  className="font-mono text-[9px] text-muted-foreground/30"
+                  animate={{ opacity: [0.25, 0.4, 0.25] }}
+                  transition={{ duration: 5, repeat: Infinity, ease: 'easeInOut' }}
+                >
+                  lattice: P¹¹
+                </motion.p>
+                <motion.p
+                  className="font-mono text-[9px] text-muted-foreground/30"
+                  animate={{ opacity: [0.25, 0.4, 0.25] }}
+                  transition={{ duration: 5, repeat: Infinity, ease: 'easeInOut', delay: 1 }}
+                >
+                  fold: 11D → 4D
+                </motion.p>
+                <p className="font-mono text-[8px] text-muted-foreground/20 mt-0.5">
+                  ops: {latticeOps.toLocaleString()}
+                </p>
               </div>
 
               <DesktopWidgets />

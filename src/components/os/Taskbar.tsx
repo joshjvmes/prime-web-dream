@@ -223,6 +223,12 @@ export default function Taskbar({ windows, onOpenApp, onFocusWindow, notificatio
           </PopoverContent>
         </Popover>
 
+        {/* System pulse dot */}
+        <div className="relative group" title="Lattice pulse: nominal">
+          <span className="block w-2 h-2 rounded-full bg-primary/60 animate-pulse-glow" />
+          <span className="absolute inset-0 rounded-full bg-primary/20 animate-ping" style={{ animationDuration: '3s' }} />
+        </div>
+
         <div className="flex items-center gap-1.5 text-[10px] font-mono text-muted-foreground">
           <Zap size={10} className="text-prime-amber" />
           <span>COP 3.2</span>
