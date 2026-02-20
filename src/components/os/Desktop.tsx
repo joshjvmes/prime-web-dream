@@ -7,6 +7,7 @@ import { useVoiceControl } from '@/hooks/useVoiceControl';
 import { useSystemPulse } from '@/hooks/useSystemPulse';
 import { useGlobalShortcuts } from '@/hooks/useGlobalShortcuts';
 import { useCalendarReminders } from '@/hooks/useCalendarReminders';
+import { useDeviceClass } from '@/hooks/useDeviceClass';
 import { eventBus } from '@/hooks/useEventBus';
 import { supabase } from '@/integrations/supabase/client';
 import type { User } from '@supabase/supabase-js';
@@ -68,6 +69,8 @@ import MiniAppsApp from '@/components/os/MiniAppsApp';
 import AppForgeApp from '@/components/os/AppForgeApp';
 import DesktopContextMenu from '@/components/os/DesktopContextMenu';
 import NotificationSystem from '@/components/os/NotificationSystem';
+import MobileLauncher from '@/components/os/MobileLauncher';
+import DesktopIcons from '@/components/os/DesktopIcons';
 import { AppType } from '@/types/os';
 
 const APP_NAME_MAP: Record<string, { app: AppType; title: string }> = {
@@ -104,6 +107,9 @@ const APP_NAME_MAP: Record<string, { app: AppType; title: string }> = {
 };
 
 export default function Desktop() {
+  const deviceClass = useDeviceClass();
+  const isMobile = deviceClass === 'mobile';
+  const isTablet = deviceClass === 'tablet';
   const [locked, setLocked] = useState(true);
   const [booted, setBooted] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
@@ -413,11 +419,35 @@ export default function Desktop() {
     const animSpeed = displaySettings.animationSpeed === 'slow' ? '0.5' : displaySettings.animationSpeed === 'fast' ? '2' : '1';
 
     return (
-    <div className={`h-screen w-screen overflow-hidden bg-background prime-grid scan-lines relative ${fontSizeClass}`} style={{ cursor: cursorStyle, '--animation-speed': animSpeed } as React.CSSProperties}>
+    <div className={`h-screen w-screen overflow-hidden bg-background ${isMobile ? '' : 'prime-grid scan-lines'} relative ${fontSizeClass}`} style={{ cursor: cursorStyle, '--animation-speed': animSpeed } as React.CSSProperties}>
       {locked && <LockScreen onUnlock={handleUnlock} user={user} />}
       {!locked && <BootSequence onComplete={handleBootComplete} />}
 
-      {booted && !locked && (
+      {booted && !locked && isMobile && (
+        <>
+          <MobileLauncher
+            windows={windows}
+            onOpenApp={openWindow}
+            onCloseApp={closeWindow}
+            onFocusWindow={focusWindow}
+            renderApp={renderApp}
+            onSearch={() => setSearchOpen(true)}
+            notificationCount={notifications.length}
+          />
+          <NotificationSystem notifications={notifications} onDismiss={dismissNotification} />
+          <GlobalSearch
+            open={searchOpen}
+            onOpenChange={setSearchOpen}
+            windows={windows}
+            onOpenApp={openWindow}
+            onFocusWindow={focusWindow}
+            onTileAll={tileAllWindows}
+            onCascade={cascadeWindows}
+          />
+        </>
+      )}
+
+      {booted && !locked && !isMobile && (
         <>
           <DesktopContextMenu onOpenApp={openWindow} onTileAll={tileAllWindows} onCascade={cascadeWindows} onSearch={() => setSearchOpen(true)}>
             <div className="absolute inset-0 pb-10">
@@ -453,7 +483,8 @@ export default function Desktop() {
                 </p>
               </div>
 
-              <DesktopWidgets />
+              {!isTablet && <DesktopWidgets />}
+              <DesktopIcons onOpenApp={openWindow} deviceClass={deviceClass} />
 
               <AnimatePresence>
                 {visibleWindows.map(win => (
@@ -467,6 +498,7 @@ export default function Desktop() {
                     onMove={moveWindow}
                     onResize={resizeWindow}
                     onSnap={snapWindow}
+                    deviceClass={deviceClass}
                   >
                     {renderApp(win.app)}
                   </OSWindow>
@@ -494,6 +526,7 @@ export default function Desktop() {
             onToggleVoice={toggleVoice}
             onToggleClipboard={() => setClipboardOpen(prev => !prev)}
             isAdmin={isAdmin}
+            deviceClass={deviceClass}
           />
 
           <GlobalSearch

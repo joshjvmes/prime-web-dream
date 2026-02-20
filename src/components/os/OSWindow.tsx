@@ -2,6 +2,7 @@ import { useRef, useCallback, useState, useEffect, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { WindowState } from '@/types/os';
 import { X, Minus, Maximize2, Minimize2 } from 'lucide-react';
+import type { DeviceClass } from '@/hooks/useDeviceClass';
 
 function useOSSettings() {
   const [settings, setSettings] = useState(() => {
@@ -39,13 +40,15 @@ interface OSWindowProps {
   onResize: (id: string, width: number, height: number, x?: number, y?: number) => void;
   onSnap: (id: string, side: 'left' | 'right') => void;
   children: React.ReactNode;
+  deviceClass?: DeviceClass;
 }
 
 const MIN_WIDTH = 300;
 const MIN_HEIGHT = 200;
 const SNAP_THRESHOLD = 12;
 
-export default function OSWindow({ window: win, onClose, onMinimize, onMaximize, onFocus, onMove, onResize, onSnap, children }: OSWindowProps) {
+export default function OSWindow({ window: win, onClose, onMinimize, onMaximize, onFocus, onMove, onResize, onSnap, children, deviceClass = 'desktop' }: OSWindowProps) {
+  const isTablet = deviceClass === 'tablet';
   const dragRef = useRef<{ startX: number; startY: number; winX: number; winY: number } | null>(null);
   const osSettings = useOSSettings();
   const windowOpacity = osSettings.windowOpacity ?? 0.95;

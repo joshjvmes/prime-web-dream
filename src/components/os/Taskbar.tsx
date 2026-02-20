@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { AppType, WindowState } from '@/types/os';
+import type { DeviceClass } from '@/hooks/useDeviceClass';
 import { OSNotification } from '@/hooks/useNotifications';
 import { Terminal, FolderTree, Activity, Cpu, Brain, Network, Code, HardDrive, Database, Zap, Settings, ChevronUp, Bell, X, Monitor, FileText, MessageSquare, Shield, Globe, Server, LayoutList, Image, Search, Link2, Orbit, CalendarDays, Moon, BookOpen, Table, Workflow, Paintbrush, Smartphone, Map, Package, Music, Dices, TrendingUp, Radio, Vault, Video, Mail, Users, Info, Bot, Cog, CalendarCheck, Wifi, Lock, Gamepad2, Clipboard, ShieldCheck, PenLine, Wallet, Blocks, Store } from 'lucide-react';
 import { startOfMonth, endOfMonth, eachDayOfInterval, getDay, isToday, format } from 'date-fns';
@@ -23,6 +24,7 @@ interface TaskbarProps {
   onToggleVoice?: () => void;
   onToggleClipboard?: () => void;
   isAdmin?: boolean;
+  deviceClass?: DeviceClass;
 }
 
 const allApps: { app: AppType; title: string; icon: React.ReactNode; label: string }[] = [
@@ -75,7 +77,8 @@ const allApps: { app: AppType; title: string; icon: React.ReactNode; label: stri
   { app: 'settings', title: 'Settings', icon: <Settings size={18} />, label: 'Settings' },
 ];
 
-export default function Taskbar({ windows, onOpenApp, onFocusWindow, notifications = [], onDismissNotification, onSearch, onOpenAbout, onLock, activeWorkspace, onSwitchWorkspace, windowCountsByWorkspace, voiceState, onToggleVoice, onToggleClipboard, isAdmin }: TaskbarProps) {
+export default function Taskbar({ windows, onOpenApp, onFocusWindow, notifications = [], onDismissNotification, onSearch, onOpenAbout, onLock, activeWorkspace, onSwitchWorkspace, windowCountsByWorkspace, voiceState, onToggleVoice, onToggleClipboard, isAdmin, deviceClass = 'desktop' }: TaskbarProps) {
+  const isTablet = deviceClass === 'tablet';
   const [menuOpen, setMenuOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
 
@@ -91,7 +94,7 @@ export default function Taskbar({ windows, onOpenApp, onFocusWindow, notificatio
   const wsWindows = windows.filter(w => w.workspace === activeWorkspace);
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 z-[100] flex items-center h-10 px-3 bg-card/90 backdrop-blur-md border-t border-border">
+    <div className={`fixed bottom-0 left-0 right-0 z-[100] flex items-center ${isTablet ? 'h-12' : 'h-10'} px-3 bg-card/90 backdrop-blur-md border-t border-border`}>
       {/* PRIME Menu Button */}
       <Popover open={menuOpen} onOpenChange={setMenuOpen}>
         <PopoverTrigger asChild>
