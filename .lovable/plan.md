@@ -1,201 +1,279 @@
 
-
-# Deep Canvas Layers + Advanced Spreadsheet + AI Integration
+# ClawBot Framework: External Agent API + In-OS Bot Builder
 
 ## Overview
 
-Upgrade PrimeCanvas with a proper layer system (add/remove/reorder layers, per-layer opacity and visibility, blend modes) and PrimeGrid with advanced features (cell formatting, charts, named ranges, multi-select). Then wire both apps into Hyper AI and PrimeAgent so the AI can programmatically create drawings and populate spreadsheets.
+Build a complete bot/agent framework for PRIME OS that enables:
+1. **External AI agents** (GPT agents, AutoGPT, OpenClaws, etc.) to connect via a REST API and MCP server
+2. **Regular users** to create their own automated bots using natural language descriptions
+3. **Configurable per-bot permissions** with audit logging and rate limiting
 
 ---
 
-## 1. PrimeCanvas -- Layer System
+## Architecture
 
-### New Layer Architecture
+The system has three layers:
 
-Replace the single-canvas approach with a multi-canvas stack where each layer is its own off-screen canvas composited onto a display canvas.
-
-**Layer data model:**
 ```text
-Layer {
-  id: string
-  name: string
-  opacity: number (0-1)
-  visible: boolean
-  blendMode: string (normal, multiply, screen, overlay, etc.)
-  canvas: OffscreenCanvas (runtime only)
-}
++---------------------------+
+|  External Agents (API)    |  <-- REST API + MCP Server
++---------------------------+
+|  Bot Runtime Engine       |  <-- Shared tool execution layer
++---------------------------+
+|  User Bot Builder (UI)    |  <-- Natural language bot creation
++---------------------------+
 ```
 
-**New UI -- Layers Panel** (right side, replaces Gallery when open):
-- Layer list with drag-to-reorder
-- Per-layer visibility toggle (eye icon)
-- Per-layer opacity slider
-- Blend mode dropdown per layer
-- Add / Delete / Duplicate / Merge Down buttons
-- Active layer highlight
-- Layer thumbnail preview (miniature render updated on draw)
-
-**Drawing changes:**
-- All drawing operations target the active layer's offscreen canvas
-- A composite function renders all visible layers (bottom-to-top) onto the main display canvas after every stroke
-- Undo/redo stores per-layer ImageData snapshots
-- Eraser erases on the active layer only (with transparency, not background color)
-- Clear clears active layer only (with option for "clear all layers")
-
-**New tools:**
-- Fill bucket (flood fill on active layer)
-- Color picker / eyedropper (sample from composite view)
-- Text tool (basic text placement on active layer)
-- Selection tool (rectangular select, move selected region)
-
-**Transparency support:**
-- Canvas background becomes a checkerboard pattern (standard transparency indicator)
-- Each layer initialized with `clearRect` (transparent) instead of solid fill
-- Export PNG flattens all layers; export with transparency option available
-
-**Gallery integration:**
-- Save now stores layer data as JSON metadata alongside the flattened PNG
-- Load restores layers when metadata exists, otherwise loads as single layer
+All bots (external and internal) use the same tool execution layer that already powers Hyper AI, ensuring consistent behavior and security.
 
 ---
 
-## 2. PrimeGrid -- Advanced Spreadsheet
+## 1. Database: Bot Registry + API Keys
 
-### New Features
+### New Tables
 
-**Cell formatting:**
-- Bold, italic, text color, background color per cell
-- Number formatting (currency, percentage, decimal places)
-- Cell data model expands to store both value and format metadata
-- Format toolbar row below formula bar
+**bot_registry** -- stores bot definitions (both external API bots and user-created bots)
+- id (uuid, PK)
+- user_id (uuid, owner)
+- name (text)
+- description (text)
+- bot_type ('external' | 'autonomous' | 'scheduled')
+- permissions (jsonb) -- granular tool access list
+- system_prompt (text) -- custom personality/instructions for autonomous bots
+- trigger_config (jsonb) -- for event-triggered bots: which events, conditions
+- schedule (text) -- cron expression for scheduled bots (null if event-driven)
+- is_active (boolean, default true)
+- rate_limit (integer, default 60) -- max calls per hour
+- created_at, updated_at
 
-**Charts:**
-- Select a range, click "Chart" to insert a mini inline chart
-- Chart types: bar, line, pie (using recharts, already installed)
-- Charts stored as special objects in the workbook
-- Charts panel on the side to manage/edit charts
+**bot_api_keys** -- API keys for external agent access
+- id (uuid, PK)
+- bot_id (uuid, FK to bot_registry)
+- user_id (uuid, owner)
+- key_hash (text) -- hashed API key (never store plaintext)
+- key_prefix (text) -- first 8 chars for identification (e.g., "clw_xxxx")
+- last_used_at (timestamp)
+- expires_at (timestamp, nullable)
+- is_revoked (boolean, default false)
+- created_at
 
-**Named ranges:**
-- Define named ranges (e.g., "Revenue" = B2:B10)
-- Use named ranges in formulas: `=SUM(Revenue)`
-- Named range manager in a dropdown
+**bot_audit_log** -- every action a bot takes
+- id (uuid, PK)
+- bot_id (uuid, FK)
+- user_id (uuid, owner)
+- tool_name (text) -- which tool was called
+- args (jsonb) -- sanitized arguments
+- result_summary (text)
+- status ('success' | 'error' | 'denied')
+- created_at
 
-**New formulas:**
-- `CONCAT(A1, " ", B1)` -- string concatenation
-- `ROUND(val, decimals)` -- rounding
-- `ABS(val)` -- absolute value
-- `VLOOKUP(search, range, col_idx)` -- vertical lookup
-- `SPARKLINE(range)` -- inline mini chart in cell
+RLS policies:
+- Users can only CRUD their own bots, keys, and audit logs
+- Audit logs are insert-only for the edge function (via service role)
 
-**Multi-cell selection:**
-- Click and drag to select a range
-- Status bar shows SUM, AVG, COUNT of selected range
-- Copy/paste selected range
+### Migration
 
-**Freeze rows/columns:**
-- Freeze header row (row 1) option
-- Frozen rows stay visible when scrolling
-
----
-
-## 3. AI Integration -- Canvas Tools
-
-### New Hyper AI Tools
-
-**`draw_on_canvas`**
-- Parameters: `instructions` (string describing what to draw), `clear_first` (boolean)
-- Execution: Client-side tool. Returns instructions to the frontend, which uses Canvas 2D API to programmatically draw shapes, patterns, text based on parsed instructions
-- The AI generates a series of drawing commands (JSON): lines, rects, circles, arcs, text, fills with colors/positions/sizes
-- Frontend parses and executes on active canvas layer
-
-**`generate_canvas_art`**
-- Parameters: `style` (geometric, abstract, fractal, pattern, circuit), `palette` (warm, cool, neon, mono, prime)
-- Execution: Client-side procedural generation -- the frontend has preset algorithms for each style that create complex generative art
-- Styles: geometric grids, Fibonacci spirals, Voronoi patterns, circuit board traces, fractal trees
-
-### Canvas EventBus Integration
-
-- `canvas.draw` event: PrimeCanvasApp listens and executes drawing commands
-- `canvas.clear` event: clears active layer
-- `canvas.add-layer` event: adds a new layer
-- PrimeAgent "Generate Art" quick command added
+Single migration creating all three tables with RLS enabled, realtime on bot_audit_log for live monitoring.
 
 ---
 
-## 4. AI Integration -- Spreadsheet Tools
+## 2. Edge Function: `bot-api`
 
-### New Hyper AI Tools
+A new edge function that serves as the unified API endpoint for all bot interactions.
 
-**`create_spreadsheet`**
-- Parameters: `name` (string), `headers` (string[]), `rows` (string[][])
-- Execution: Client-side tool. Creates a new sheet in the active workbook and populates it with data
-- EventBus event: `spreadsheet.create`
+### Authentication Flow
 
-**`update_cells`**
-- Parameters: `sheet` (string), `cells` (Record of cell key to value, e.g. {"A1": "Revenue", "B1": "=SUM(B2:B10)"})
-- Execution: Client-side tool. Updates specific cells in a named sheet
-- EventBus event: `spreadsheet.update`
+Two auth modes:
+1. **API Key** -- External agents pass `X-Bot-Key: clw_xxxxxxxxxx` header. The function hashes the key, looks up the bot, verifies it's active and not expired, checks rate limits.
+2. **User JWT** -- Regular users (or their in-OS bots) use their normal auth token + a `X-Bot-Id` header to execute as a specific bot.
 
-**`read_spreadsheet`**
-- Parameters: `sheet` (string, optional)
-- Execution: Server-side -- reads from cloud storage (`useCloudStorage` key)
-- Returns formatted table of current spreadsheet data
+### Endpoints (via query params)
 
-**`add_chart`**
-- Parameters: `sheet` (string), `range` (string like "A1:B5"), `chart_type` ("bar"|"line"|"pie"), `title` (string)
-- Execution: Client-side -- inserts a chart object
-- EventBus event: `spreadsheet.chart`
+| Action | Method | Description |
+|--------|--------|-------------|
+| `tools` | GET | List available tools for this bot (filtered by permissions) |
+| `execute` | POST | Execute a single tool by name with args |
+| `chat` | POST | Send a message to the bot's AI (uses the bot's custom system prompt) |
+| `status` | GET | Bot status, rate limit remaining, last activity |
 
-### Spreadsheet EventBus Integration
+### Tool Execution
 
-- `spreadsheet.create` event: PrimeGridApp listens, creates sheet with data
-- `spreadsheet.update` event: updates cells
-- `spreadsheet.chart` event: adds chart
-- PrimeAgent "Create Report" quick command added
+Reuses the exact same tool execution functions from `hyper-chat` (extracted into shared logic):
+- Financial tools (check_balance, transfer_tokens, buy/sell shares, place bets)
+- Extended tools (market data, portfolio, booking, messaging, audio)
+- Client-side tools return a payload that the frontend handles via EventBus
+- Memory tools scoped to the bot owner's user_id
+
+### Security
+
+- Every call checks the bot's `permissions` JSON against the requested tool
+- Rate limiting: tracks calls per hour in memory, returns 429 when exceeded
+- Audit logging: every tool execution is logged to `bot_audit_log`
+- API keys are hashed with SHA-256 before storage
+- Bots cannot escalate privileges -- they can only access tools their owner has access to
+
+### MCP Server Mode
+
+The same edge function also serves as an MCP (Model Context Protocol) server when called with `?mode=mcp`. This allows tools like Claude Desktop, Cursor, or any MCP-compatible client to connect directly.
+
+Uses `mcp-lite` library to expose all permitted tools as MCP tool definitions.
 
 ---
 
-## 5. Fix Existing Bug
+## 3. Edge Function: `bot-runner`
 
-The `hyper-chat/index.ts` edge function references `EXTENDED_TOOLS` and `executeExtendedTool` which are never defined. These need to be added with implementations for the 10 extended tools (market data, portfolio, booking, messaging, audio) plus the new canvas/spreadsheet tools.
+A lightweight function that executes autonomous/scheduled bots:
+
+- Called by the frontend when an EventBus event matches a bot's trigger config
+- Or called on a timer for scheduled bots
+- Sends the trigger context to the bot's AI (using the bot's custom system prompt)
+- AI decides which tools to call, function executes them
+- Results logged to audit log and optionally pushed as notifications
+
+---
+
+## 4. Frontend: BotLabApp (New App)
+
+A new OS application called **BotLab** where users create and manage bots.
+
+### Tabs
+
+**My Bots** -- List of user's bots with status toggles, edit, delete
+**Create Bot** -- Natural language bot creation wizard
+**API Keys** -- Manage API keys for external access
+**Activity** -- Live audit log feed (realtime from bot_audit_log)
+
+### Create Bot Flow (Natural Language)
+
+1. User describes what the bot should do: "Monitor AAPL stock price and message me when it drops below $150"
+2. System sends description to Hyper AI which returns:
+   - Bot name and description
+   - Required permissions (market data, messaging)
+   - Trigger config (schedule: every 5 min, or event: market.checked)
+   - System prompt for the bot's AI personality
+3. User reviews and approves the generated config
+4. Bot is saved to bot_registry and activated
+
+### Permission Editor
+
+Visual toggle grid showing all available tools:
+- Market Data (get_market_data, get_stock_chart)
+- Portfolio (check_portfolio, trade_stock)
+- Booking (create_booking, list_bookings, cancel_booking)
+- Messaging (send_message, list_conversations)
+- Financial (check_balance, transfer_tokens, buy_shares, sell_shares)
+- Audio (control_audio)
+- Canvas (draw_on_canvas, generate_canvas_art)
+- Spreadsheet (create_spreadsheet, update_cells, add_chart)
+- Social (post_to_social, send_email)
+- Memory (save_memory, recall_memories)
+
+### API Key Management
+
+- Generate new API key (shown once, then only prefix visible)
+- Copy endpoint URL for external agents
+- Revoke keys
+- View last used timestamp
+
+### Activity Monitor
+
+Real-time table showing:
+- Timestamp, bot name, tool called, status, result summary
+- Filter by bot, tool, status
+- Export audit log
+
+---
+
+## 5. OS Integration
+
+### New App Registration
+
+Add `botlab` to the AppType union and register BotLabApp in Desktop.tsx with icon and title.
+
+### EventBus Bot Triggers
+
+Modify the EventBus to check bot_registry for bots with matching trigger_config on every event emission. When a match is found, call the `bot-runner` edge function.
+
+### PrimeAgent Integration
+
+Add "My Bots" and "Create Bot" quick commands to PrimeAgent.
+
+### Hyper AI Integration
+
+Add a `manage_bot` tool to hyper-chat so users can say "Create a bot that monitors my portfolio every hour" directly in Hyper.
 
 ---
 
 ## Technical Details
 
-### EventBus New Event Types
+### Files to Create
 
-```text
-'canvas.draw', 'canvas.clear', 'canvas.add-layer',
-'spreadsheet.create', 'spreadsheet.update', 'spreadsheet.chart'
-```
+| File | Purpose |
+|------|---------|
+| `supabase/functions/bot-api/index.ts` | Unified bot API endpoint (REST + MCP) |
+| `supabase/functions/bot-runner/index.ts` | Autonomous bot execution engine |
+| `src/components/os/BotLabApp.tsx` | Bot management UI |
 
 ### Files to Modify
 
 | File | Change |
 |------|--------|
-| `src/components/os/PrimeCanvasApp.tsx` | Full rewrite: multi-layer system, new tools, transparency, EventBus listener |
-| `src/components/os/PrimeGridApp.tsx` | Cell formatting, charts, named ranges, multi-select, freeze rows, EventBus listener |
-| `supabase/functions/hyper-chat/index.ts` | Fix missing `EXTENDED_TOOLS`/`executeExtendedTool`, add 4 new tools (draw_on_canvas, generate_canvas_art, create_spreadsheet, update_cells, read_spreadsheet, add_chart) |
-| `src/components/os/HypersphereApp.tsx` | Handle new canvas/spreadsheet tool responses |
-| `src/components/os/PrimeAgentApp.tsx` | Add "Generate Art" and "Create Report" quick commands, expand keyword parser |
-| `src/hooks/useEventBus.ts` | Add new event types |
+| `src/types/os.ts` | Add 'botlab' to AppType |
+| `src/components/os/Desktop.tsx` | Register BotLabApp |
+| `src/components/os/DesktopIcons.tsx` | Add BotLab icon |
+| `src/hooks/useEventBus.ts` | Add bot trigger checking on emit |
+| `src/components/os/PrimeAgentApp.tsx` | Add bot-related quick commands |
+| `supabase/functions/hyper-chat/index.ts` | Add manage_bot tool |
+| `supabase/config.toml` | Register bot-api and bot-runner functions |
 
-### New Tool Definitions for hyper-chat
+### Database Migration
 
-**draw_on_canvas**: `{ instructions: string, clear_first?: boolean }` -- client-side, returns drawing command JSON
-**generate_canvas_art**: `{ style: string, palette?: string }` -- client-side, triggers procedural generation
-**create_spreadsheet**: `{ name: string, headers: string[], rows: string[][] }` -- client-side
-**update_cells**: `{ sheet: string, cells: Record<string, string> }` -- client-side
-**read_spreadsheet**: `{ sheet?: string }` -- server-side (reads from user_data cloud storage)
-**add_chart**: `{ sheet: string, range: string, chart_type: string, title?: string }` -- client-side
+```text
+- bot_registry table with RLS (users CRUD own bots)
+- bot_api_keys table with RLS (users CRUD own keys)  
+- bot_audit_log table with RLS (users read own logs)
+- Enable realtime on bot_audit_log
+```
+
+### API Key Format
+
+Keys follow the format: `clw_` + 32 random hex characters (e.g., `clw_a1b2c3d4e5f6...`)
+
+Stored as SHA-256 hash. Only the prefix `clw_a1b2c3d4` is stored in plaintext for identification.
+
+### Rate Limiting Strategy
+
+In-memory Map in the edge function keyed by bot_id, tracking call count per rolling hour window. Falls back to database count if memory is cold.
+
+### External Agent Connection Example
+
+```text
+POST /functions/v1/bot-api?action=execute
+Headers:
+  X-Bot-Key: clw_a1b2c3d4e5f6...
+  Content-Type: application/json
+Body:
+  { "tool": "get_market_data", "args": { "symbols": "AAPL,MSFT" } }
+
+Response:
+  { "status": "success", "result": { "tickers": [...] } }
+```
+
+### MCP Connection Example
+
+```text
+MCP endpoint: https://<project>.supabase.co/functions/v1/bot-api?mode=mcp
+Headers:
+  X-Bot-Key: clw_a1b2c3d4e5f6...
+```
 
 ### Execution Order
 
-1. Update `useEventBus.ts` with new event types
-2. Rewrite `PrimeCanvasApp.tsx` with layer system + EventBus listeners
-3. Upgrade `PrimeGridApp.tsx` with formatting, charts, multi-select + EventBus listeners
-4. Fix and extend `hyper-chat/index.ts` (add missing `EXTENDED_TOOLS`/`executeExtendedTool`, add 6 new tools)
-5. Update `HypersphereApp.tsx` to handle new tool responses
-6. Update `PrimeAgentApp.tsx` with new commands
-
+1. Database migration (bot_registry, bot_api_keys, bot_audit_log)
+2. Create bot-api edge function
+3. Create bot-runner edge function
+4. Create BotLabApp frontend
+5. Register in OS (types, Desktop, icons)
+6. Wire EventBus bot triggers
+7. Add Hyper AI manage_bot tool
+8. Update PrimeAgent quick commands
