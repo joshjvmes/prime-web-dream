@@ -37,6 +37,8 @@ const QUICK_COMMANDS = [
   { label: 'Launch Game', icon: <Rocket size={12} />, instruction: 'Launch a random arcade game' },
   { label: 'Generate Art', icon: <Rocket size={12} />, instruction: 'Generate some geometric art on the canvas' },
   { label: 'Create Report', icon: <Rocket size={12} />, instruction: 'Create a spreadsheet report with system data' },
+  { label: 'My Bots', icon: <Bot size={12} />, instruction: 'Open BotLab to manage my bots' },
+  { label: 'Create Bot', icon: <Bot size={12} />, instruction: 'Create a new automated bot' },
   { label: 'Create Mini-App', icon: <Rocket size={12} />, instruction: 'Create a new mini-app' },
   { label: 'Deploy Build', icon: <Rocket size={12} />, instruction: 'Deploy the latest build to production' },
 ];
@@ -49,6 +51,7 @@ const APP_TITLES: Record<string, string> = {
   journal: 'PrimeJournal', browser: 'PrimeBrowser', calendar: 'Prime Calendar',
   signals: 'PrimeSignals', vault: 'PrimeVault', canvas: 'PrimeCanvas',
   booking: 'PrimeBooking', comm: 'PrimeComm', audio: 'PrimeAudio',
+  botlab: 'BotLab',
 };
 
 function parseInstruction(input: string): AgentAction[] {
@@ -129,6 +132,11 @@ function parseInstruction(input: string): AgentAction[] {
     actions.push(
       { id: id(), type: 'open-app', label: 'Open PrimeGrid', payload: { app: 'spreadsheet', title: 'PrimeGrid' }, status: 'pending' },
       { id: id(), type: 'report', label: 'Spreadsheet ready — ask Hyper to create reports!', status: 'pending' },
+    );
+  } else if (lower.includes('bot') || lower.includes('clawbot') || lower.includes('automat')) {
+    actions.push(
+      { id: id(), type: 'open-app', label: 'Open BotLab', payload: { app: 'botlab', title: 'BotLab' }, status: 'pending' },
+      { id: id(), type: 'report', label: 'BotLab ready — create and manage your bots!', status: 'pending' },
     );
   } else if (lower.includes('mini-app') || lower.includes('miniapp') || lower.includes('create app')) {
     actions.push(

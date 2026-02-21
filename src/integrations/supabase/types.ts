@@ -245,6 +245,139 @@ export type Database = {
         }
         Relationships: []
       }
+      bot_api_keys: {
+        Row: {
+          bot_id: string
+          created_at: string
+          expires_at: string | null
+          id: string
+          is_revoked: boolean
+          key_hash: string
+          key_prefix: string
+          last_used_at: string | null
+          user_id: string
+        }
+        Insert: {
+          bot_id: string
+          created_at?: string
+          expires_at?: string | null
+          id?: string
+          is_revoked?: boolean
+          key_hash: string
+          key_prefix: string
+          last_used_at?: string | null
+          user_id: string
+        }
+        Update: {
+          bot_id?: string
+          created_at?: string
+          expires_at?: string | null
+          id?: string
+          is_revoked?: boolean
+          key_hash?: string
+          key_prefix?: string
+          last_used_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bot_api_keys_bot_id_fkey"
+            columns: ["bot_id"]
+            isOneToOne: false
+            referencedRelation: "bot_registry"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      bot_audit_log: {
+        Row: {
+          args: Json
+          bot_id: string
+          created_at: string
+          id: string
+          result_summary: string | null
+          status: string
+          tool_name: string
+          user_id: string
+        }
+        Insert: {
+          args?: Json
+          bot_id: string
+          created_at?: string
+          id?: string
+          result_summary?: string | null
+          status?: string
+          tool_name: string
+          user_id: string
+        }
+        Update: {
+          args?: Json
+          bot_id?: string
+          created_at?: string
+          id?: string
+          result_summary?: string | null
+          status?: string
+          tool_name?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bot_audit_log_bot_id_fkey"
+            columns: ["bot_id"]
+            isOneToOne: false
+            referencedRelation: "bot_registry"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      bot_registry: {
+        Row: {
+          bot_type: string
+          created_at: string
+          description: string
+          id: string
+          is_active: boolean
+          name: string
+          permissions: Json
+          rate_limit: number
+          schedule: string | null
+          system_prompt: string
+          trigger_config: Json | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          bot_type?: string
+          created_at?: string
+          description?: string
+          id?: string
+          is_active?: boolean
+          name: string
+          permissions?: Json
+          rate_limit?: number
+          schedule?: string | null
+          system_prompt?: string
+          trigger_config?: Json | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          bot_type?: string
+          created_at?: string
+          description?: string
+          id?: string
+          is_active?: boolean
+          name?: string
+          permissions?: Json
+          rate_limit?: number
+          schedule?: string | null
+          system_prompt?: string
+          trigger_config?: Json | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       calendar_events: {
         Row: {
           color: string

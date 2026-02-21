@@ -67,6 +67,7 @@ import PrimeJournalApp from '@/components/os/PrimeJournalApp';
 import PrimeWalletApp from '@/components/os/PrimeWalletApp';
 import MiniAppsApp from '@/components/os/MiniAppsApp';
 import AppForgeApp from '@/components/os/AppForgeApp';
+import BotLabApp from '@/components/os/BotLabApp';
 import DesktopContextMenu from '@/components/os/DesktopContextMenu';
 import NotificationSystem from '@/components/os/NotificationSystem';
 import MobileLauncher from '@/components/os/MobileLauncher';
@@ -104,6 +105,8 @@ const APP_NAME_MAP: Record<string, { app: AppType; title: string }> = {
   'wallet': { app: 'wallet', title: 'PrimeWallet' },
   'miniapps': { app: 'miniapps', title: 'Mini Apps' },
   'forge': { app: 'forge', title: 'App Forge' },
+  'botlab': { app: 'botlab', title: 'BotLab' },
+  'bots': { app: 'botlab', title: 'BotLab' },
 };
 
 export default function Desktop() {
@@ -410,6 +413,7 @@ export default function Desktop() {
       case 'wallet': return <PrimeWalletApp />;
       case 'miniapps': return <MiniAppsApp />;
       case 'forge': return <AppForgeApp />;
+      case 'botlab': return <BotLabApp />;
       default: return <div className="p-4 text-muted-foreground font-mono text-xs">App not found</div>;
     }
   };
