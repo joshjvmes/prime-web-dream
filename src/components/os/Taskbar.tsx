@@ -17,6 +17,7 @@ interface TaskbarProps {
   onSearch?: () => void;
   onOpenAbout?: () => void;
   onLock?: () => void;
+  onCreateBot?: () => void;
   activeWorkspace: number;
   onSwitchWorkspace: (ws: number) => void;
   windowCountsByWorkspace: number[];
@@ -77,7 +78,7 @@ const allApps: { app: AppType; title: string; icon: React.ReactNode; label: stri
   { app: 'settings', title: 'Settings', icon: <Settings size={18} />, label: 'Settings' },
 ];
 
-export default function Taskbar({ windows, onOpenApp, onFocusWindow, notifications = [], onDismissNotification, onSearch, onOpenAbout, onLock, activeWorkspace, onSwitchWorkspace, windowCountsByWorkspace, voiceState, onToggleVoice, onToggleClipboard, isAdmin, deviceClass = 'desktop' }: TaskbarProps) {
+export default function Taskbar({ windows, onOpenApp, onFocusWindow, notifications = [], onDismissNotification, onSearch, onOpenAbout, onLock, onCreateBot, activeWorkspace, onSwitchWorkspace, windowCountsByWorkspace, voiceState, onToggleVoice, onToggleClipboard, isAdmin, deviceClass = 'desktop' }: TaskbarProps) {
   const isTablet = deviceClass === 'tablet';
   const [menuOpen, setMenuOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
@@ -185,6 +186,13 @@ export default function Taskbar({ windows, onOpenApp, onFocusWindow, notificatio
         {onToggleClipboard && (
           <button onClick={onToggleClipboard} aria-label="Clipboard (Ctrl+Shift+V)" className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors" title="Clipboard (Ctrl+Shift+V)">
             <Clipboard size={13} />
+          </button>
+        )}
+
+        {/* Bot Creator shortcut */}
+        {onCreateBot && (
+          <button onClick={onCreateBot} aria-label="Create Bot" className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors" title="Create Bot">
+            <Bot size={13} />
           </button>
         )}
 

@@ -69,6 +69,7 @@ import MiniAppsApp from '@/components/os/MiniAppsApp';
 import AppForgeApp from '@/components/os/AppForgeApp';
 import BotLabApp from '@/components/os/BotLabApp';
 import DesktopContextMenu from '@/components/os/DesktopContextMenu';
+import BotCreatorPrompt from '@/components/os/BotCreatorPrompt';
 import NotificationSystem from '@/components/os/NotificationSystem';
 import MobileLauncher from '@/components/os/MobileLauncher';
 import DesktopIcons from '@/components/os/DesktopIcons';
@@ -119,6 +120,8 @@ export default function Desktop() {
   const [showTour, setShowTour] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
   const [clipboardOpen, setClipboardOpen] = useState(false);
+  const [botCreatorOpen, setBotCreatorOpen] = useState(false);
+  const [botCreatorDesc, setBotCreatorDesc] = useState('');
   const [user, setUser] = useState<User | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [voiceEnabled, setVoiceEnabled] = useState(() => {
@@ -212,7 +215,7 @@ export default function Desktop() {
     prevWindowsRef.current = currentApps;
   }, [windows]);
 
-  // CloudHooks action listeners
+  // CloudHooks action listeners + Bot Creator event
   useEffect(() => {
     const handleNotif = (e: Event) => {
       const detail = (e as CustomEvent).detail;
@@ -224,14 +227,21 @@ export default function Desktop() {
       if (match) openWindow(match.app, match.title);
     };
     const handleLockEvt = () => setLocked(true);
+    const handleCreateBot = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      setBotCreatorDesc(detail?.description || '');
+      setBotCreatorOpen(true);
+    };
 
     window.addEventListener('cloudhook-notification', handleNotif);
     window.addEventListener('cloudhook-open-app', handleOpenApp);
     window.addEventListener('cloudhook-lock', handleLockEvt);
+    window.addEventListener('prime-create-bot', handleCreateBot);
     return () => {
       window.removeEventListener('cloudhook-notification', handleNotif);
       window.removeEventListener('cloudhook-open-app', handleOpenApp);
       window.removeEventListener('cloudhook-lock', handleLockEvt);
+      window.removeEventListener('prime-create-bot', handleCreateBot);
     };
   }, [pushNotification, openWindow]);
 
@@ -453,7 +463,7 @@ export default function Desktop() {
 
       {booted && !locked && !isMobile && (
         <>
-          <DesktopContextMenu onOpenApp={openWindow} onTileAll={tileAllWindows} onCascade={cascadeWindows} onSearch={() => setSearchOpen(true)}>
+          <DesktopContextMenu onOpenApp={openWindow} onTileAll={tileAllWindows} onCascade={cascadeWindows} onSearch={() => setSearchOpen(true)} onCreateBot={() => { setBotCreatorDesc(''); setBotCreatorOpen(true); }}>
             <div className="absolute inset-0 pb-10">
               <div className="absolute top-4 left-[90px] select-none flex items-center gap-2">
                 <div>
@@ -523,6 +533,7 @@ export default function Desktop() {
             onSearch={() => setSearchOpen(true)}
             onOpenAbout={() => setAboutOpen(true)}
             onLock={handleLock}
+            onCreateBot={() => { setBotCreatorDesc(''); setBotCreatorOpen(true); }}
             activeWorkspace={activeWorkspace}
             onSwitchWorkspace={switchWorkspace}
             windowCountsByWorkspace={getWindowCountsByWorkspace()}
@@ -541,6 +552,14 @@ export default function Desktop() {
             onFocusWindow={focusWindow}
             onTileAll={tileAllWindows}
             onCascade={cascadeWindows}
+            onCreateBot={() => { setBotCreatorDesc(''); setBotCreatorOpen(true); }}
+          />
+
+          <BotCreatorPrompt
+            open={botCreatorOpen}
+            onOpenChange={setBotCreatorOpen}
+            initialDescription={botCreatorDesc}
+            onOpenBotLab={() => openWindow('botlab', 'BotLab')}
           />
 
           {showTour && (

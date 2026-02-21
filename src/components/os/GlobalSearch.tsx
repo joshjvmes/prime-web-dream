@@ -66,9 +66,10 @@ interface GlobalSearchProps {
   onFocusWindow: (id: string) => void;
   onTileAll: () => void;
   onCascade: () => void;
+  onCreateBot?: () => void;
 }
 
-export default function GlobalSearch({ open, onOpenChange, windows, onOpenApp, onFocusWindow, onTileAll, onCascade }: GlobalSearchProps) {
+export default function GlobalSearch({ open, onOpenChange, windows, onOpenApp, onFocusWindow, onTileAll, onCascade, onCreateBot }: GlobalSearchProps) {
   const close = useCallback(() => onOpenChange(false), [onOpenChange]);
 
   const handleSelectApp = useCallback((app: AppType, title: string) => {
@@ -125,6 +126,12 @@ export default function GlobalSearch({ open, onOpenChange, windows, onOpenApp, o
         <CommandSeparator />
 
         <CommandGroup heading="Quick Actions">
+          {onCreateBot && (
+            <CommandItem onSelect={() => { onCreateBot(); close(); }} className="gap-2 font-mono text-xs">
+              <Bot size={16} />
+              <span>Create Bot...</span>
+            </CommandItem>
+          )}
           <CommandItem onSelect={() => { onTileAll(); close(); }} className="gap-2 font-mono text-xs">
             <LayoutGrid size={16} />
             <span>Tile All Windows</span>

@@ -133,6 +133,16 @@ function parseInstruction(input: string): AgentAction[] {
       { id: id(), type: 'open-app', label: 'Open PrimeGrid', payload: { app: 'spreadsheet', title: 'PrimeGrid' }, status: 'pending' },
       { id: id(), type: 'report', label: 'Spreadsheet ready — ask Hyper to create reports!', status: 'pending' },
     );
+  } else if (lower.includes('create a bot') || lower.includes('create bot') || lower.includes('new bot')) {
+    // Extract the description after "create a bot that" or similar
+    const descMatch = input.match(/(?:create\s+(?:a\s+)?bot\s+(?:that\s+)?|new\s+bot\s+(?:that\s+)?)(.*)/i);
+    const botDesc = descMatch?.[1]?.trim() || '';
+    actions.push(
+      { id: id(), type: 'run-command', label: 'Opening Bot Creator...', status: 'pending' },
+      { id: id(), type: 'report', label: botDesc ? `Pre-filling: "${botDesc}"` : 'Bot Creator ready — describe your bot!', status: 'pending' },
+    );
+    // Dispatch event so Desktop can open BotCreatorPrompt
+    window.dispatchEvent(new CustomEvent('prime-create-bot', { detail: { description: botDesc } }));
   } else if (lower.includes('bot') || lower.includes('clawbot') || lower.includes('automat')) {
     actions.push(
       { id: id(), type: 'open-app', label: 'Open BotLab', payload: { app: 'botlab', title: 'BotLab' }, status: 'pending' },
