@@ -20,3 +20,9 @@ verify_jwt = false
 
 [functions.market-data]
 verify_jwt = false
+
+[functions.bot-api]
+verify_jwt = false
+
+[functions.bot-runner]
+verify_jwt = false

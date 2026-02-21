@@ -31,6 +31,7 @@ const categories: { name: string; apps: AppEntry[] }[] = [
       { app: 'geomc', title: 'GeomC Compiler', icon: <Code size={22} />, label: 'GeomC' },
       { app: 'miniapps', title: 'Mini Apps', icon: <Blocks size={22} />, label: 'Mini Apps' },
       { app: 'forge', title: 'App Forge', icon: <Store size={22} />, label: 'App Forge' },
+      { app: 'botlab', title: 'BotLab', icon: <Bot size={22} />, label: 'BotLab' },
     ],
   },
   {
