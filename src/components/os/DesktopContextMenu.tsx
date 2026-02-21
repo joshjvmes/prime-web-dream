@@ -6,7 +6,7 @@ import {
   ContextMenuTrigger,
 } from '@/components/ui/context-menu';
 import { AppType } from '@/types/os';
-import { Terminal, Cpu, LayoutGrid, Layers, Info, Search } from 'lucide-react';
+import { Terminal, Cpu, LayoutGrid, Layers, Info, Search, Bot } from 'lucide-react';
 
 interface DesktopContextMenuProps {
   children: React.ReactNode;
@@ -14,9 +14,10 @@ interface DesktopContextMenuProps {
   onTileAll: () => void;
   onCascade: () => void;
   onSearch: () => void;
+  onCreateBot?: () => void;
 }
 
-export default function DesktopContextMenu({ children, onOpenApp, onTileAll, onCascade, onSearch }: DesktopContextMenuProps) {
+export default function DesktopContextMenu({ children, onOpenApp, onTileAll, onCascade, onSearch, onCreateBot }: DesktopContextMenuProps) {
   return (
     <ContextMenu>
       <ContextMenuTrigger asChild>{children}</ContextMenuTrigger>
@@ -37,6 +38,10 @@ export default function DesktopContextMenu({ children, onOpenApp, onTileAll, onC
           onClick={() => onOpenApp('sysinfo', 'System Info')}
         >
           <Cpu size={14} /> System Info
+        </ContextMenuItem>
+        <ContextMenuSeparator />
+        <ContextMenuItem className="gap-2 text-xs" onClick={onCreateBot}>
+          <Bot size={14} /> Create Bot...
         </ContextMenuItem>
         <ContextMenuSeparator />
         <ContextMenuItem className="gap-2 text-xs" onClick={onTileAll}>
