@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { routeAICall } from "../_shared/ai-router.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -41,13 +42,6 @@ serve(async (req) => {
       });
     }
 
-    const lovableApiKey = Deno.env.get("LOVABLE_API_KEY");
-    if (!lovableApiKey) {
-      return new Response(JSON.stringify({ error: "AI not configured" }), {
-        status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
     // Build context message for the bot's AI
     const contextMessage = event_type
       ? `Event triggered: ${event_type}. Payload: ${JSON.stringify(event_payload || {})}. Decide what actions to take based on your instructions.`
@@ -55,21 +49,15 @@ serve(async (req) => {
 
     const systemPrompt = bot.system_prompt || "You are a helpful automated bot. Respond with a brief summary of actions you would take.";
 
-    // Call AI with the bot's system prompt
-    const aiResponse = await fetch("https://api.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${lovableApiKey}`,
-      },
-      body: JSON.stringify({
-        model: "openai/gpt-5-mini",
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: contextMessage },
-        ],
-        max_tokens: 512,
-      }),
+    // Call AI with the bot's system prompt, using BYOAK routing
+    const aiResponse = await routeAICall({
+      userId: user_id,
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: contextMessage },
+      ],
+      maxTokens: 512,
+      stream: false,
     });
 
     const aiData = await aiResponse.json();
