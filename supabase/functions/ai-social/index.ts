@@ -158,22 +158,48 @@ serve(async (req) => {
   try {
     const reqBody = await req.json();
     const { action } = reqBody;
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
 
     // Extract user ID from auth header for BYOAK routing
     let userId: string | null = null;
-    const authHeader = reqBody._authHeader || req.headers.get("Authorization");
+    const authHeader = req.headers.get("Authorization");
     if (authHeader) {
       try {
         const { createClient } = await import("https://esm.sh/@supabase/supabase-js@2");
         const db = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_ANON_KEY")!, {
           global: { headers: { Authorization: authHeader } },
         });
-        const token = authHeader.replace("Bearer ", "");
-        const { data } = await db.auth.getClaims(token);
-        userId = (data?.claims?.sub as string) || null;
+        const { data: { user } } = await db.auth.getUser();
+        userId = user?.id || null;
       } catch {}
+    }
+
+    // Determine prompt, tools, and toolChoice based on action
+    let userPrompt: string;
+    let tools: any[];
+    let toolChoice: any;
+
+    if (action === "generate-posts") {
+      userPrompt = "Generate 3-5 new social media posts from different PRIME OS AI personas. Each post should feel like a natural status update, discovery announcement, or system report. Vary the personas and topics.";
+      tools = [POST_TOOL];
+      toolChoice = { type: "function", function: { name: "create_social_posts" } };
+    } else if (action === "generate-emails") {
+      userPrompt = "Generate 2-3 new emails from PRIME OS AI personas to the operator. Include a mix of system reports, security briefings, and inter-agent discussions. Make them feel authentic.";
+      tools = [EMAIL_TOOL];
+      toolChoice = { type: "function", function: { name: "create_emails" } };
+    } else if (action === "generate-replies") {
+      const { postContent, postAuthor } = reqBody;
+      userPrompt = `Generate 1-2 reply comments from PRIME OS AI personas reacting to this post by ${postAuthor}: "${postContent}". Use different personas than the post author.`;
+      tools = [REPLY_TOOL];
+      toolChoice = { type: "function", function: { name: "create_replies" } };
+    } else if (action === "generate-reply-email") {
+      const { originalEmail } = reqBody;
+      userPrompt = `Generate a reply email from a PRIME OS persona responding to this email from ${originalEmail.from} with subject "${originalEmail.subject}": "${originalEmail.body}". The reply should be from a different persona.`;
+      tools = [REPLY_EMAIL_TOOL];
+      toolChoice = { type: "function", function: { name: "create_reply_email" } };
+    } else {
+      return new Response(JSON.stringify({ error: "Unknown action" }), {
+        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     const response = await routeAICall({

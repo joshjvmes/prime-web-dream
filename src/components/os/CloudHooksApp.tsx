@@ -1,6 +1,7 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
-import { Plus, Trash2, Zap, CheckCircle, XCircle, RefreshCw, Play, Pause, ChevronDown, BookTemplate } from 'lucide-react';
-import { eventBus, EVENT_TYPES, type EventType } from '@/hooks/useEventBus';
+import { useState, useEffect, useCallback } from 'react';
+import { Plus, Trash2, Zap, RefreshCw, Pause, BookTemplate } from 'lucide-react';
+import { eventBus, EVENT_TYPES } from '@/hooks/useEventBus';
+import { supabase } from '@/integrations/supabase/client';
 
 interface WorkflowAction {
   type: 'open_app' | 'close_app' | 'notification' | 'copy_text' | 'lock_screen' | 'webhook';
@@ -25,7 +26,6 @@ interface Execution {
   message: string;
 }
 
-const STORAGE_KEY = 'prime-os-cloudhooks';
 const MAX_EXECUTIONS = 50;
 
 const ACTION_TYPES = [
@@ -36,49 +36,80 @@ const ACTION_TYPES = [
   { value: 'webhook', label: 'Send Webhook' },
 ];
 
-const TEMPLATES: WorkflowHook[] = [
+const TEMPLATES: Omit<WorkflowHook, 'id'>[] = [
   {
-    id: 'tpl-1', name: 'File Upload Notifier', trigger: 'file.uploaded',
+    name: 'File Upload Notifier', trigger: 'file.uploaded',
     condition: '', actions: [{ type: 'notification', config: { title: 'Files', message: 'New file uploaded successfully' } }], enabled: true,
   },
   {
-    id: 'tpl-2', name: 'Calendar Reminder Action', trigger: 'calendar.event.starting',
+    name: 'Calendar Reminder Action', trigger: 'calendar.event.starting',
     condition: '', actions: [{ type: 'notification', config: { title: 'Calendar', message: 'An event is starting soon!' } }], enabled: true,
   },
   {
-    id: 'tpl-3', name: 'Welcome Workflow', trigger: 'user.signed-in',
+    name: 'Welcome Workflow', trigger: 'user.signed-in',
     condition: '', actions: [{ type: 'notification', config: { title: 'System', message: 'Welcome back, Operator.' } }], enabled: true,
   },
 ];
 
-function loadHooks(): WorkflowHook[] {
-  try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]'); } catch { return []; }
-}
-
 export default function CloudHooksApp() {
-  const [hooks, setHooks] = useState<WorkflowHook[]>(() => {
-    const saved = loadHooks();
-    return saved.length > 0 ? saved : [];
-  });
-  const [selectedId, setSelectedId] = useState<string | null>(hooks[0]?.id ?? null);
+  const [hooks, setHooks] = useState<WorkflowHook[]>([]);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [executions, setExecutions] = useState<Execution[]>([]);
   const [showTemplates, setShowTemplates] = useState(false);
+  const [userId, setUserId] = useState<string | null>(null);
+  const [loaded, setLoaded] = useState(false);
 
   const selected = hooks.find(h => h.id === selectedId) ?? null;
 
-  // Persist hooks
+  // Get user and load hooks from DB
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(hooks));
-  }, [hooks]);
+    supabase.auth.getUser().then(({ data }) => {
+      const uid = data.user?.id ?? null;
+      setUserId(uid);
+      if (uid) {
+        (supabase.from('cloud_hooks') as any).select('*').eq('user_id', uid).order('created_at').then(({ data: rows }: any) => {
+          if (rows) {
+            const mapped: WorkflowHook[] = rows.map(r => ({
+              id: r.id,
+              name: r.name,
+              trigger: r.trigger_event,
+              condition: (r.action_config as any)?.condition || '',
+              actions: (r.action_config as any)?.actions || [],
+              enabled: r.enabled,
+            }));
+            setHooks(mapped);
+            if (mapped.length > 0) setSelectedId(mapped[0].id);
+          }
+          setLoaded(true);
+        });
+      } else {
+        setLoaded(true);
+      }
+    });
+  }, []);
+
+  // Persist a hook to DB
+  const persistHook = useCallback(async (hook: WorkflowHook) => {
+    if (!userId) return;
+    await (supabase.from('cloud_hooks') as any).upsert({
+      id: hook.id,
+      user_id: userId,
+      name: hook.name,
+      trigger_event: hook.trigger,
+      action_type: hook.actions[0]?.type || 'notification',
+      action_config: { actions: hook.actions, condition: hook.condition },
+      enabled: hook.enabled,
+    }, { onConflict: 'id' });
+  }, [userId]);
 
   // Subscribe to events and execute hooks
   useEffect(() => {
+    if (!loaded) return;
     const handlers = new Map<string, (payload: any) => void>();
 
     for (const hook of hooks) {
       if (!hook.enabled) continue;
       const handler = (payload: any) => {
-        // Check condition
         if (hook.condition) {
           try {
             const payloadStr = JSON.stringify(payload || {});
@@ -86,12 +117,10 @@ export default function CloudHooksApp() {
           } catch {}
         }
 
-        // Execute actions
         for (const action of hook.actions) {
           try {
             switch (action.type) {
               case 'notification':
-                // Dispatch a custom event that Desktop can listen to
                 window.dispatchEvent(new CustomEvent('cloudhook-notification', {
                   detail: { title: action.config.title || 'CloudHook', message: action.config.message || 'Hook triggered' }
                 }));
@@ -110,8 +139,7 @@ export default function CloudHooksApp() {
               case 'webhook':
                 if (action.config.url) {
                   fetch(action.config.url, {
-                    method: 'POST',
-                    mode: 'no-cors',
+                    method: 'POST', mode: 'no-cors',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ event: hook.trigger, payload, hook: hook.name }),
                   }).catch(() => {});
@@ -122,18 +150,13 @@ export default function CloudHooksApp() {
         }
 
         setExecutions(prev => [{
-          id: `exec-${Date.now()}`,
-          hookName: hook.name,
-          trigger: hook.trigger,
-          timestamp: Date.now(),
-          status: 'success' as const,
-          message: `Triggered by ${hook.trigger}`,
+          id: `exec-${Date.now()}`, hookName: hook.name, trigger: hook.trigger,
+          timestamp: Date.now(), status: 'success' as const, message: `Triggered by ${hook.trigger}`,
         }, ...prev].slice(0, MAX_EXECUTIONS));
       };
 
       const existing = handlers.get(hook.trigger);
       if (existing) {
-        // Wrap existing handler
         const prev = existing;
         const combined = (payload: any) => { prev(payload); handler(payload); };
         handlers.set(hook.trigger, combined);
@@ -145,62 +168,93 @@ export default function CloudHooksApp() {
       }
     }
 
-    return () => {
-      handlers.forEach((handler, event) => eventBus.off(event, handler));
-    };
-  }, [hooks]);
+    return () => { handlers.forEach((handler, event) => eventBus.off(event, handler)); };
+  }, [hooks, loaded]);
 
   const updateHook = (id: string, updates: Partial<WorkflowHook>) => {
-    setHooks(prev => prev.map(h => h.id === id ? { ...h, ...updates } : h));
+    setHooks(prev => {
+      const next = prev.map(h => h.id === id ? { ...h, ...updates } : h);
+      const updated = next.find(h => h.id === id);
+      if (updated) persistHook(updated);
+      return next;
+    });
   };
 
-  const addHook = (template?: WorkflowHook) => {
-    const newHook: WorkflowHook = template
-      ? { ...template, id: `hook-${Date.now()}` }
-      : {
-          id: `hook-${Date.now()}`,
-          name: 'New Hook',
-          trigger: EVENT_TYPES[0],
-          condition: '',
-          actions: [{ type: 'notification', config: { title: 'Hook', message: 'Triggered!' } }],
-          enabled: true,
-        };
-    setHooks(prev => [...prev, newHook]);
-    setSelectedId(newHook.id);
+  const addHook = async (template?: Omit<WorkflowHook, 'id'>) => {
+    if (!userId) return;
+    const base = template || {
+      name: 'New Hook', trigger: EVENT_TYPES[0], condition: '',
+      actions: [{ type: 'notification' as const, config: { title: 'Hook', message: 'Triggered!' } }], enabled: true,
+    };
+    const { data } = await (supabase.from('cloud_hooks') as any).insert({
+      user_id: userId, name: base.name, trigger_event: base.trigger,
+      action_type: base.actions[0]?.type || 'notification',
+      action_config: { actions: base.actions, condition: base.condition },
+      enabled: base.enabled,
+    }).select().single();
+
+    if (data) {
+      const newHook: WorkflowHook = {
+        id: data.id, name: data.name, trigger: data.trigger_event,
+        condition: (data.action_config as any)?.condition || '',
+        actions: (data.action_config as any)?.actions || [],
+        enabled: data.enabled,
+      };
+      setHooks(prev => [...prev, newHook]);
+      setSelectedId(newHook.id);
+    }
     setShowTemplates(false);
   };
 
-  const deleteHook = (id: string) => {
+  const deleteHook = async (id: string) => {
+    await (supabase.from('cloud_hooks') as any).delete().eq('id', id);
     setHooks(prev => prev.filter(h => h.id !== id));
     if (selectedId === id) setSelectedId(hooks.find(h => h.id !== id)?.id ?? null);
   };
 
   const updateAction = (hookId: string, actionIdx: number, updates: Partial<WorkflowAction>) => {
-    setHooks(prev => prev.map(h => {
-      if (h.id !== hookId) return h;
-      const newActions = [...h.actions];
-      newActions[actionIdx] = { ...newActions[actionIdx], ...updates };
-      return { ...h, actions: newActions };
-    }));
+    setHooks(prev => {
+      const next = prev.map(h => {
+        if (h.id !== hookId) return h;
+        const newActions = [...h.actions];
+        newActions[actionIdx] = { ...newActions[actionIdx], ...updates };
+        return { ...h, actions: newActions };
+      });
+      const updated = next.find(h => h.id === hookId);
+      if (updated) persistHook(updated);
+      return next;
+    });
   };
 
   const addAction = (hookId: string) => {
-    setHooks(prev => prev.map(h => {
-      if (h.id !== hookId) return h;
-      return { ...h, actions: [...h.actions, { type: 'notification', config: { title: 'Hook', message: 'Action' } }] };
-    }));
+    setHooks(prev => {
+      const next = prev.map(h => {
+        if (h.id !== hookId) return h;
+        return { ...h, actions: [...h.actions, { type: 'notification' as const, config: { title: 'Hook', message: 'Action' } }] };
+      });
+      const updated = next.find(h => h.id === hookId);
+      if (updated) persistHook(updated);
+      return next;
+    });
   };
 
   const removeAction = (hookId: string, idx: number) => {
-    setHooks(prev => prev.map(h => {
-      if (h.id !== hookId) return h;
-      return { ...h, actions: h.actions.filter((_, i) => i !== idx) };
-    }));
+    setHooks(prev => {
+      const next = prev.map(h => {
+        if (h.id !== hookId) return h;
+        return { ...h, actions: h.actions.filter((_, i) => i !== idx) };
+      });
+      const updated = next.find(h => h.id === hookId);
+      if (updated) persistHook(updated);
+      return next;
+    });
   };
 
   const activeCount = hooks.filter(h => h.enabled).length;
   const successRate = executions.length > 0
     ? Math.round((executions.filter(e => e.status === 'success').length / executions.length) * 100) : 100;
+
+  if (!loaded) return <div className="flex items-center justify-center h-full text-muted-foreground text-xs font-mono">Loading…</div>;
 
   return (
     <div className="h-full bg-background flex flex-col font-mono text-xs">
@@ -240,8 +294,8 @@ export default function CloudHooksApp() {
           {showTemplates && (
             <div className="border-b border-primary/20 bg-primary/5 p-2 space-y-1">
               <p className="text-[8px] text-primary font-display tracking-wider uppercase">Templates</p>
-              {TEMPLATES.map(tpl => (
-                <button key={tpl.id} onClick={() => addHook(tpl)}
+              {TEMPLATES.map((tpl, i) => (
+                <button key={i} onClick={() => addHook(tpl)}
                   className="w-full text-left px-2 py-1 rounded text-[10px] text-muted-foreground hover:text-foreground hover:bg-muted/30">
                   {tpl.name}
                 </button>
@@ -276,9 +330,8 @@ export default function CloudHooksApp() {
                 <input value={selected.name} onChange={e => updateHook(selected.id, { name: e.target.value })}
                   className="bg-transparent border-b border-border text-foreground font-display text-sm tracking-wider focus:outline-none focus:border-primary w-48" />
                 <div className="flex items-center gap-1.5">
-                  <button onClick={() => {
-                    eventBus.emit(selected.trigger, { test: true });
-                  }} className="flex items-center gap-1 px-2 py-1 rounded border border-primary/30 text-primary hover:bg-primary/10 text-[9px]">
+                  <button onClick={() => eventBus.emit(selected.trigger, { test: true })}
+                    className="flex items-center gap-1 px-2 py-1 rounded border border-primary/30 text-primary hover:bg-primary/10 text-[9px]">
                     <Zap size={10} /> Test
                   </button>
                   <button onClick={() => deleteHook(selected.id)} className="p-1 rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10">
@@ -367,10 +420,12 @@ export default function CloudHooksApp() {
                 <div className="p-3 text-center text-muted-foreground text-[10px]">No executions yet — hooks fire on real events</div>
               ) : executions.map(ex => (
                 <div key={ex.id} className="flex items-center gap-2 px-3 py-1 border-b border-border/20 text-[10px]">
-                  <CheckCircle size={10} className="text-prime-green shrink-0" />
-                  <span className="text-muted-foreground w-16 shrink-0">{new Date(ex.timestamp).toLocaleTimeString('en-US', { hour12: false })}</span>
-                  <span className="text-foreground truncate flex-1">{ex.hookName}</span>
-                  <span className="text-muted-foreground/50 truncate max-w-24">{ex.trigger}</span>
+                  <span className={`w-1.5 h-1.5 rounded-full ${ex.status === 'success' ? 'bg-prime-green' : 'bg-destructive'}`} />
+                  <span className="text-foreground font-semibold truncate">{ex.hookName}</span>
+                  <span className="text-muted-foreground/50 truncate">{ex.trigger}</span>
+                  <span className="text-[8px] text-muted-foreground/40 ml-auto shrink-0">
+                    {new Date(ex.timestamp).toLocaleTimeString()}
+                  </span>
                 </div>
               ))}
             </div>
