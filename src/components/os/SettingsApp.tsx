@@ -115,7 +115,7 @@ export default function SettingsApp({ notifEvents = [], onToggleEvent, onUpdateM
     try { const s = localStorage.getItem('prime-os-lock-settings'); return s ? { pinEnabled: false, pin: '', wallpaper: 'lattice', autoLock: false, autoLockTimeout: 5, ...JSON.parse(s) } : { pinEnabled: false, pin: '', wallpaper: 'lattice', autoLock: false, autoLockTimeout: 5 }; } catch { return { pinEnabled: false, pin: '', wallpaper: 'lattice', autoLock: false, autoLockTimeout: 5 }; }
   });
   const [widgetToggles, setWidgetToggles] = useState<WidgetToggles>(() => {
-    try { const s = localStorage.getItem('prime-os-widgets'); return s ? { clock: true, stats: true, notes: false, network: false, forge: false, agentLog: false, rokcat: true, ...JSON.parse(s) } : { clock: true, stats: true, notes: false, network: false, forge: false, agentLog: false, rokcat: true }; } catch { return { clock: true, stats: true, notes: false, network: false, forge: false, agentLog: false, rokcat: true }; }
+    try { const s = localStorage.getItem('prime-os-widgets'); return s ? { clock: true, stats: true, notes: true, network: true, forge: true, agentLog: true, rokcat: true, ...JSON.parse(s) } : { clock: true, stats: true, notes: true, network: true, forge: true, agentLog: true, rokcat: true }; } catch { return { clock: true, stats: true, notes: true, network: true, forge: true, agentLog: true, rokcat: true }; }
   });
 
   const [newTitle, setNewTitle] = useState('');
@@ -529,7 +529,7 @@ export default function SettingsApp({ notifEvents = [], onToggleEvent, onUpdateM
             <Toggle label="Agent Activity Widget" value={widgetToggles.agentLog} onChange={v => setWidgetToggles(s => ({ ...s, agentLog: v }))} />
             <Toggle label="ROKCAT Assistant" value={widgetToggles.rokcat} onChange={v => setWidgetToggles(s => ({ ...s, rokcat: v }))} />
             <div className="mt-4">
-              <button onClick={() => setWidgetToggles({ clock: true, stats: true, notes: false, network: false, forge: false, agentLog: false, rokcat: true })}
+              <button onClick={() => setWidgetToggles({ clock: true, stats: true, notes: true, network: true, forge: true, agentLog: true, rokcat: true })}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded border border-muted-foreground/30 text-muted-foreground text-[10px] font-display tracking-wider hover:bg-muted/30 transition-colors">
                 <RotateCcw size={10} /> Reset Defaults
               </button>

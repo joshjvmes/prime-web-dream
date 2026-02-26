@@ -2,13 +2,15 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { Bot, Play, Square, Loader2, CheckCircle2, AlertCircle, Terminal, Zap, Shield, Rocket } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { AppType } from '@/types/os';
+import { eventBus } from '@/hooks/useEventBus';
+import { resolveWidgetId, ALL_WIDGET_KEYS, WIDGET_IDS } from '@/components/os/DesktopWidgets';
 
 interface PrimeAgentAppProps {
   onOpenApp: (app: AppType, title: string) => void;
   onCloseApp: (app: string) => void;
 }
 
-type ActionType = 'open-app' | 'close-app' | 'check-status' | 'report' | 'run-command';
+type ActionType = 'open-app' | 'close-app' | 'check-status' | 'report' | 'run-command' | 'widget-control';
 
 interface AgentAction {
   id: string;
@@ -167,6 +169,44 @@ function parseInstruction(input: string): AgentAction[] {
       { id: id(), type: 'check-status', label: 'Verify deployment integrity', status: 'pending' },
       { id: id(), type: 'report', label: 'Deployment complete', status: 'pending' },
     );
+  } else if (lower.includes('widget') || lower.includes('arrange widget') || lower.match(/\b(show|hide|enable|disable|toggle)\b.*\bwidget/)) {
+    // Widget control via agent
+    if (lower.includes('show all') || lower.includes('enable all')) {
+      ALL_WIDGET_KEYS.forEach(wid => actions.push({ id: id(), type: 'widget-control', label: `Enable ${wid}`, payload: { widgetId: wid, action: 'show' }, status: 'pending' }));
+      actions.push({ id: id(), type: 'report', label: 'All widgets enabled', status: 'pending' });
+    } else if (lower.includes('hide all') || lower.includes('disable all')) {
+      ALL_WIDGET_KEYS.forEach(wid => actions.push({ id: id(), type: 'widget-control', label: `Disable ${wid}`, payload: { widgetId: wid, action: 'hide' }, status: 'pending' }));
+      actions.push({ id: id(), type: 'report', label: 'All widgets disabled', status: 'pending' });
+    } else if (lower.includes('arrange') || lower.includes('organize') || lower.includes('tidy')) {
+      const grid = [
+        { id: 'clock', x: 100, y: 80 }, { id: 'stats', x: 100, y: 240 }, { id: 'notes', x: 320, y: 80 },
+        { id: 'network', x: 320, y: 240 }, { id: 'forge', x: 540, y: 80 }, { id: 'agentLog', x: 540, y: 240 },
+        { id: 'rokcat', x: 760, y: 80 },
+      ];
+      grid.forEach(g => actions.push({ id: id(), type: 'widget-control', label: `Move ${g.id} to (${g.x},${g.y})`, payload: { widgetId: g.id, action: 'move', x: String(g.x), y: String(g.y) }, status: 'pending' }));
+      actions.push({ id: id(), type: 'report', label: 'Widgets arranged in grid', status: 'pending' });
+    } else {
+      // Try to find specific widget name and action
+      const showMatch = input.match(/(?:show|enable|open)\s+(?:the\s+)?(?:widget\s+)?(\w+)/i);
+      const hideMatch = input.match(/(?:hide|disable|close)\s+(?:the\s+)?(?:widget\s+)?(\w+)/i);
+      const moveMatch = input.match(/move\s+(?:the\s+)?(?:widget\s+)?(\w+)\s+(?:to\s+)?(\d+)[,\s]+(\d+)/i);
+      if (moveMatch) {
+        const resolved = resolveWidgetId(moveMatch[1]);
+        if (resolved) {
+          actions.push({ id: id(), type: 'widget-control', label: `Move ${resolved.name} to (${moveMatch[2]},${moveMatch[3]})`, payload: { widgetId: resolved.id, action: 'move', x: moveMatch[2], y: moveMatch[3] }, status: 'pending' });
+        }
+      } else if (showMatch) {
+        const resolved = resolveWidgetId(showMatch[1]);
+        if (resolved) actions.push({ id: id(), type: 'widget-control', label: `Show ${resolved.name}`, payload: { widgetId: resolved.id, action: 'show' }, status: 'pending' });
+      } else if (hideMatch) {
+        const resolved = resolveWidgetId(hideMatch[1]);
+        if (resolved) actions.push({ id: id(), type: 'widget-control', label: `Hide ${resolved.name}`, payload: { widgetId: resolved.id, action: 'hide' }, status: 'pending' });
+      }
+      if (actions.length === 0) {
+        actions.push({ id: id(), type: 'widget-control', label: 'List widgets', payload: { action: 'list' }, status: 'pending' });
+      }
+      actions.push({ id: id(), type: 'report', label: 'Widget control executed', status: 'pending' });
+    }
   } else {
     // Try to extract app names
     const appKeys = Object.keys(APP_TITLES);
@@ -214,6 +254,7 @@ function generateResult(action: AgentAction): string {
       return results[Math.floor(Math.random() * results.length)];
     }
     case 'report': return '◉ All tasks completed successfully. System operating within optimal parameters.';
+    case 'widget-control': return `✓ Widget command executed`;
     default: return '✓ Done';
   }
 }
@@ -242,6 +283,12 @@ export default function PrimeAgentApp({ onOpenApp, onCloseApp }: PrimeAgentAppPr
         onOpenApp(actions[i].payload!.app as AppType, actions[i].payload!.title);
       } else if (actions[i].type === 'close-app' && actions[i].payload) {
         onCloseApp(actions[i].payload!.app);
+      } else if (actions[i].type === 'widget-control' && actions[i].payload) {
+        const p = actions[i].payload!;
+        if (p.action === 'show') eventBus.emit('widget.toggle', { id: p.widgetId, enabled: true });
+        else if (p.action === 'hide') eventBus.emit('widget.toggle', { id: p.widgetId, enabled: false });
+        else if (p.action === 'move') eventBus.emit('widget.move', { id: p.widgetId, x: Number(p.x), y: Number(p.y) });
+        else if (p.action === 'list') eventBus.emit('widget.list');
       }
 
       const result = generateResult(actions[i]);

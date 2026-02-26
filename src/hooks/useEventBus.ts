@@ -27,6 +27,10 @@ export const EVENT_TYPES = [
   'spreadsheet.create',
   'spreadsheet.update',
   'spreadsheet.chart',
+  'widget.toggle',
+  'widget.move',
+  'widget.list',
+  'widget.list.response',
 ] as const;
 
 export type EventType = typeof EVENT_TYPES[number];
