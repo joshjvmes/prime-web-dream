@@ -97,6 +97,28 @@ const PANELS: { id: Panel; label: string; icon: React.ReactNode }[] = [
   { id: 'about', label: 'About', icon: <Info size={14} /> },
 ];
 
+const Toggle = ({ label, value, onChange }: { label: string; value: boolean; onChange: (v: boolean) => void }) => (
+  <div
+    className="flex items-center justify-between py-2 px-1 -mx-1 rounded cursor-pointer hover:bg-muted/30 transition-colors"
+    onClick={() => onChange(!value)}
+  >
+    <span className="font-body text-xs text-card-foreground">{label}</span>
+    <div className={`w-8 h-4 rounded-full transition-colors relative shrink-0 ${value ? 'bg-primary/60' : 'bg-muted'}`}>
+      <div className={`absolute top-0.5 w-3 h-3 rounded-full transition-all ${value ? 'left-4 bg-primary' : 'left-0.5 bg-muted-foreground'}`} />
+    </div>
+  </div>
+);
+
+const SliderRow = ({ label, value, onChange, min, max, suffix }: { label: string; value: number; onChange: (v: number) => void; min: number; max: number; suffix?: string }) => (
+  <div className="py-1.5">
+    <div className="flex items-center justify-between mb-1">
+      <span className="font-body text-xs text-card-foreground">{label}</span>
+      <span className="text-[10px] text-muted-foreground">{value}{suffix}</span>
+    </div>
+    <input type="range" min={min} max={max} value={value} onChange={e => onChange(Number(e.target.value))} className="w-full accent-primary h-1" />
+  </div>
+);
+
 export default function SettingsApp({ notifEvents = [], onToggleEvent, onUpdateMessage, onAddEvent, onRemoveEvent, onLock, user }: SettingsAppProps) {
   const [activePanel, setActivePanel] = useState<Panel>('profile');
   const [profileName, setProfileName] = useState(() => {
@@ -183,24 +205,7 @@ export default function SettingsApp({ notifEvents = [], onToggleEvent, onUpdateM
   const update = <K extends keyof SettingsState>(key: K, value: SettingsState[K]) =>
     setSettings(s => ({ ...s, [key]: value }));
 
-  const Toggle = ({ label, value, onChange }: { label: string; value: boolean; onChange: (v: boolean) => void }) => (
-    <div className="flex items-center justify-between py-1.5">
-      <span className="font-body text-xs text-card-foreground">{label}</span>
-      <button onClick={() => onChange(!value)} className={`w-8 h-4 rounded-full transition-colors relative ${value ? 'bg-primary/60' : 'bg-muted'}`}>
-        <div className={`absolute top-0.5 w-3 h-3 rounded-full transition-all ${value ? 'left-4 bg-primary' : 'left-0.5 bg-muted-foreground'}`} />
-      </button>
-    </div>
-  );
-
-  const SliderRow = ({ label, value, onChange, min, max, suffix }: { label: string; value: number; onChange: (v: number) => void; min: number; max: number; suffix?: string }) => (
-    <div className="py-1.5">
-      <div className="flex items-center justify-between mb-1">
-        <span className="font-body text-xs text-card-foreground">{label}</span>
-        <span className="text-[10px] text-muted-foreground">{value}{suffix}</span>
-      </div>
-      <input type="range" min={min} max={max} value={value} onChange={e => onChange(Number(e.target.value))} className="w-full accent-primary h-1" />
-    </div>
-  );
+  
 
   const SelectRow = ({ label, value, options, onChange }: { label: string; value: string; options: string[]; onChange: (v: string) => void }) => (
     <div className="flex items-center justify-between py-1.5">
