@@ -123,6 +123,12 @@ const SliderRow = ({ label, value, onChange, min, max, suffix }: { label: string
 
 const PROVIDER_MODELS: Record<string, { label: string; models: { value: string; label: string }[] }> = {
   default: { label: 'Default (Built-in)', models: [] },
+  xai: { label: 'xAI (Grok)', models: [
+    { value: 'grok-4-latest', label: 'Grok 4' },
+    { value: 'grok-3', label: 'Grok 3' },
+    { value: 'grok-3-mini', label: 'Grok 3 Mini' },
+    { value: 'grok-3-fast', label: 'Grok 3 Fast' },
+  ]},
   openai: { label: 'OpenAI', models: [
     { value: 'gpt-4o', label: 'GPT-4o' },
     { value: 'gpt-4o-mini', label: 'GPT-4o Mini' },
@@ -230,7 +236,7 @@ function AIProviderPanel({ user, cloudSave, cloudLoad, isSignedIn, SectionTitle 
     <div className="space-y-1">
       <SectionTitle>AI Provider</SectionTitle>
       <p className="text-[10px] text-muted-foreground mb-3">
-        Bring your own API key for OpenAI, Anthropic, or Google Gemini. All AI features will route through your chosen provider.
+        Connect your xAI (Grok) API key to power ROKCAT and all AI features. OpenAI, Anthropic, and Google Gemini are also supported.
       </p>
 
       <SectionTitle>Provider</SectionTitle>

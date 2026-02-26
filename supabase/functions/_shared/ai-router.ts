@@ -12,7 +12,7 @@ export interface AIRouterOptions {
 }
 
 interface UserAIConfig {
-  provider: "openai" | "anthropic" | "google";
+  provider: "openai" | "anthropic" | "google" | "xai";
   model: string;
   apiKey: string;
 }
@@ -65,6 +65,7 @@ function getDefaultModel(provider: string): string {
     case "openai": return "gpt-4o";
     case "anthropic": return "claude-sonnet-4-20250514";
     case "google": return "gemini-2.5-flash";
+    case "xai": return "grok-4-latest";
     default: return "gpt-4o";
   }
 }
@@ -387,6 +388,30 @@ function convertGeminiStreamToOpenAI(resp: Response): Response {
   });
 }
 
+// ── xAI (Grok) caller — OpenAI-compatible ──
+
+async function callXAI(config: UserAIConfig, opts: AIRouterOptions): Promise<Response> {
+  const body: any = {
+    model: config.model,
+    messages: opts.messages,
+    stream: opts.stream ?? false,
+  };
+  if (opts.tools?.length) {
+    body.tools = opts.tools;
+    if (opts.toolChoice) body.tool_choice = opts.toolChoice;
+  }
+  if (opts.maxTokens) body.max_tokens = opts.maxTokens;
+
+  return fetch("https://api.x.ai/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${config.apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+}
+
 // ── Default Lovable gateway caller ──
 
 async function callLovableGateway(opts: AIRouterOptions): Promise<Response> {
@@ -432,6 +457,9 @@ export async function routeAICall(opts: AIRouterOptions): Promise<Response> {
             break;
           case "google":
             resp = await callGemini(config, opts);
+            break;
+          case "xai":
+            resp = await callXAI(config, opts);
             break;
           default:
             resp = await callLovableGateway(opts);
@@ -489,6 +517,14 @@ export async function testAIKey(provider: string, apiKey: string): Promise<{ suc
         `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`
       );
       if (!resp.ok) return { success: false, error: `Google returned ${resp.status}` };
+      return { success: true };
+    }
+
+    if (provider === "xai") {
+      const resp = await fetch("https://api.x.ai/v1/models", {
+        headers: { Authorization: `Bearer ${apiKey}` },
+      });
+      if (!resp.ok) return { success: false, error: `xAI returned ${resp.status}` };
       return { success: true };
     }
 
