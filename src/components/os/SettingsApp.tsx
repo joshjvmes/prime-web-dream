@@ -45,6 +45,7 @@ interface WidgetToggles {
   network: boolean;
   forge: boolean;
   agentLog: boolean;
+  rokcat: boolean;
 }
 
 interface SettingsAppProps {
@@ -113,7 +114,7 @@ export default function SettingsApp({ notifEvents = [], onToggleEvent, onUpdateM
     try { const s = localStorage.getItem('prime-os-lock-settings'); return s ? { pinEnabled: false, pin: '', wallpaper: 'lattice', autoLock: false, autoLockTimeout: 5, ...JSON.parse(s) } : { pinEnabled: false, pin: '', wallpaper: 'lattice', autoLock: false, autoLockTimeout: 5 }; } catch { return { pinEnabled: false, pin: '', wallpaper: 'lattice', autoLock: false, autoLockTimeout: 5 }; }
   });
   const [widgetToggles, setWidgetToggles] = useState<WidgetToggles>(() => {
-    try { const s = localStorage.getItem('prime-os-widgets'); return s ? { clock: true, stats: true, notes: false, network: false, forge: false, agentLog: false, ...JSON.parse(s) } : { clock: true, stats: true, notes: false, network: false, forge: false, agentLog: false }; } catch { return { clock: true, stats: true, notes: false, network: false, forge: false, agentLog: false }; }
+    try { const s = localStorage.getItem('prime-os-widgets'); return s ? { clock: true, stats: true, notes: false, network: false, forge: false, agentLog: false, rokcat: false, ...JSON.parse(s) } : { clock: true, stats: true, notes: false, network: false, forge: false, agentLog: false, rokcat: false }; } catch { return { clock: true, stats: true, notes: false, network: false, forge: false, agentLog: false, rokcat: false }; }
   });
 
   const [newTitle, setNewTitle] = useState('');
@@ -524,8 +525,9 @@ export default function SettingsApp({ notifEvents = [], onToggleEvent, onUpdateM
             <Toggle label="Network Status Widget" value={widgetToggles.network} onChange={v => setWidgetToggles(s => ({ ...s, network: v }))} />
             <Toggle label="Forge Market Widget" value={widgetToggles.forge} onChange={v => setWidgetToggles(s => ({ ...s, forge: v }))} />
             <Toggle label="Agent Activity Widget" value={widgetToggles.agentLog} onChange={v => setWidgetToggles(s => ({ ...s, agentLog: v }))} />
+            <Toggle label="ROKCAT Assistant" value={widgetToggles.rokcat} onChange={v => setWidgetToggles(s => ({ ...s, rokcat: v }))} />
             <div className="mt-4">
-              <button onClick={() => setWidgetToggles({ clock: true, stats: true, notes: false, network: false, forge: false, agentLog: false })}
+              <button onClick={() => setWidgetToggles({ clock: true, stats: true, notes: false, network: false, forge: false, agentLog: false, rokcat: false })}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded border border-muted-foreground/30 text-muted-foreground text-[10px] font-display tracking-wider hover:bg-muted/30 transition-colors">
                 <RotateCcw size={10} /> Reset Defaults
               </button>
