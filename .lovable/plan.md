@@ -1,71 +1,123 @@
 
 
-# Clickable COP & Cores Indicators in Taskbar
+# ROKCAT AI Face + ElevenLabs TTS Integration
 
 ## Overview
 
-Make the "COP 3.2" and "649 cores" indicators in the bottom taskbar clickable, each opening a detailed popover with rich system information.
+Add two major features to PRIME OS:
+1. **ROKCAT 3D Wireframe Face** -- A Three.js-rendered geometric cat face (from the uploaded HTML) that lives as a new OS app and can also appear as a floating assistant overlay
+2. **ElevenLabs Text-to-Speech** -- Connect ElevenLabs via the connector system, create an edge function for TTS, and wire it into the ROKCAT face so the jaw animates while speaking
+
+The ROKCAT face will integrate with the existing Hyper AI chat -- when Hyper responds, ROKCAT speaks the response aloud with jaw animation synced to audio playback.
 
 ---
 
-## COP 3.2 Popover
+## 1. ElevenLabs Connection Setup
 
-When clicked, shows a popover with energy/COP details:
+Use the ElevenLabs connector (connector_id: `elevenlabs`) to get the API key into the project. This provides `ELEVENLABS_API_KEY` as a secret for edge functions.
 
-- **COP gauge** -- arc gauge showing current COP value (3.2) on a 0-5 scale
-- **What is COP** -- brief explanation: "Coefficient of Performance -- ratio of useful energy output to input. Values above 1.0 indicate over-unity operation."
-- **Live stats**: Input power, Output power, Efficiency %, Energy mode (Satellite)
-- **Historical sparkline** -- last 30 readings
-- **Quick link** -- "Open Energy Monitor" button to launch the full Energy Monitor app
+## 2. Edge Function: `elevenlabs-tts`
 
-## 649 Cores Popover
+Create `supabase/functions/elevenlabs-tts/index.ts`:
+- Accepts `{ text, voiceId? }` POST body
+- Calls ElevenLabs TTS API (`eleven_turbo_v2_5` model for low latency)
+- Returns raw audio/mpeg binary
+- Uses CORS headers from shared module
+- Default voice: "Brian" (`nPczCjzI2devNBz1zQrb`) -- deep, slightly robotic feel fitting ROKCAT
 
-When clicked, shows a popover with core/compute details:
+## 3. ROKCAT Face Component
 
-- **Core grid** -- mini visualization of 649 cores as tiny colored dots (active = green, idle = dim, busy = amber)
-- **Stats**: Active cores, Idle cores, Average load %, Architecture info (11D Folded to 4D)
-- **Core distribution** by subsystem: Kernel, Network, Inference, User, I/O
-- **Quick link** -- "Open System Monitor" button to launch the full System Monitor app
+Create `src/components/os/RokCatFace.tsx`:
+- Port the Three.js wireframe cat geometry from `rokcat.html` into a React component using raw Three.js (no additional deps needed -- Three.js patterns via `useRef` + `useEffect`)
+- Neon cyan wireframe cat head with glass facets, node particles, and jaw animation
+- Mouse parallax for head tracking
+- Idle breathing animation
+- Exposes methods: `speak(audioUrl)` to trigger jaw animation synced to audio playback
+- Audio playback uses `Web Audio API` `AnalyserNode` for real-time volume data driving jaw movement (instead of simulated sine waves from the original)
+
+## 4. ROKCAT App Window
+
+Create `src/components/os/RokCatApp.tsx`:
+- Full app window containing the 3D face + chat input at bottom
+- Text input sends to `hyper-chat` edge function for AI response
+- AI response text is sent to `elevenlabs-tts` edge function
+- Returned audio plays while jaw animates
+- Shows transcript of conversation
+- "Transmit" button + Enter key to send
+
+Register as app type `'rokcat'` in the OS type system and Desktop.
+
+## 5. Integration Points
+
+**Desktop.tsx**: Add `rokcat` to app registry, import `RokCatApp`
+
+**types/os.ts**: Add `'rokcat'` to the `AppType` union
+
+**Taskbar.tsx**: Add ROKCAT to the app list with a Cat/Bot icon
+
+**DesktopIcons.tsx**: Add ROKCAT icon under AI & Compute category
+
+**HypersphereApp.tsx** (optional enhancement): Add a "Speak" button next to AI responses that sends the text to TTS and opens a mini ROKCAT face overlay
 
 ---
 
 ## Technical Details
 
-### File Modified: `src/components/os/Taskbar.tsx`
+### Three.js Integration Pattern
 
-**Changes at lines 264-271:**
-
-Replace the two static `<div>` elements with `<Popover>` components (already imported in the file).
-
-**COP Popover** (replaces lines 264-267):
-- Trigger: the existing COP display styled as a button
-- Content: a `PopoverContent` with arc gauge SVG, stats grid, sparkline, and "Open Energy Monitor" button
-- Simulated live data using `useState` + `useEffect` interval (matching SystemMonitorApp's pattern)
-
-**Cores Popover** (replaces lines 268-271):
-- Trigger: the existing cores display styled as a button
-- Content: a `PopoverContent` with mini core grid (649 tiny dots), stats, subsystem breakdown, and "Open System Monitor" button
-- Core states randomized on interval for ambient life
-
-### New State Variables
+The face geometry is defined as typed node/connection/face arrays (ported from the HTML). A React component manages the Three.js lifecycle:
 
 ```text
-copValue: number (fluctuates around 3.2)
-copHistory: number[] (30 readings for sparkline)
-coreStates: number[] (649 entries: 0=idle, 1=active, 2=busy)
+useEffect(() => {
+  // Create scene, camera, renderer
+  // Build geometry from node definitions
+  // Start animation loop
+  return () => { cleanup renderer }
+}, [])
 ```
 
-A single `useEffect` with a 2-second interval updates these values, keeping the popovers alive when open.
+Jaw animation is driven by an `AnalyserNode` attached to the audio element, reading `getByteFrequencyData()` per frame to get real volume levels.
 
-### No New Files
+### Edge Function Structure
 
-Everything fits within the existing `Taskbar.tsx` file. The Popover component and Zap icon are already imported.
+```text
+POST /functions/v1/elevenlabs-tts
+Body: { text: string, voiceId?: string }
+Response: audio/mpeg binary stream
+```
+
+### Files to Create
+
+| File | Purpose |
+|------|---------|
+| `supabase/functions/elevenlabs-tts/index.ts` | TTS edge function |
+| `src/components/os/RokCatFace.tsx` | Three.js 3D wireframe cat face component |
+| `src/components/os/RokCatApp.tsx` | Full ROKCAT app with chat + face + TTS |
+
+### Files to Modify
+
+| File | Change |
+|------|---------|
+| `src/types/os.ts` | Add `'rokcat'` to AppType |
+| `src/components/os/Desktop.tsx` | Import RokCatApp, add to app registry |
+| `src/components/os/Taskbar.tsx` | Add ROKCAT to allApps list |
+| `src/components/os/DesktopIcons.tsx` | Add ROKCAT icon |
 
 ### Execution Order
 
-1. Add state variables for COP data and core states
-2. Add useEffect interval for live updates
-3. Replace COP static div with Popover containing gauge + stats
-4. Replace cores static div with Popover containing grid + stats
-5. Both popovers include a button that calls `onOpenApp('energy', ...)` or `onOpenApp('monitor', ...)`
+1. Connect ElevenLabs connector (user approval required)
+2. Create `elevenlabs-tts` edge function
+3. Create `RokCatFace.tsx` (Three.js face component)
+4. Create `RokCatApp.tsx` (app wrapper with chat + TTS)
+5. Update `types/os.ts`, `Desktop.tsx`, `Taskbar.tsx`, `DesktopIcons.tsx`
+
+### Notes from Friend's Feedback
+
+The uploaded ideas document highlights key improvements PRIME OS already addresses well:
+- Hybrid kernel architecture (local + cloud) -- already implemented
+- Agent orchestration with BotLab + EventBus
+- Session replay/observability via audit logs
+- MCP integration in bot system
+
+The ROKCAT face adds the "personality layer" that makes the AI assistant feel tangible and alive -- a visual anchor for voice interaction.
 
