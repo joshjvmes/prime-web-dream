@@ -508,6 +508,7 @@ export type Database = {
           description: string
           id: string
           is_active: boolean
+          last_run_at: string | null
           name: string
           permissions: Json
           rate_limit: number
@@ -523,6 +524,7 @@ export type Database = {
           description?: string
           id?: string
           is_active?: boolean
+          last_run_at?: string | null
           name: string
           permissions?: Json
           rate_limit?: number
@@ -538,6 +540,7 @@ export type Database = {
           description?: string
           id?: string
           is_active?: boolean
+          last_run_at?: string | null
           name?: string
           permissions?: Json
           rate_limit?: number
@@ -909,6 +912,33 @@ export type Database = {
           },
         ]
       }
+      user_activity: {
+        Row: {
+          action: string
+          created_at: string
+          id: string
+          metadata: Json | null
+          target: string
+          user_id: string
+        }
+        Insert: {
+          action: string
+          created_at?: string
+          id?: string
+          metadata?: Json | null
+          target?: string
+          user_id: string
+        }
+        Update: {
+          action?: string
+          created_at?: string
+          id?: string
+          metadata?: Json | null
+          target?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       user_ai_keys: {
         Row: {
           created_at: string
@@ -1112,6 +1142,7 @@ export type Database = {
         }
         Returns: boolean
       }
+      cleanup_old_activity: { Args: never; Returns: undefined }
       get_waitlist_count: { Args: never; Returns: number }
       has_role: {
         Args: {

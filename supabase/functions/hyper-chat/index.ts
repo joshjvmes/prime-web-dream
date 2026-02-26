@@ -582,7 +582,7 @@ async function getUserId(authHeader: string): Promise<string | null> {
 }
 
 // ── Build context-aware system prompt ──
-function buildSystemPrompt(context?: Record<string, unknown>, memories?: string[], priorHistory?: Array<{ role: string; content: string }>) {
+function buildSystemPrompt(context?: Record<string, unknown>, memories?: string[], priorHistory?: Array<{ role: string; content: string }>, userActivity?: Array<{ action: string; target: string; created_at: string }>) {
   let prompt = BASE_SYSTEM_PROMPT;
 
   if (context) {
@@ -615,6 +615,10 @@ function buildSystemPrompt(context?: Record<string, unknown>, memories?: string[
 
   if (priorHistory && priorHistory.length > 0) {
     prompt += `\n\n[RECENT CONVERSATION HISTORY FROM PRIOR SESSIONS]\n${priorHistory.map(m => `${m.role === 'user' ? 'Operator' : 'Hyper'}: ${m.content.substring(0, 200)}`).join('\n')}`;
+  }
+
+  if (userActivity && userActivity.length > 0) {
+    prompt += `\n\n[OPERATOR'S RECENT ACTIVITY — what they've been doing]\n${userActivity.map(a => `[${a.created_at}] ${a.action} → ${a.target}`).join('\n')}`;
   }
 
   return prompt;
@@ -885,17 +889,25 @@ serve(async (req) => {
     // Extract user ID for memory/context features
     const userId = await getUserId(authHeader);
 
-    // Load memories and prior history for authenticated users
+    // Load memories, prior history, and recent activity for authenticated users
     let memories: string[] = [];
     let priorHistory: Array<{ role: string; content: string }> = [];
+    let userActivity: Array<{ action: string; target: string; created_at: string }> = [];
     if (userId) {
-      [memories, priorHistory] = await Promise.all([
+      const db = getServiceDb();
+      [memories, priorHistory, userActivity] = await Promise.all([
         loadMemories(userId),
         loadConversationHistory(userId),
+        db.from("user_activity")
+          .select("action, target, created_at")
+          .eq("user_id", userId)
+          .order("created_at", { ascending: false })
+          .limit(20)
+          .then(({ data }) => (data || []) as Array<{ action: string; target: string; created_at: string }>),
       ]);
     }
 
-    const systemPrompt = buildSystemPrompt(context, memories, priorHistory);
+    const systemPrompt = buildSystemPrompt(context, memories, priorHistory, userActivity);
 
     const fullMessages = [
       { role: "system", content: systemPrompt },
