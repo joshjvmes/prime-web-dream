@@ -18,7 +18,7 @@ interface WidgetState {
 }
 
 const DEFAULTS: WidgetState = {
-  clock: true, stats: true, notes: false, network: false, forge: false, agentLog: false, rokcat: false,
+  clock: true, stats: true, notes: false, network: false, forge: false, agentLog: false, rokcat: true,
   positions: { clock: { x: 200, y: 80 }, stats: { x: 200, y: 220 }, notes: { x: 400, y: 80 }, network: { x: 400, y: 220 }, forge: { x: 600, y: 80 }, agentLog: { x: 600, y: 220 }, rokcat: { x: 900, y: 400 } },
 };
 
