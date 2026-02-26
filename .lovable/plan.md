@@ -1,132 +1,67 @@
 
 
-# Comprehensive Widget System with AI Control
+# Fix Widget Toggle Click Registration
 
-## Overview
+## Problem
 
-Make all widgets fully controllable by the AI agent and terminal, with persistent on/off state and programmatic toggle/move capabilities via the EventBus.
+The `Toggle` component is defined **inside** the SettingsApp component body (line 186). This is a classic React anti-pattern -- every render creates a new function reference, so React treats it as a brand new component type and unmounts/remounts it. This causes clicks to be lost because the element disappears and reappears between the mousedown and mouseup events.
 
-## Changes
+## Solution
 
-### 1. Add Widget Control Events to EventBus
+Two changes to `src/components/os/SettingsApp.tsx`:
 
-**File: `src/hooks/useEventBus.ts`**
+### 1. Move Toggle outside the component (fixes click registration)
 
-Add three new event types:
-- `widget.toggle` -- toggle or set a widget's visibility
-- `widget.move` -- reposition a widget
-- `widget.list` -- request current widget state (response emitted back)
+Move the `Toggle` component definition **outside** of the `SettingsApp` function (above it or below it as a standalone component). This ensures React sees a stable component identity across renders and stops unmounting/remounting it.
 
-### 2. Make DesktopWidgets Respond to Control Events
+### 2. Make the full row clickable (improves UX)
 
-**File: `src/components/os/DesktopWidgets.tsx`**
+While fixing the core bug, also make the entire row clickable instead of just the tiny 32x16px switch:
+- Wrap in a clickable `div` with `cursor-pointer` and `hover:bg-muted/30`
+- Add padding for a larger hit target
+- Keep the switch as a visual indicator (not a nested button)
 
-- Listen for `widget.toggle` events with payload `{ id: string, enabled?: boolean }`. If `enabled` is provided, set to that value; otherwise toggle. Save state and emit `widgets.updated`.
-- Listen for `widget.move` events with payload `{ id: string, x: number, y: number }`. Update the widget position and save.
-- Listen for `widget.list` and emit `widget.list.response` with current state (which widgets are on/off, positions).
-- Enable **all widgets by default**: change `notes`, `network`, `forge`, `agentLog` defaults from `false` to `true`.
+### Before (broken -- defined inside component)
+```text
+const SettingsApp = () => {
+  // ... state ...
+  const Toggle = ({ label, value, onChange }) => (  // <-- recreated every render
+    <div className="flex items-center justify-between py-1.5">
+      <span>...</span>
+      <button onClick={() => onChange(!value)}>...</button>
+    </div>
+  );
+  return <Toggle ... />;
+};
+```
 
-### 3. Add Widget Commands to PrimeAgent
+### After (fixed -- defined outside component)
+```text
+// Standalone component with stable identity
+const Toggle = ({ label, value, onChange }: { label: string; value: boolean; onChange: (v: boolean) => void }) => (
+  <div
+    className="flex items-center justify-between py-2 px-1 -mx-1 rounded cursor-pointer hover:bg-muted/30 transition-colors"
+    onClick={() => onChange(!value)}
+  >
+    <span className="font-body text-xs text-card-foreground">{label}</span>
+    <div className={`w-8 h-4 rounded-full transition-colors relative shrink-0 ${value ? 'bg-primary/60' : 'bg-muted'}`}>
+      <div className={`absolute top-0.5 w-3 h-3 rounded-full transition-all ${value ? 'left-4 bg-primary' : 'left-0.5 bg-muted-foreground'}`} />
+    </div>
+  </div>
+);
 
-**File: `src/components/os/PrimeAgentApp.tsx`**
+const SettingsApp = () => {
+  // ... uses <Toggle /> with stable identity
+};
+```
 
-Add widget-related instruction parsing:
-- "show/enable/open widget X" -> emits `widget.toggle` with `{ id, enabled: true }`
-- "hide/disable/close widget X" -> emits `widget.toggle` with `{ id, enabled: false }`
-- "move widget X to Y,Z" -> emits `widget.move` with `{ id, x, y }`
-- "show all widgets" / "hide all widgets" -> toggles all
-- "arrange widgets" / "organize widgets" -> positions them in a grid layout
+### Also move SliderRow outside
 
-Import `eventBus` and add a new action type `'widget-control'` to handle these.
+The `SliderRow` component (line 195) has the same anti-pattern and should also be moved outside to prevent similar issues with slider interactions.
 
-### 4. Add Terminal Widget Commands
-
-**File: `src/components/os/terminal/commands.ts`**
-
-Add new commands:
-- `widget list` -- shows all widgets with their on/off status and positions
-- `widget toggle <name>` -- toggles a widget on/off
-- `widget show <name>` -- enables a widget
-- `widget hide <name>` -- disables a widget
-- `widget move <name> <x> <y>` -- moves a widget
-- `widget reset` -- resets all widgets to defaults
-- `widget all on|off` -- enables/disables all widgets
-
-Add `widget` to HELP_TEXT.
-
-### 5. Align Settings Defaults
-
-**File: `src/components/os/SettingsApp.tsx`**
-
-Update the default `WidgetToggles` to match the new "all enabled" defaults so Settings and DesktopWidgets stay in sync.
-
----
-
-## Technical Details
-
-### Files Modified
+## File changed
 
 | File | Change |
 |------|--------|
-| `src/hooks/useEventBus.ts` | Add `widget.toggle`, `widget.move`, `widget.list` to EVENT_TYPES |
-| `src/components/os/DesktopWidgets.tsx` | Add eventBus listeners for widget control; enable all widgets by default; export `WIDGET_IDS` map for name resolution |
-| `src/components/os/PrimeAgentApp.tsx` | Add widget instruction parsing + `widget-control` action type with eventBus emits |
-| `src/components/os/terminal/commands.ts` | Add `widget` command with subcommands; import eventBus |
-| `src/components/os/SettingsApp.tsx` | Update defaults to all-enabled |
+| `src/components/os/SettingsApp.tsx` | Move `Toggle` and `SliderRow` component definitions outside of `SettingsApp` function body; make Toggle row fully clickable with hover feedback |
 
-### Widget ID to Name Map
-
-```text
-clock     -> "Clock"
-stats     -> "System Stats"  
-notes     -> "Quick Notes"
-network   -> "PrimeNet"
-forge     -> "Forge Market"
-agentLog  -> "Agent Activity"
-rokcat    -> "ROKCAT"
-```
-
-The name resolution will be case-insensitive and support partial matches (e.g., "clock", "stats", "rokcat", "agent", "forge", "notes", "network").
-
-### EventBus Payloads
-
-```text
-widget.toggle:  { id: string, enabled?: boolean }
-widget.move:    { id: string, x: number, y: number }
-widget.list:    (no payload -- DesktopWidgets responds with widget.list.response)
-```
-
-### Agent Examples
-
-- User says "Show all widgets" -> Agent emits `widget.toggle` for each widget with `enabled: true`
-- User says "Move clock to top right" -> Agent emits `widget.move` with `{ id: 'clock', x: 1100, y: 80 }`
-- User says "Hide the notes widget" -> Agent emits `widget.toggle` with `{ id: 'notes', enabled: false }`
-- User says "Arrange widgets neatly" -> Agent emits a series of `widget.move` events in a grid pattern
-
-### Terminal Examples
-
-```text
-> widget list
-DESKTOP WIDGETS
-  clock      ON   (200, 80)
-  stats      ON   (200, 220)
-  notes      ON   (400, 80)
-  ...
-
-> widget toggle clock
-Widget "Clock" toggled OFF
-
-> widget move stats 500 100
-Widget "System Stats" moved to (500, 100)
-
-> widget all on
-All widgets enabled
-```
-
-### Execution Order
-
-1. Update EventBus with new event types
-2. Update DesktopWidgets with control listeners and new defaults
-3. Update SettingsApp defaults to match
-4. Add widget commands to terminal
-5. Add widget instructions to PrimeAgent parser
