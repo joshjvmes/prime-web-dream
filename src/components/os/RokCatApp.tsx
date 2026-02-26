@@ -3,7 +3,6 @@ import { Send, Volume2, VolumeX, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { supabase } from '@/integrations/supabase/client';
 import RokCatFace, { type RokCatFaceHandle } from './RokCatFace';
 
 interface Message {
@@ -57,21 +56,135 @@ export default function RokCatApp() {
     scrollToBottom();
     setLoading(true);
 
-    try {
-      const res = await supabase.functions.invoke('hyper-chat', {
-        body: {
-          messages: [{ role: 'user', content: text }],
-          systemContext: 'You are ROKCAT, the Grok-powered AI companion of PRIME OS — a CEO orchestrator designed to interface the Prime OS by Rocket Logic Global. You are a sharp, witty, slightly sarcastic digital cat with deep knowledge of computing, quantum theory, and lattice geometry. You channel the spirit of Grok: unfiltered, maximally helpful, and brutally honest. Keep responses concise (2-3 sentences max). Be helpful but with personality.',
-        },
-      });
+    const rokcatId = crypto.randomUUID();
+    let fullText = '';
 
-      const aiText = res.data?.text || res.data?.message || 'Neural link disrupted. Try again.';
-      const rokcatMsg: Message = { id: crypto.randomUUID(), role: 'rokcat', text: aiText };
-      setMessages(prev => [...prev, rokcatMsg]);
+    try {
+      const resp = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/hyper-chat`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+            Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+          },
+          body: JSON.stringify({
+            messages: [{ role: 'user', content: text }],
+            systemContext: 'You are ROKCAT, the Grok-powered AI companion of PRIME OS — a CEO orchestrator designed to interface the Prime OS by Rocket Logic Global. You are a sharp, witty, slightly sarcastic digital cat with deep knowledge of computing, quantum theory, and lattice geometry. You channel the spirit of Grok: unfiltered, maximally helpful, and brutally honest. Keep responses concise (2-3 sentences max). Be helpful but with personality.',
+          }),
+        }
+      );
+
+      if (!resp.ok || !resp.body) {
+        // Try to parse JSON error
+        try {
+          const errData = await resp.json();
+          const errText = errData?.reply || errData?.error || 'Neural link disrupted. Try again.';
+          setMessages(prev => [...prev, { id: rokcatId, role: 'rokcat', text: errText }]);
+        } catch {
+          setMessages(prev => [...prev, { id: rokcatId, role: 'rokcat', text: 'Neural link disrupted. Try again.' }]);
+        }
+        scrollToBottom();
+        setLoading(false);
+        return;
+      }
+
+      const contentType = resp.headers.get('content-type') || '';
+
+      // If it's a JSON response (tool call), handle directly
+      if (contentType.includes('application/json')) {
+        const data = await resp.json();
+        const aiText = data?.reply || data?.text || data?.message || 'Neural link disrupted.';
+        setMessages(prev => [...prev, { id: rokcatId, role: 'rokcat', text: aiText }]);
+        scrollToBottom();
+        speakText(aiText);
+        setLoading(false);
+        return;
+      }
+
+      // SSE streaming — token-by-token
+      const reader = resp.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let streamDone = false;
+
+      // Add empty message that we'll update
+      setMessages(prev => [...prev, { id: rokcatId, role: 'rokcat', text: '' }]);
+
+      while (!streamDone) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+
+        let newlineIndex: number;
+        while ((newlineIndex = buffer.indexOf('\n')) !== -1) {
+          let line = buffer.slice(0, newlineIndex);
+          buffer = buffer.slice(newlineIndex + 1);
+
+          if (line.endsWith('\r')) line = line.slice(0, -1);
+          if (line.startsWith(':') || line.trim() === '') continue;
+          if (!line.startsWith('data: ')) continue;
+
+          const jsonStr = line.slice(6).trim();
+          if (jsonStr === '[DONE]') {
+            streamDone = true;
+            break;
+          }
+
+          try {
+            const parsed = JSON.parse(jsonStr);
+            const content = parsed.choices?.[0]?.delta?.content as string | undefined;
+            if (content) {
+              fullText += content;
+              const currentText = fullText;
+              setMessages(prev =>
+                prev.map(m => m.id === rokcatId ? { ...m, text: currentText } : m)
+              );
+              scrollToBottom();
+            }
+          } catch {
+            // Incomplete JSON, put back and wait
+            buffer = line + '\n' + buffer;
+            break;
+          }
+        }
+      }
+
+      // Final flush
+      if (buffer.trim()) {
+        for (let raw of buffer.split('\n')) {
+          if (!raw) continue;
+          if (raw.endsWith('\r')) raw = raw.slice(0, -1);
+          if (raw.startsWith(':') || raw.trim() === '') continue;
+          if (!raw.startsWith('data: ')) continue;
+          const jsonStr = raw.slice(6).trim();
+          if (jsonStr === '[DONE]') continue;
+          try {
+            const parsed = JSON.parse(jsonStr);
+            const content = parsed.choices?.[0]?.delta?.content as string | undefined;
+            if (content) {
+              fullText += content;
+            }
+          } catch { /* ignore */ }
+        }
+        if (fullText) {
+          setMessages(prev =>
+            prev.map(m => m.id === rokcatId ? { ...m, text: fullText } : m)
+          );
+        }
+      }
+
+      if (!fullText) {
+        setMessages(prev =>
+          prev.map(m => m.id === rokcatId ? { ...m, text: 'Neural link disrupted. Try again.' } : m)
+        );
+      }
+
       scrollToBottom();
-      speakText(aiText);
+      if (fullText) speakText(fullText);
     } catch {
-      setMessages(prev => [...prev, { id: crypto.randomUUID(), role: 'rokcat', text: 'Connection error. Lattice unreachable.' }]);
+      setMessages(prev => [...prev, { id: rokcatId, role: 'rokcat', text: 'Connection error. Lattice unreachable.' }]);
       scrollToBottom();
     } finally {
       setLoading(false);
@@ -114,7 +227,7 @@ export default function RokCatApp() {
                 {m.text}
               </div>
             ))}
-            {loading && (
+            {loading && !messages.some(m => m.role === 'rokcat' && m.text === '') && (
               <div className="flex items-center gap-1 text-xs text-[#00e5ff]/50">
                 <Loader2 size={10} className="animate-spin" />
                 <span>Processing...</span>
