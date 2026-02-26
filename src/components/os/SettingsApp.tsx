@@ -163,23 +163,30 @@ function AIProviderPanel({ user, cloudSave, cloudLoad, isSignedIn, SectionTitle 
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<{ success: boolean; error?: string } | null>(null);
   const [configuredProviders, setConfiguredProviders] = useState<string[]>([]);
-  const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
-    if (!isSignedIn || loaded) return;
+    if (!isSignedIn) return;
+    let cancelled = false;
+
+    // Load provider preference from cloud
     cloudLoad<{ provider: string; model: string }>('ai-provider').then(data => {
+      if (cancelled) return;
       if (data) {
         setProvider(data.provider || 'default');
         setModel(data.model || '');
       }
     });
+
+    // Load configured keys from backend
     supabase.functions.invoke('ai-key-manager', { body: { action: 'get-config' } }).then(({ data }) => {
+      if (cancelled) return;
       if (data?.configuredProviders) {
         setConfiguredProviders(data.configuredProviders.map((p: any) => p.provider));
       }
     });
-    setLoaded(true);
-  }, [isSignedIn, loaded, cloudLoad]);
+
+    return () => { cancelled = true; };
+  }, [isSignedIn, cloudLoad]);
 
   const handleSave = async () => {
     setSaving(true);
