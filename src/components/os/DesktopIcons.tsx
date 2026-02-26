@@ -32,6 +32,7 @@ const categories: { name: string; apps: AppEntry[] }[] = [
       { app: 'miniapps', title: 'Mini Apps', icon: <Blocks size={22} />, label: 'Mini Apps' },
       { app: 'forge', title: 'App Forge', icon: <Store size={22} />, label: 'App Forge' },
       { app: 'botlab', title: 'BotLab', icon: <Bot size={22} />, label: 'BotLab' },
+      { app: 'rokcat', title: 'ROKCAT', icon: <Bot size={22} />, label: 'ROKCAT' },
     ],
   },
   {
