@@ -1,59 +1,31 @@
 
 
-# Fix Widget Toggle Sync Between Settings and Desktop
+# Fix Widget Toggle Default Mismatch
 
-## Problem
+## Problem Found
 
-The Settings app and DesktopWidgets both read from `localStorage('prime-os-widgets')` but maintain independent React state. Toggling a widget in Settings updates localStorage but DesktopWidgets never picks up the change until a full page reload.
+The widget toggle sync (via `eventBus`) IS working correctly -- toggling in Settings immediately updates the desktop. However, there's a **default value mismatch** between the two components:
 
-## Solution
+- `DesktopWidgets.tsx` defaults `rokcat: true`
+- `SettingsApp.tsx` defaults `rokcat: false`
 
-Use the existing `eventBus` to broadcast widget state changes so both components stay in sync.
+When Settings opens, its `useEffect` saves its defaults to localStorage (`rokcat: false`), which overwrites the DesktopWidgets default (`rokcat: true`), causing the ROKCAT widget to disappear immediately.
 
-## Changes
+## Fix
 
-### 1. DesktopWidgets.tsx -- Listen for widget changes
-
-- In the main `DesktopWidgets` component, add an `eventBus.on('widgets.updated')` listener that re-reads localStorage and updates state
-- This triggers an immediate re-render when Settings toggles a widget
-
-### 2. SettingsApp.tsx -- Emit event on toggle
-
-- In the `useEffect` that saves `widgetToggles` to localStorage, also emit `eventBus.emit('widgets.updated')` after writing
-- This notifies DesktopWidgets to refresh
-
-### 3. Clean up unused export
-
-- Remove the unused `useWidgetSettings` export from DesktopWidgets (it's never imported anywhere)
+Align the default values in `SettingsApp.tsx` to match `DesktopWidgets.tsx`.
 
 ## Technical Details
 
-### Files Modified
+### File Modified
 
 | File | Change |
 |------|--------|
-| `src/components/os/DesktopWidgets.tsx` | Add `eventBus.on('widgets.updated')` listener in `DesktopWidgets` component to re-read localStorage on change; remove unused `useWidgetSettings` |
-| `src/components/os/SettingsApp.tsx` | Emit `eventBus.emit('widgets.updated')` after saving widget toggles to localStorage |
+| `src/components/os/SettingsApp.tsx` (line 118) | Change `rokcat: false` to `rokcat: true` in the default `WidgetToggles` initialization (appears 3 times on line 118) |
 
-### Implementation
+### The One-Line Fix
 
-In DesktopWidgets, add inside the main component:
-```text
-useEffect(() => {
-  const handler = () => setState(loadState());
-  eventBus.on('widgets.updated', handler);
-  return () => eventBus.off('widgets.updated', handler);
-}, []);
-```
+In `SettingsApp.tsx` line 118, the `widgetToggles` state initializer sets `rokcat: false` as the default. Change all three occurrences to `rokcat: true` to match `DesktopWidgets.tsx`.
 
-In SettingsApp, update the existing widget save effect:
-```text
-useEffect(() => {
-  const current = JSON.parse(localStorage.getItem('prime-os-widgets') || '{}');
-  localStorage.setItem('prime-os-widgets', JSON.stringify({ ...current, ...widgetToggles }));
-  eventBus.emit('widgets.updated');  // <-- add this line
-}, [widgetToggles]);
-```
-
-This is a minimal 2-line fix that uses the already-imported eventBus pattern.
+This ensures both components agree on the default state, preventing Settings from accidentally overwriting the ROKCAT widget visibility when it first renders.
 
