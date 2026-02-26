@@ -642,6 +642,42 @@ export type Database = {
         }
         Relationships: []
       }
+      cloud_hooks: {
+        Row: {
+          action_config: Json
+          action_type: string
+          created_at: string
+          enabled: boolean
+          id: string
+          name: string
+          trigger_event: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          action_config?: Json
+          action_type: string
+          created_at?: string
+          enabled?: boolean
+          id?: string
+          name?: string
+          trigger_event: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          action_config?: Json
+          action_type?: string
+          created_at?: string
+          enabled?: boolean
+          id?: string
+          name?: string
+          trigger_event?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       escrow_deals: {
         Row: {
           amount: number
@@ -854,6 +890,106 @@ export type Database = {
           },
         ]
       }
+      social_comments: {
+        Row: {
+          ai_generated: boolean
+          author: string
+          content: string
+          created_at: string
+          id: string
+          post_id: string
+          user_id: string
+        }
+        Insert: {
+          ai_generated?: boolean
+          author: string
+          content: string
+          created_at?: string
+          id?: string
+          post_id: string
+          user_id: string
+        }
+        Update: {
+          ai_generated?: boolean
+          author?: string
+          content?: string
+          created_at?: string
+          id?: string
+          post_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "social_comments_post_id_fkey"
+            columns: ["post_id"]
+            isOneToOne: false
+            referencedRelation: "social_posts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      social_likes: {
+        Row: {
+          created_at: string
+          id: string
+          post_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          post_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          post_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "social_likes_post_id_fkey"
+            columns: ["post_id"]
+            isOneToOne: false
+            referencedRelation: "social_posts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      social_posts: {
+        Row: {
+          ai_generated: boolean
+          author: string
+          content: string
+          created_at: string
+          id: string
+          likes: number
+          role: string
+          user_id: string
+        }
+        Insert: {
+          ai_generated?: boolean
+          author: string
+          content: string
+          created_at?: string
+          id?: string
+          likes?: number
+          role?: string
+          user_id: string
+        }
+        Update: {
+          ai_generated?: boolean
+          author?: string
+          content?: string
+          created_at?: string
+          id?: string
+          likes?: number
+          role?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       transactions: {
         Row: {
           amount: number
@@ -990,6 +1126,45 @@ export type Database = {
           updated_at?: string
           user_id?: string
           value?: Json
+        }
+        Relationships: []
+      }
+      user_emails: {
+        Row: {
+          ai_generated: boolean
+          body: string
+          created_at: string
+          folder: string
+          from_address: string
+          id: string
+          read: boolean
+          subject: string
+          to_address: string
+          user_id: string
+        }
+        Insert: {
+          ai_generated?: boolean
+          body?: string
+          created_at?: string
+          folder?: string
+          from_address: string
+          id?: string
+          read?: boolean
+          subject: string
+          to_address?: string
+          user_id: string
+        }
+        Update: {
+          ai_generated?: boolean
+          body?: string
+          created_at?: string
+          folder?: string
+          from_address?: string
+          id?: string
+          read?: boolean
+          subject?: string
+          to_address?: string
+          user_id?: string
         }
         Relationships: []
       }
