@@ -371,6 +371,12 @@ function RokCatWidget() {
 export default function DesktopWidgets() {
   const [state, setState] = useState<WidgetState>(loadState);
 
+  useEffect(() => {
+    const handler = () => setState(loadState());
+    eventBus.on('widgets.updated', handler);
+    return () => eventBus.off('widgets.updated', handler);
+  }, []);
+
   const updateState = useCallback((updater: (prev: WidgetState) => WidgetState) => {
     setState(prev => { const next = updater(prev); saveState(next); return next; });
   }, []);
@@ -411,17 +417,3 @@ export default function DesktopWidgets() {
   );
 }
 
-// Export for settings
-export function useWidgetSettings() {
-  const [state, setState] = useState<WidgetState>(loadState);
-
-  const toggle = useCallback((id: string) => {
-    setState(prev => {
-      const next = { ...prev, [id]: !prev[id as keyof WidgetState] };
-      saveState(next as WidgetState);
-      return next as WidgetState;
-    });
-  }, []);
-
-  return { state, toggle };
-}

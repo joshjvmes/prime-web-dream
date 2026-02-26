@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { eventBus } from '@/hooks/useEventBus';
 import { NotificationEvent } from '@/hooks/useNotifications';
 import { type PulseSettings, loadPulseSettings, savePulseSettings } from '@/hooks/useSystemPulse';
 import { Trash2, Plus, Bell, BellOff, Monitor, Keyboard, Mouse, Volume2, Info, User, Lock, LayoutGrid, Mic, LogOut, Sparkles, Camera, RotateCcw } from 'lucide-react';
@@ -150,6 +151,7 @@ export default function SettingsApp({ notifEvents = [], onToggleEvent, onUpdateM
   useEffect(() => {
     const current = JSON.parse(localStorage.getItem('prime-os-widgets') || '{}');
     localStorage.setItem('prime-os-widgets', JSON.stringify({ ...current, ...widgetToggles }));
+    eventBus.emit('widgets.updated');
   }, [widgetToggles]);
 
   // Cloud sync
