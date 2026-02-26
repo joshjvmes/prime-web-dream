@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { eventBus } from '@/hooks/useEventBus';
 import { NotificationEvent } from '@/hooks/useNotifications';
 import { type PulseSettings, loadPulseSettings, savePulseSettings } from '@/hooks/useSystemPulse';
-import { Trash2, Plus, Bell, BellOff, Monitor, Keyboard, Mouse, Volume2, Info, User, Lock, LayoutGrid, Mic, LogOut, Sparkles, Camera, RotateCcw } from 'lucide-react';
+import { Trash2, Plus, Bell, BellOff, Monitor, Keyboard, Mouse, Volume2, Info, User, Lock, LayoutGrid, Mic, LogOut, Sparkles, Camera, RotateCcw, Brain, Eye, EyeOff, CheckCircle, XCircle, Loader2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import type { User as SupabaseUser } from '@supabase/supabase-js';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
@@ -81,7 +81,7 @@ function applyTheme(theme: 'cyan' | 'violet' | 'amber') {
   root.style.setProperty('--border', t.border);
 }
 
-type Panel = 'profile' | 'display' | 'keyboard' | 'mouse' | 'audio' | 'notifications' | 'lock' | 'widgets' | 'voice' | 'ambience' | 'about';
+type Panel = 'profile' | 'display' | 'keyboard' | 'mouse' | 'audio' | 'notifications' | 'lock' | 'widgets' | 'voice' | 'ambience' | 'ai' | 'about';
 
 const PANELS: { id: Panel; label: string; icon: React.ReactNode }[] = [
   { id: 'profile', label: 'Profile', icon: <User size={14} /> },
@@ -90,6 +90,7 @@ const PANELS: { id: Panel; label: string; icon: React.ReactNode }[] = [
   { id: 'lock', label: 'Lock & Security', icon: <Lock size={14} /> },
   { id: 'widgets', label: 'Widgets', icon: <LayoutGrid size={14} /> },
   { id: 'voice', label: 'Voice Control', icon: <Mic size={14} /> },
+  { id: 'ai', label: 'AI Provider', icon: <Brain size={14} /> },
   { id: 'keyboard', label: 'Keyboard', icon: <Keyboard size={14} /> },
   { id: 'mouse', label: 'Mouse', icon: <Mouse size={14} /> },
   { id: 'audio', label: 'Audio', icon: <Volume2 size={14} /> },
@@ -118,6 +119,229 @@ const SliderRow = ({ label, value, onChange, min, max, suffix }: { label: string
     <input type="range" min={min} max={max} value={value} onChange={e => onChange(Number(e.target.value))} className="w-full accent-primary h-1" />
   </div>
 );
+
+const PROVIDER_MODELS: Record<string, { label: string; models: { value: string; label: string }[] }> = {
+  default: { label: 'Default (Built-in)', models: [] },
+  openai: { label: 'OpenAI', models: [
+    { value: 'gpt-4o', label: 'GPT-4o' },
+    { value: 'gpt-4o-mini', label: 'GPT-4o Mini' },
+    { value: 'gpt-4-turbo', label: 'GPT-4 Turbo' },
+    { value: 'o1', label: 'o1' },
+    { value: 'o1-mini', label: 'o1 Mini' },
+  ]},
+  anthropic: { label: 'Anthropic', models: [
+    { value: 'claude-sonnet-4-20250514', label: 'Claude Sonnet 4' },
+    { value: 'claude-3-5-haiku-latest', label: 'Claude 3.5 Haiku' },
+    { value: 'claude-3-opus-20240229', label: 'Claude 3 Opus' },
+  ]},
+  google: { label: 'Google Gemini', models: [
+    { value: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro' },
+    { value: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash' },
+    { value: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash' },
+  ]},
+};
+
+function AIProviderPanel({ user, cloudSave, cloudLoad, isSignedIn, SectionTitle }: {
+  user?: SupabaseUser | null;
+  cloudSave: (key: string, value: unknown) => Promise<void>;
+  cloudLoad: <T = unknown>(key: string, fallback?: T) => Promise<T | undefined>;
+  isSignedIn: boolean;
+  SectionTitle: React.FC<{ children: string }>;
+}) {
+  const [provider, setProvider] = useState('default');
+  const [model, setModel] = useState('');
+  const [apiKey, setApiKey] = useState('');
+  const [showKey, setShowKey] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [testResult, setTestResult] = useState<{ success: boolean; error?: string } | null>(null);
+  const [configuredProviders, setConfiguredProviders] = useState<string[]>([]);
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    if (!isSignedIn || loaded) return;
+    cloudLoad<{ provider: string; model: string }>('ai-provider').then(data => {
+      if (data) {
+        setProvider(data.provider || 'default');
+        setModel(data.model || '');
+      }
+    });
+    supabase.functions.invoke('ai-key-manager', { body: { action: 'get-config' } }).then(({ data }) => {
+      if (data?.configuredProviders) {
+        setConfiguredProviders(data.configuredProviders.map((p: any) => p.provider));
+      }
+    });
+    setLoaded(true);
+  }, [isSignedIn, loaded, cloudLoad]);
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      await cloudSave('ai-provider', { provider, model });
+      if (apiKey && provider !== 'default') {
+        await supabase.functions.invoke('ai-key-manager', {
+          body: { action: 'save-key', provider, apiKey, model },
+        });
+        setConfiguredProviders(prev => prev.includes(provider) ? prev : [...prev, provider]);
+        setApiKey('');
+      }
+    } catch {} finally { setSaving(false); }
+  };
+
+  const handleTest = async () => {
+    if (!apiKey || provider === 'default') return;
+    setTesting(true);
+    setTestResult(null);
+    try {
+      const { data } = await supabase.functions.invoke('ai-key-manager', {
+        body: { action: 'test-key', provider, apiKey },
+      });
+      setTestResult(data || { success: false, error: 'No response' });
+    } catch (e) {
+      setTestResult({ success: false, error: 'Connection failed' });
+    } finally { setTesting(false); }
+  };
+
+  const handleDelete = async (prov: string) => {
+    await supabase.functions.invoke('ai-key-manager', {
+      body: { action: 'delete-key', provider: prov },
+    });
+    setConfiguredProviders(prev => prev.filter(p => p !== prov));
+    if (provider === prov) {
+      setProvider('default');
+      setModel('');
+      await cloudSave('ai-provider', { provider: 'default', model: '' });
+    }
+  };
+
+  if (!user) {
+    return (
+      <div className="space-y-1">
+        <SectionTitle>AI Provider</SectionTitle>
+        <p className="text-[10px] text-muted-foreground">Sign in to configure your own AI provider and unlock unchained access to your preferred model.</p>
+      </div>
+    );
+  }
+
+  const models = PROVIDER_MODELS[provider]?.models || [];
+
+  return (
+    <div className="space-y-1">
+      <SectionTitle>AI Provider</SectionTitle>
+      <p className="text-[10px] text-muted-foreground mb-3">
+        Bring your own API key for OpenAI, Anthropic, or Google Gemini. All AI features will route through your chosen provider.
+      </p>
+
+      <SectionTitle>Provider</SectionTitle>
+      <div className="flex flex-wrap gap-1.5 py-1">
+        {Object.entries(PROVIDER_MODELS).map(([key, { label }]) => (
+          <button key={key} onClick={() => { setProvider(key); setModel(PROVIDER_MODELS[key]?.models[0]?.value || ''); setTestResult(null); }}
+            className={`px-3 py-1.5 rounded border text-[10px] font-display tracking-wider transition-all ${
+              provider === key
+                ? 'border-primary bg-primary/10 text-primary'
+                : 'border-border text-muted-foreground hover:text-foreground hover:border-muted-foreground'
+            }`}>
+            {label}
+            {configuredProviders.includes(key) && <span className="ml-1 text-primary">●</span>}
+          </button>
+        ))}
+      </div>
+
+      {provider !== 'default' && (
+        <>
+          <SectionTitle>Model</SectionTitle>
+          <select
+            value={model}
+            onChange={e => setModel(e.target.value)}
+            className="w-full bg-background border border-border rounded px-2 py-1.5 text-xs text-foreground"
+          >
+            {models.map(m => (
+              <option key={m.value} value={m.value}>{m.label}</option>
+            ))}
+          </select>
+
+          <SectionTitle>API Key</SectionTitle>
+          <div className="relative">
+            <input
+              type={showKey ? 'text' : 'password'}
+              value={apiKey}
+              onChange={e => { setApiKey(e.target.value); setTestResult(null); }}
+              placeholder={configuredProviders.includes(provider) ? '••••••••  (key saved — enter new to replace)' : 'Paste your API key'}
+              className="w-full bg-background border border-border rounded px-2 py-1.5 text-xs text-foreground placeholder:text-muted-foreground/50 pr-8"
+            />
+            <button
+              onClick={() => setShowKey(!showKey)}
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+            >
+              {showKey ? <EyeOff size={12} /> : <Eye size={12} />}
+            </button>
+          </div>
+
+          <div className="flex gap-2 mt-2">
+            <button
+              onClick={handleTest}
+              disabled={!apiKey || testing}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded border border-border text-[10px] font-display tracking-wider text-muted-foreground hover:text-foreground hover:bg-muted/30 transition-colors disabled:opacity-40"
+            >
+              {testing ? <Loader2 size={10} className="animate-spin" /> : <CheckCircle size={10} />}
+              Test Key
+            </button>
+            <button
+              onClick={handleSave}
+              disabled={saving || (provider !== 'default' && !apiKey && !configuredProviders.includes(provider))}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded border border-primary/30 text-primary text-[10px] font-display tracking-wider hover:bg-primary/10 transition-colors disabled:opacity-40"
+            >
+              {saving ? <Loader2 size={10} className="animate-spin" /> : null}
+              Save Configuration
+            </button>
+          </div>
+
+          {testResult && (
+            <div className={`mt-2 p-2 rounded border text-[10px] ${
+              testResult.success
+                ? 'border-green-500/30 bg-green-500/10 text-green-400'
+                : 'border-destructive/30 bg-destructive/10 text-destructive'
+            }`}>
+              {testResult.success ? (
+                <span className="flex items-center gap-1"><CheckCircle size={10} /> Key validated successfully!</span>
+              ) : (
+                <span className="flex items-center gap-1"><XCircle size={10} /> {testResult.error || 'Invalid key'}</span>
+              )}
+            </div>
+          )}
+        </>
+      )}
+
+      {configuredProviders.length > 0 && (
+        <>
+          <SectionTitle>Configured Keys</SectionTitle>
+          <div className="space-y-1">
+            {configuredProviders.map(p => (
+              <div key={p} className="flex items-center justify-between p-2 rounded border border-border bg-card/50">
+                <div className="flex items-center gap-2">
+                  <span className={`w-2 h-2 rounded-full ${provider === p ? 'bg-primary' : 'bg-muted-foreground/40'}`} />
+                  <span className="text-[10px] text-foreground">{PROVIDER_MODELS[p]?.label || p}</span>
+                  {provider === p && <span className="text-[8px] text-primary font-display tracking-wider">ACTIVE</span>}
+                </div>
+                <button onClick={() => handleDelete(p)} className="text-muted-foreground hover:text-destructive">
+                  <Trash2 size={11} />
+                </button>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+
+      <SectionTitle>How It Works</SectionTitle>
+      <div className="text-[10px] text-muted-foreground space-y-1.5">
+        <p>• Keys are stored encrypted server-side and never leave the backend</p>
+        <p>• All AI features (Hypersphere, ROKCAT, BotLab, MiniApps) route through your provider</p>
+        <p>• If your key fails, the system falls back to the built-in AI</p>
+        <p>• Select "Default" to use the built-in AI at any time</p>
+      </div>
+    </div>
+  );
+}
 
 export default function SettingsApp({ notifEvents = [], onToggleEvent, onUpdateMessage, onAddEvent, onRemoveEvent, onLock, user }: SettingsAppProps) {
   const [activePanel, setActivePanel] = useState<Panel>('profile');
@@ -206,7 +430,6 @@ export default function SettingsApp({ notifEvents = [], onToggleEvent, onUpdateM
     setSettings(s => ({ ...s, [key]: value }));
 
   
-
   const SelectRow = ({ label, value, options, onChange }: { label: string; value: string; options: string[]; onChange: (v: string) => void }) => (
     <div className="flex items-center justify-between py-1.5">
       <span className="font-body text-xs text-card-foreground">{label}</span>
@@ -659,6 +882,9 @@ export default function SettingsApp({ notifEvents = [], onToggleEvent, onUpdateM
             </div>
           </div>
         );
+
+      case 'ai':
+        return <AIProviderPanel user={user} cloudSave={cloudSave} cloudLoad={cloudLoad} isSignedIn={isSignedIn} SectionTitle={SectionTitle} />;
 
       case 'about':
         return (

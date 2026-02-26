@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { routeAICall } from "../_shared/ai-router.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -160,59 +161,30 @@ serve(async (req) => {
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
 
-    const now = new Date();
-    const timeContext = `Current time: ${now.toISOString()}. Hour: ${now.getUTCHours()} UTC.`;
-
-    let userPrompt: string;
-    let tools: any[];
-    let toolChoice: any;
-    let resultKey: string;
-
-    if (action === "generate-posts") {
-      userPrompt = `${timeContext} Generate 3-5 fresh social posts from different PRIME OS personas. Make them about recent system events, discoveries, metrics, or inter-module conversations. Each post should feel unique to its persona's personality. Include 0-2 comments from OTHER personas on some posts.`;
-      tools = [POST_TOOL];
-      toolChoice = { type: "function", function: { name: "create_social_posts" } };
-      resultKey = "posts";
-    } else if (action === "generate-emails") {
-      userPrompt = `${timeContext} Generate 2-3 emails for the operator's inbox. Mix types: a system report with metrics, an inter-agent discussion the operator is CC'd on, or a Forge marketplace alert. Use realistic @prime.os email addresses.`;
-      tools = [EMAIL_TOOL];
-      toolChoice = { type: "function", function: { name: "create_emails" } };
-      resultKey = "emails";
-    } else if (action === "generate-replies") {
-      const { postContent, postAuthor } = reqBody;
-      userPrompt = `${timeContext} A post was just made by "${postAuthor}" on PrimeSocial:\n\n"${postContent}"\n\nGenerate 1-2 short reply comments from OTHER PRIME OS personas (not ${postAuthor}) reacting to this post. The replies should be in-character, referencing relevant system concepts. Keep each reply to 1-2 sentences.`;
-      tools = [REPLY_TOOL];
-      toolChoice = { type: "function", function: { name: "create_replies" } };
-      resultKey = "replies";
-    } else if (action === "generate-reply-email") {
-      const { originalEmail } = reqBody;
-      const recipientName = (originalEmail?.to || "operator").split("@")[0];
-      userPrompt = `${timeContext} An email was just sent:\nFrom: ${originalEmail?.from}\nTo: ${originalEmail?.to}\nSubject: ${originalEmail?.subject}\nBody: ${originalEmail?.body}\n\nGenerate a single reply email from the recipient "${recipientName}" (or the most relevant PRIME OS persona) responding to this email. The reply should be in-character, thoughtful, and reference specific details from the original. Use a Re: subject line.`;
-      tools = [REPLY_EMAIL_TOOL];
-      toolChoice = { type: "function", function: { name: "create_reply_email" } };
-      resultKey = "email";
-    } else {
-      return new Response(
-        JSON.stringify({ error: "Invalid action." }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+    // Extract user ID from auth header for BYOAK routing
+    let userId: string | null = null;
+    const authHeader = reqBody._authHeader || req.headers.get("Authorization");
+    if (authHeader) {
+      try {
+        const { createClient } = await import("https://esm.sh/@supabase/supabase-js@2");
+        const db = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_ANON_KEY")!, {
+          global: { headers: { Authorization: authHeader } },
+        });
+        const token = authHeader.replace("Bearer ", "");
+        const { data } = await db.auth.getClaims(token);
+        userId = (data?.claims?.sub as string) || null;
+      } catch {}
     }
 
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-3-flash-preview",
-        messages: [
-          { role: "system", content: SYSTEM_PROMPT },
-          { role: "user", content: userPrompt },
-        ],
-        tools,
-        tool_choice: toolChoice,
-      }),
+    const response = await routeAICall({
+      userId,
+      messages: [
+        { role: "system", content: SYSTEM_PROMPT },
+        { role: "user", content: userPrompt },
+      ],
+      tools,
+      toolChoice,
+      stream: false,
     });
 
     if (!response.ok) {

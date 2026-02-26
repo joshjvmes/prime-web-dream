@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { routeAICall } from "../_shared/ai-router.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -879,8 +880,7 @@ serve(async (req) => {
   try {
     const authHeader = req.headers.get("Authorization") || `Bearer ${Deno.env.get("SUPABASE_ANON_KEY")}`;
     const { messages, context } = await req.json();
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
+    // LOVABLE_API_KEY is still needed as fallback (handled by ai-router)
 
     // Extract user ID for memory/context features
     const userId = await getUserId(authHeader);
@@ -897,30 +897,18 @@ serve(async (req) => {
 
     const systemPrompt = buildSystemPrompt(context, memories, priorHistory);
 
-    const apiHeaders = {
-      Authorization: `Bearer ${LOVABLE_API_KEY}`,
-      "Content-Type": "application/json",
-    };
-
     const fullMessages = [
       { role: "system", content: systemPrompt },
       ...messages,
     ];
 
     // Phase 1: Non-streaming call with tools
-    const phase1Resp = await fetch(
-      "https://ai.gateway.lovable.dev/v1/chat/completions",
-      {
-        method: "POST",
-        headers: apiHeaders,
-        body: JSON.stringify({
-          model: "google/gemini-3-flash-preview",
-          messages: fullMessages,
-          tools: TOOLS,
-          stream: false,
-        }),
-      }
-    );
+    const phase1Resp = await routeAICall({
+      userId,
+      messages: fullMessages,
+      tools: TOOLS,
+      stream: false,
+    });
 
     if (!phase1Resp.ok) {
       if (phase1Resp.status === 429) {
@@ -967,18 +955,11 @@ serve(async (req) => {
           if (lastUserMsg) await saveConversationMessage(userId, "user", lastUserMsg.content);
           
           // Re-run without tools to get a natural response after saving
-          const phase2Resp = await fetch(
-            "https://ai.gateway.lovable.dev/v1/chat/completions",
-            {
-              method: "POST",
-              headers: apiHeaders,
-              body: JSON.stringify({
-                model: "google/gemini-3-flash-preview",
-                messages: fullMessages,
-                stream: true,
-              }),
-            }
-          );
+          const phase2Resp = await routeAICall({
+            userId,
+            messages: fullMessages,
+            stream: true,
+          });
           if (!phase2Resp.ok) {
             return new Response(JSON.stringify({ error: "AI gateway error" }),
               { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
@@ -997,18 +978,11 @@ serve(async (req) => {
             { role: "assistant", content: null, tool_calls: [tc] },
             { role: "tool", tool_call_id: tc.id, content: recalled.length > 0 ? `Found memories:\n${recalled.join('\n')}` : "No matching memories found." },
           ];
-          const recallResp = await fetch(
-            "https://ai.gateway.lovable.dev/v1/chat/completions",
-            {
-              method: "POST",
-              headers: apiHeaders,
-              body: JSON.stringify({
-                model: "google/gemini-3-flash-preview",
-                messages: recallMessages,
-                stream: true,
-              }),
-            }
-          );
+          const recallResp = await routeAICall({
+            userId,
+            messages: recallMessages,
+            stream: true,
+          });
           if (!recallResp.ok) {
             return new Response(JSON.stringify({ error: "AI gateway error" }),
               { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
@@ -1110,18 +1084,11 @@ serve(async (req) => {
       if (lastUserMsg) saveConversationMessage(userId, "user", lastUserMsg.content).catch(() => {});
     }
 
-    const phase2Resp = await fetch(
-      "https://ai.gateway.lovable.dev/v1/chat/completions",
-      {
-        method: "POST",
-        headers: apiHeaders,
-        body: JSON.stringify({
-          model: "google/gemini-3-flash-preview",
-          messages: fullMessages,
-          stream: true,
-        }),
-      }
-    );
+    const phase2Resp = await routeAICall({
+      userId,
+      messages: fullMessages,
+      stream: true,
+    });
 
     if (!phase2Resp.ok) {
       const t = await phase2Resp.text();
