@@ -1,123 +1,84 @@
 
-
-# ROKCAT AI Face + ElevenLabs TTS Integration
+# Floating Mini ROKCAT Widget + Widget Settings Toggle
 
 ## Overview
 
-Add two major features to PRIME OS:
-1. **ROKCAT 3D Wireframe Face** -- A Three.js-rendered geometric cat face (from the uploaded HTML) that lives as a new OS app and can also appear as a floating assistant overlay
-2. **ElevenLabs Text-to-Speech** -- Connect ElevenLabs via the connector system, create an edge function for TTS, and wire it into the ROKCAT face so the jaw animates while speaking
-
-The ROKCAT face will integrate with the existing Hyper AI chat -- when Hyper responds, ROKCAT speaks the response aloud with jaw animation synced to audio playback.
+Add a floating mini ROKCAT face as a new desktop widget in the bottom-right corner. Double-click toggles it on/off (active = listens for system events and speaks them via TTS; inactive = static/sleeping face). Also add a "ROKCAT Assistant" toggle to the existing Widget Settings in the Settings app.
 
 ---
 
-## 1. ElevenLabs Connection Setup
+## 1. New Widget: RokCatWidget
 
-Use the ElevenLabs connector (connector_id: `elevenlabs`) to get the API key into the project. This provides `ELEVENLABS_API_KEY` as a secret for edge functions.
+**File: `src/components/os/DesktopWidgets.tsx`**
 
-## 2. Edge Function: `elevenlabs-tts`
+Add a new `RokCatWidget` component inside the existing widget system:
 
-Create `supabase/functions/elevenlabs-tts/index.ts`:
-- Accepts `{ text, voiceId? }` POST body
-- Calls ElevenLabs TTS API (`eleven_turbo_v2_5` model for low latency)
-- Returns raw audio/mpeg binary
-- Uses CORS headers from shared module
-- Default voice: "Brian" (`nPczCjzI2devNBz1zQrb`) -- deep, slightly robotic feel fitting ROKCAT
+- Renders a small (120x120px) `RokCatFace` component inside a draggable widget frame
+- Has an `active` state (persisted in localStorage via the widget state)
+- **Double-click** on the face toggles active/inactive:
+  - Active: face glows cyan, listens on `eventBus` for `notification.created` and `agent.action.logged` events, speaks summaries via the `elevenlabs-tts` edge function with jaw animation
+  - Inactive: face is dim/sleeping, no TTS, shows a small "zzz" indicator
+- Single-click drag still works for repositioning (handled by existing `DraggableWidget` wrapper)
+- Shows a small status indicator (green dot = active, gray = sleeping)
 
-## 3. ROKCAT Face Component
+## 2. Widget State Updates
 
-Create `src/components/os/RokCatFace.tsx`:
-- Port the Three.js wireframe cat geometry from `rokcat.html` into a React component using raw Three.js (no additional deps needed -- Three.js patterns via `useRef` + `useEffect`)
-- Neon cyan wireframe cat head with glass facets, node particles, and jaw animation
-- Mouse parallax for head tracking
-- Idle breathing animation
-- Exposes methods: `speak(audioUrl)` to trigger jaw animation synced to audio playback
-- Audio playback uses `Web Audio API` `AnalyserNode` for real-time volume data driving jaw movement (instead of simulated sine waves from the original)
+**File: `src/components/os/DesktopWidgets.tsx`**
 
-## 4. ROKCAT App Window
+- Add `rokcat: boolean` to the `WidgetState` interface (default: `false`)
+- Add default position: `rokcat: { x: -200, y: -200 }` (bottom-right relative, will compute at render)
+- Register in the widgets array alongside clock, stats, notes, etc.
+- The RokCatWidget gets a special fixed position in bottom-right corner by default
 
-Create `src/components/os/RokCatApp.tsx`:
-- Full app window containing the 3D face + chat input at bottom
-- Text input sends to `hyper-chat` edge function for AI response
-- AI response text is sent to `elevenlabs-tts` edge function
-- Returned audio plays while jaw animates
-- Shows transcript of conversation
-- "Transmit" button + Enter key to send
+## 3. Settings Integration
 
-Register as app type `'rokcat'` in the OS type system and Desktop.
+**File: `src/components/os/SettingsApp.tsx`**
 
-## 5. Integration Points
+- Add `rokcat: boolean` to the `WidgetToggles` interface
+- Add a new toggle row: "ROKCAT Assistant" in the Desktop Widgets section
+- Follows the exact same pattern as the existing clock/stats/notes toggles
 
-**Desktop.tsx**: Add `rokcat` to app registry, import `RokCatApp`
-
-**types/os.ts**: Add `'rokcat'` to the `AppType` union
-
-**Taskbar.tsx**: Add ROKCAT to the app list with a Cat/Bot icon
-
-**DesktopIcons.tsx**: Add ROKCAT icon under AI & Compute category
-
-**HypersphereApp.tsx** (optional enhancement): Add a "Speak" button next to AI responses that sends the text to TTS and opens a mini ROKCAT face overlay
-
----
-
-## Technical Details
-
-### Three.js Integration Pattern
-
-The face geometry is defined as typed node/connection/face arrays (ported from the HTML). A React component manages the Three.js lifecycle:
+## 4. RokCatWidget Component Details
 
 ```text
-useEffect(() => {
-  // Create scene, camera, renderer
-  // Build geometry from node definitions
-  // Start animation loop
-  return () => { cleanup renderer }
-}, [])
+function RokCatWidget():
+  - useState: active (boolean, from localStorage)
+  - useRef: RokCatFaceHandle for speak/stop
+  - useEffect: when active, subscribe to eventBus events:
+    - 'notification.created' -> speak notification summary
+    - 'agent.action.logged' -> speak agent action summary
+  - onDoubleClick handler: toggles active state, saves to localStorage
+  - Renders:
+    - RokCatFace (small, 120x120)
+    - Status dot overlay (green pulse when active, gray when off)
+    - "Double-click to wake/sleep" tooltip on hover
 ```
 
-Jaw animation is driven by an `AnalyserNode` attached to the audio element, reading `getByteFrequencyData()` per frame to get real volume levels.
+## 5. Technical Details
 
-### Edge Function Structure
-
-```text
-POST /functions/v1/elevenlabs-tts
-Body: { text: string, voiceId?: string }
-Response: audio/mpeg binary stream
-```
-
-### Files to Create
-
-| File | Purpose |
-|------|---------|
-| `supabase/functions/elevenlabs-tts/index.ts` | TTS edge function |
-| `src/components/os/RokCatFace.tsx` | Three.js 3D wireframe cat face component |
-| `src/components/os/RokCatApp.tsx` | Full ROKCAT app with chat + face + TTS |
-
-### Files to Modify
+### Files Modified
 
 | File | Change |
-|------|---------|
-| `src/types/os.ts` | Add `'rokcat'` to AppType |
-| `src/components/os/Desktop.tsx` | Import RokCatApp, add to app registry |
-| `src/components/os/Taskbar.tsx` | Add ROKCAT to allApps list |
-| `src/components/os/DesktopIcons.tsx` | Add ROKCAT icon |
+|------|--------|
+| `src/components/os/DesktopWidgets.tsx` | Add `rokcat` to WidgetState, add RokCatWidget component, register in widgets array |
+| `src/components/os/SettingsApp.tsx` | Add `rokcat` to WidgetToggles interface and toggle UI |
+
+### No New Files
+
+Everything fits within existing files following the established widget pattern.
+
+### Implementation Notes
+
+- The RokCatFace component already accepts a `className` prop and exposes `speak(audioUrl)` via `useImperativeHandle` -- perfect for embedding as a mini widget
+- TTS calls go through the existing `elevenlabs-tts` edge function at `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/elevenlabs-tts`
+- Event bus subscriptions use the existing `eventBus.on/off` pattern from `useEventBus`
+- Widget position defaults to bottom-right but is draggable like all other widgets
+- The double-click vs drag distinction works because drag requires mousedown on the title bar (GripHorizontal area), while double-click targets the face content area
 
 ### Execution Order
 
-1. Connect ElevenLabs connector (user approval required)
-2. Create `elevenlabs-tts` edge function
-3. Create `RokCatFace.tsx` (Three.js face component)
-4. Create `RokCatApp.tsx` (app wrapper with chat + TTS)
-5. Update `types/os.ts`, `Desktop.tsx`, `Taskbar.tsx`, `DesktopIcons.tsx`
-
-### Notes from Friend's Feedback
-
-The uploaded ideas document highlights key improvements PRIME OS already addresses well:
-- Hybrid kernel architecture (local + cloud) -- already implemented
-- Agent orchestration with BotLab + EventBus
-- Session replay/observability via audit logs
-- MCP integration in bot system
-
-The ROKCAT face adds the "personality layer" that makes the AI assistant feel tangible and alive -- a visual anchor for voice interaction.
-
+1. Update `WidgetState` interface and defaults in `DesktopWidgets.tsx`
+2. Create `RokCatWidget` component with double-click toggle + TTS integration
+3. Register rokcat in the widgets array
+4. Update `WidgetToggles` in `SettingsApp.tsx` and add the toggle row
+5. Test end-to-end: enable widget from Settings, verify face renders, double-click to activate, trigger a notification to hear TTS
