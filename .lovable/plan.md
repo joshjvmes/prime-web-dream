@@ -1,230 +1,159 @@
 
 
-# Full Agent Runtime: Lane-Based Queue, Sub-Agents, Persistent Memory, Streaming
+# Cron Scheduling + Real-Time User Activity Feed for AI Agents
 
 ## Overview
 
-Transform the current stateless bot system into a persistent agent runtime with real orchestration. Agents get their own task queues with priority lanes, can spawn child agents, maintain isolated persistent memory, and stream execution logs back to the UI in real-time.
+Two major additions: (1) real cron-based scheduling so bots automatically execute on their configured intervals, and (2) a user activity stream that feeds into AI agent context so the AI can "see" what the user is doing in real-time and reference it during conversations.
 
-## Architecture
+## Part 1: Cron Job Scheduling
 
-```text
-                    ┌─────────────────────────────────────┐
-                    │         agent-runtime (edge fn)      │
-                    │                                      │
-  BotLab UI ──────> │  ┌──────────┐  ┌──────────────────┐ │
-  PrimeAgent ─────> │  │ Executor │  │  Lane Scheduler   │ │
-  Cron (pg_cron) ─> │  │          │──│  critical > high  │ │
-  EventBus ───────> │  │  AI Loop │  │  > normal > low   │ │
-                    │  │          │  │  > background     │ │
-                    │  └────┬─────┘  └──────────────────┘ │
-                    │       │                              │
-                    │  ┌────▼─────┐  ┌──────────────────┐ │
-                    │  │ Sub-agent│  │ Tool Executor     │ │
-                    │  │ Spawner  │──│ (reuses bot-api)  │ │
-                    │  └──────────┘  └──────────────────┘ │
-                    └──────────┬──────────────────────────┘
-                               │
-              ┌────────────────┼────────────────┐
-              │                │                │
-        agent_tasks      agent_memory     Realtime SSE
-        (queue table)    (per-bot KV)     (streaming logs)
-```
+### How It Works
 
-## Database Changes (3 new tables)
+Bots in `bot_registry` already have a `schedule` column (e.g., `"*/5 * * * *"`). Currently it's stored but never used. We'll make it real by:
 
-### `agent_tasks` -- The Task Queue
+1. Creating a new edge function `cron-dispatcher` that scans for active bots with schedules and executes them via `agent-runtime`
+2. Setting up a `pg_cron` job that calls `cron-dispatcher` every minute
+3. Adding a `last_run_at` column to `bot_registry` so we can track when each bot last ran and avoid double-firing
 
-Stores all tasks with lane-based priority. Agents pull from this queue.
+### Database Changes
 
-| Column | Type | Purpose |
-|--------|------|---------|
-| id | uuid PK | Task ID |
-| bot_id | uuid | Owning agent |
-| user_id | uuid | Owning user |
-| parent_task_id | uuid? | Parent task (for sub-agent work) |
-| spawned_by_bot_id | uuid? | Parent agent that spawned this |
-| lane | text | `critical`, `high`, `normal`, `low`, `background` |
-| status | text | `queued`, `running`, `completed`, `failed`, `cancelled` |
-| instruction | text | What the agent should do |
-| input_payload | jsonb | Input data/context |
-| result | jsonb? | Output when complete |
-| error | text? | Error message if failed |
-| steps | jsonb[] | Array of execution steps (for streaming log) |
-| max_steps | int | Safety limit (default 10) |
-| created_at | timestamptz | |
-| started_at | timestamptz? | When execution began |
-| completed_at | timestamptz? | When finished |
+- Add `last_run_at TIMESTAMPTZ` column to `bot_registry`
+- Create pg_cron job via SQL insert (not migration, since it contains project-specific URLs/keys)
 
-RLS: Users can only see/manage their own tasks.
+### New Edge Function: `cron-dispatcher`
 
-### `agent_memory` -- Per-Bot Persistent Memory
+**File: `supabase/functions/cron-dispatcher/index.ts`**
 
-Isolated key-value store per bot (not shared like `ai_memories`).
+Called every minute by pg_cron. Logic:
+1. Query all bots where `is_active = true` AND `schedule IS NOT NULL`
+2. For each bot, parse the cron expression and check if it should fire now (comparing against `last_run_at`)
+3. If it should fire, enqueue a task via `agent_tasks` table directly and update `last_run_at`
+4. The bot's task will be picked up by `agent-runtime` when the user (or a follow-up cron call) triggers execution
+
+A lightweight cron parser will be included inline to match minute/hour/day patterns without external dependencies.
+
+### UI Updates in BotLabApp
+
+- Show "Next run" time next to scheduled bots
+- Show "Last run" timestamp from `last_run_at`
+- Add a visual cron schedule builder (preset options: every 5 min, hourly, daily, weekly + custom cron input)
+
+## Part 2: Real-Time User Activity Stream
+
+### Concept
+
+Create a `user_activity` table that logs every significant user action in the OS. This becomes context that AI agents (Hypersphere, PrimeAgent, BotLab bots) can query to understand what the user is currently doing.
+
+### New Table: `user_activity`
 
 | Column | Type | Purpose |
 |--------|------|---------|
 | id | uuid PK | |
-| bot_id | uuid | Which bot owns this memory |
-| user_id | uuid | Owning user |
-| namespace | text | Category: `facts`, `context`, `conversation`, `state` |
-| key | text | Memory key |
-| value | jsonb | Memory value |
-| created_at / updated_at | timestamptz | |
+| user_id | uuid | Who |
+| action | text | What happened (e.g., `app.opened`, `file.uploaded`) |
+| target | text | What it targeted (e.g., `PrimeVault`, `report.pdf`) |
+| metadata | jsonb | Extra context (window positions, values, etc.) |
+| created_at | timestamptz | When |
 
-RLS: Users can only access memory for their own bots. UNIQUE on (bot_id, namespace, key).
+RLS: Users can only see their own activity. Auto-prune entries older than 24 hours via a cleanup function.
 
-### `agent_runs` -- Execution History with Streaming
+Enable Realtime on this table so agents can subscribe to live updates.
 
-| Column | Type | Purpose |
-|--------|------|---------|
-| id | uuid PK | Run ID |
-| task_id | uuid | Which task this run executes |
-| bot_id | uuid | |
-| user_id | uuid | |
-| status | text | `running`, `completed`, `failed` |
-| steps | jsonb | Array of `{ step, action, result, timestamp }` |
-| token_usage | jsonb? | `{ prompt, completion, total }` |
-| started_at | timestamptz | |
-| completed_at | timestamptz? | |
+### Activity Tracker Hook: `useActivityTracker`
 
-RLS: Users can only view their own runs. Enable realtime on this table so the UI can stream step updates.
+**File: `src/hooks/useActivityTracker.ts`**
 
-## New Edge Function: `agent-runtime`
+A hook integrated into `Desktop.tsx` that:
+1. Listens to EventBus events (`app.opened`, `app.closed`, `file.uploaded`, `trade.executed`, etc.)
+2. Batches events and writes them to `user_activity` every 3 seconds (debounced)
+3. Tracks the currently focused window and active workspace
+4. Records navigation events, clicks on major UI elements
 
-**File: `supabase/functions/agent-runtime/index.ts`**
+This provides a continuous stream of "what the user is doing" without any manual logging.
 
-This is the core execution engine. Actions:
+### AI Context Integration
 
-### `enqueue` -- Add a task to the queue
-Accepts `{ bot_id, instruction, lane?, input_payload?, parent_task_id?, max_steps? }`. Inserts into `agent_tasks` with status `queued`.
+Update the `_shared/ai-router.ts` and the edge functions (`hyper-chat`, `agent-runtime`) to:
+1. Before each AI call, query the last 20 entries from `user_activity` for the user
+2. Inject this as a system prompt section: "User's recent activity:" with timestamps
+3. The AI now knows: "The user opened PrimeVault 30 seconds ago, then checked their wallet, then opened this chat"
 
-### `execute` -- Run the next task (or a specific task)
-The main agentic loop:
+### Activity Feed UI Component
 
-1. Pick the highest-priority `queued` task for the bot (ordered by lane priority, then created_at)
-2. Create an `agent_runs` record with status `running`
-3. Enter the AI loop (up to `max_steps` iterations):
-   a. Build context: system prompt + bot memory + task instruction + previous steps
-   b. Call AI (via `routeAICall`) with available tools + two special tools: `spawn_subtask` and `save_to_memory`
-   c. If AI returns tool calls, execute them and append step to `agent_runs.steps`
-   d. Update `agent_runs` in DB after each step (triggers realtime for streaming)
-   e. If AI returns a final text response (no tool calls), mark task `completed`
-4. If a step calls `spawn_subtask`, insert a child `agent_tasks` row with `parent_task_id` set
+**File: `src/components/os/ActivityFeed.tsx`**
 
-### `cancel` -- Cancel a running/queued task
-Sets status to `cancelled`. If the task has child tasks, cascade-cancel them.
+A live-updating activity log panel that can be:
+- Embedded in PrimeAgent as a sidebar
+- Shown in BotLab's Tasks tab as context
+- Opened as a standalone widget from the taskbar
 
-### `status` -- Get queue status
-Returns tasks grouped by lane with counts.
-
-### `memory` -- Manage bot memory
-Sub-actions: `get`, `set`, `list`, `delete` for the bot's `agent_memory` entries.
-
-### Special Tools Available to Agents
-
-In addition to the existing bot tools (from `bot-api`), agents get:
-
-- **`spawn_subtask`**: `{ instruction, lane?, input_payload? }` -- creates a child task executed by a new sub-agent instance. Returns the child task ID. The parent can later check results.
-- **`save_to_memory`**: `{ namespace, key, value }` -- persists data to the bot's isolated memory store.
-- **`recall_from_memory`**: `{ namespace, key? }` -- retrieves from memory. If no key, lists all in namespace.
-- **`check_subtask`**: `{ task_id }` -- checks if a spawned subtask has completed and gets its result.
-- **`wait_for_subtask`**: `{ task_id }` -- blocks (within the loop) until subtask completes, then returns result.
-- **`emit_status`**: `{ message }` -- emits a status update to the streaming log without taking an action.
-
-### Lane Priority Order
-
+Displays a scrolling timeline:
 ```text
-critical  (0) -- safety/security actions, execute immediately
-high      (1) -- user-initiated tasks
-normal    (2) -- default lane
-low       (3) -- background automation
-background(4) -- maintenance, cleanup
+[12:03:45] Opened PrimeVault
+[12:03:52] Viewed portfolio holdings
+[12:04:01] Opened Hypersphere
+[12:04:15] Asked: "What's my portfolio performance?"
+[12:04:18] AI reading activity context...
 ```
 
-The executor picks tasks in lane-priority order, then FIFO within each lane.
+### Desktop Integration
 
-## Frontend Changes
+In `Desktop.tsx`, mount the `useActivityTracker` hook. It auto-captures:
+- Window open/close/focus events
+- Workspace switches
+- Authentication events
+- File operations
+- Trading/wallet actions
+- Chat messages sent
+- Bot tasks enqueued
 
-### Updated BotLabApp (`src/components/os/BotLabApp.tsx`)
+## Technical Details
 
-Add a new "Tasks" tab showing:
-- Active task queue grouped by lane (color-coded: red/orange/blue/gray/dim)
-- Each task shows status, instruction preview, step count
-- Click a task to see the live execution log (steps stream in via realtime)
-- "Enqueue Task" button to manually add tasks
-- "Cancel" button on running/queued tasks
-- Sub-task tree view (indented children under parent tasks)
+### Cron Expression Parser (inline in cron-dispatcher)
 
-Add a "Memory" tab showing:
-- Bot's persistent memory organized by namespace
-- Key-value browser with add/edit/delete
-- Memory usage stats
+Simple matcher supporting standard 5-field cron (`minute hour day month weekday`). Supports:
+- Exact values: `5 * * * *` (at minute 5)
+- Intervals: `*/5 * * * *` (every 5 minutes)
+- Ranges: `0 9-17 * * *` (hourly 9am-5pm)
+- Lists: `0,15,30,45 * * * *` (every 15 min)
 
-### Updated PrimeAgentApp (`src/components/os/PrimeAgentApp.tsx`)
+### Activity Cleanup
 
-When the user gives an instruction:
-1. Instead of the hardcoded `parseInstruction`, call `agent-runtime?action=enqueue` to queue a real task
-2. Subscribe to realtime updates on `agent_runs` to stream execution steps into the UI
-3. Show a live step-by-step execution log with timestamps
-4. Support "Run with sub-agents" toggle for complex multi-step tasks
+A database function `cleanup_old_activity()` that deletes entries older than 24 hours, called by the same pg_cron schedule (once per hour).
 
-### Streaming Execution Log Component
+### Privacy Controls
 
-New component embedded in both BotLab and PrimeAgent:
-
-```text
-┌─ Task: "Analyze portfolio and rebalance" ──────────────┐
-│ Lane: high | Status: running | Steps: 3/10            │
-│                                                         │
-│ [00:00] Thinking... Loading portfolio data              │
-│ [00:02] Tool: check_portfolio -> 5 holdings loaded      │
-│ [00:03] Tool: get_market_data -> AAPL, MSFT, GOOGL...   │
-│ [00:05] Thinking... Analyzing allocation...             │
-│ [00:07] Spawned subtask: "Calculate optimal weights"    │
-│ [00:08] Waiting for subtask result...                   │
-│ [00:12] Subtask complete: {AAPL: 30%, MSFT: 25%...}    │
-│ [00:13] Tool: save_to_memory -> Saved rebalance plan    │
-│ [00:14] Complete: Portfolio analysis done.               │
-└─────────────────────────────────────────────────────────┘
-```
-
-## Execution Flow Example
-
-```text
-User: "Analyze my portfolio and create a report"
-
-1. PrimeAgent enqueues task (lane: high)
-2. agent-runtime picks up task
-3. Step 1: AI decides to check_portfolio -> gets holdings
-4. Step 2: AI decides to get_market_data -> gets prices
-5. Step 3: AI spawns subtask "Generate spreadsheet report"
-   └─ Child task executes:
-      └─ Step 1: create_spreadsheet with data
-      └─ Step 2: add_chart for performance
-      └─ Complete: returns spreadsheet ID
-6. Step 4: Parent checks subtask result
-7. Step 5: AI saves analysis to memory
-8. Step 6: AI responds with summary
-9. Task marked completed
-```
+Add a toggle in Settings: "Share activity with AI agents" (default: on). When off, the activity tracker still runs locally for the UI feed but doesn't write to the database, so AI agents won't see it.
 
 ## Files Created/Modified
 
 | File | Change |
 |------|--------|
-| New migration | Create `agent_tasks`, `agent_memory`, `agent_runs` tables with RLS; enable realtime on `agent_runs` |
-| `supabase/functions/agent-runtime/index.ts` | **New** -- core execution engine with lane scheduler, AI loop, sub-agent spawning, memory ops |
-| `src/components/os/BotLabApp.tsx` | Add "Tasks" and "Memory" tabs with queue view, streaming log, memory browser |
-| `src/components/os/PrimeAgentApp.tsx` | Replace hardcoded parseInstruction with real task enqueueing + realtime streaming |
-| `supabase/config.toml` | Add `agent-runtime` function config |
-| `src/integrations/supabase/types.ts` | Auto-updated with new table types |
+| New migration | Add `last_run_at` to `bot_registry`, create `user_activity` table with RLS + realtime |
+| `supabase/functions/cron-dispatcher/index.ts` | **New** -- scans scheduled bots and enqueues tasks |
+| `src/hooks/useActivityTracker.ts` | **New** -- captures EventBus events and writes to `user_activity` |
+| `src/components/os/ActivityFeed.tsx` | **New** -- live activity timeline UI component |
+| `src/components/os/Desktop.tsx` | Mount `useActivityTracker` hook |
+| `src/components/os/BotLabApp.tsx` | Show schedule info, next/last run times |
+| `src/components/os/PrimeAgentApp.tsx` | Show activity feed sidebar |
+| `src/components/os/SettingsApp.tsx` | Add "Activity Sharing" privacy toggle |
+| `supabase/functions/hyper-chat/index.ts` | Query `user_activity` for AI context |
+| `supabase/functions/agent-runtime/index.ts` | Query `user_activity` for agent context |
+| `supabase/config.toml` | Add `cron-dispatcher` function config |
+| pg_cron setup (via insert tool) | Schedule `cron-dispatcher` every minute |
 
 ## Execution Order
 
-1. Create database tables (`agent_tasks`, `agent_memory`, `agent_runs`) with RLS and realtime
-2. Build `agent-runtime` edge function with full executor loop
-3. Update `BotLabApp` with Tasks and Memory tabs
-4. Update `PrimeAgentApp` to use real task queue + streaming
-5. Update config.toml
+1. Database migration: add `last_run_at` column, create `user_activity` table with RLS and realtime
+2. Create `cron-dispatcher` edge function
+3. Create `useActivityTracker` hook
+4. Create `ActivityFeed` component
+5. Update `Desktop.tsx` to mount activity tracker
+6. Update `hyper-chat` and `agent-runtime` to include activity context
+7. Update `BotLabApp` with schedule display
+8. Update `PrimeAgentApp` with activity sidebar
+9. Add privacy toggle to Settings
+10. Set up pg_cron job via insert tool
+11. Update config.toml
 
