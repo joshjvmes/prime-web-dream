@@ -81,7 +81,7 @@ function applyTheme(theme: 'cyan' | 'violet' | 'amber') {
   root.style.setProperty('--border', t.border);
 }
 
-type Panel = 'profile' | 'display' | 'keyboard' | 'mouse' | 'audio' | 'notifications' | 'lock' | 'widgets' | 'voice' | 'ambience' | 'ai' | 'about';
+type Panel = 'profile' | 'display' | 'keyboard' | 'mouse' | 'audio' | 'notifications' | 'lock' | 'widgets' | 'voice' | 'ambience' | 'ai' | 'activity' | 'about';
 
 const PANELS: { id: Panel; label: string; icon: React.ReactNode }[] = [
   { id: 'profile', label: 'Profile', icon: <User size={14} /> },
@@ -91,6 +91,7 @@ const PANELS: { id: Panel; label: string; icon: React.ReactNode }[] = [
   { id: 'widgets', label: 'Widgets', icon: <LayoutGrid size={14} /> },
   { id: 'voice', label: 'Voice Control', icon: <Mic size={14} /> },
   { id: 'ai', label: 'AI Provider', icon: <Brain size={14} /> },
+  { id: 'activity', label: 'Activity Sharing', icon: <Eye size={14} /> },
   { id: 'keyboard', label: 'Keyboard', icon: <Keyboard size={14} /> },
   { id: 'mouse', label: 'Mouse', icon: <Mouse size={14} /> },
   { id: 'audio', label: 'Audio', icon: <Volume2 size={14} /> },
@@ -885,6 +886,24 @@ export default function SettingsApp({ notifEvents = [], onToggleEvent, onUpdateM
 
       case 'ai':
         return <AIProviderPanel user={user} cloudSave={cloudSave} cloudLoad={cloudLoad} isSignedIn={isSignedIn} SectionTitle={SectionTitle} />;
+
+      case 'activity':
+        return (
+          <div className="space-y-3">
+            <SectionTitle>Activity Sharing</SectionTitle>
+            <p className="text-[10px] text-muted-foreground">
+              When enabled, your actions (opening apps, trading, booking, etc.) are logged and shared with AI agents so they can understand your context and provide better assistance.
+            </p>
+            <Toggle
+              label="Share activity with AI agents"
+              value={(() => { try { return localStorage.getItem('prime-os-activity-sharing') !== 'false'; } catch { return true; } })()}
+              onChange={(v) => { localStorage.setItem('prime-os-activity-sharing', String(v)); }}
+            />
+            <p className="text-[10px] text-muted-foreground/60">
+              Activity data is automatically deleted after 24 hours. Only you and your AI agents can see your activity.
+            </p>
+          </div>
+        );
 
       case 'about':
         return (

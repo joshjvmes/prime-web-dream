@@ -9,6 +9,7 @@ import { useGlobalShortcuts } from '@/hooks/useGlobalShortcuts';
 import { useCalendarReminders } from '@/hooks/useCalendarReminders';
 import { useDeviceClass } from '@/hooks/useDeviceClass';
 import { eventBus } from '@/hooks/useEventBus';
+import { useActivityTracker } from '@/hooks/useActivityTracker';
 import { supabase } from '@/integrations/supabase/client';
 import type { User } from '@supabase/supabase-js';
 import LockScreen from '@/components/os/LockScreen';
@@ -168,6 +169,9 @@ export default function Desktop() {
 
   // System pulse
   useSystemPulse(pushNotification, activeApps, booted && !locked);
+
+  // Activity tracker — writes user actions to database for AI context
+  useActivityTracker(booted && !locked && !!user);
 
   // Calendar reminders
   const openCalendar = useCallback(() => openWindow('calendar', 'Prime Calendar'), [openWindow]);

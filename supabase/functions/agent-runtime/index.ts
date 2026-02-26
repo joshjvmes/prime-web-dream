@@ -292,12 +292,24 @@ async function handleExecute(db: any, userId: string, body: any) {
     ? `\n\nYour persistent memory:\n${memories.map((m: any) => `[${m.namespace}] ${m.key}: ${JSON.stringify(m.value)}`).join("\n")}`
     : "";
 
+  // Load recent user activity for context
+  const { data: activities } = await db.from("user_activity")
+    .select("action, target, metadata, created_at")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false })
+    .limit(20);
+
+  const activityContext = activities?.length
+    ? `\n\nUser's recent activity (most recent first):\n${activities.map((a: any) => `[${a.created_at}] ${a.action} → ${a.target}${a.metadata && Object.keys(a.metadata).length ? ` (${JSON.stringify(a.metadata)})` : ''}`).join("\n")}`
+    : "";
+
   const systemPrompt = (bot.system_prompt || "You are a helpful automated agent.") +
     `\n\nTask instruction: ${task.instruction}` +
     (task.input_payload && Object.keys(task.input_payload).length
       ? `\nInput data: ${JSON.stringify(task.input_payload)}`
       : "") +
     memoryContext +
+    activityContext +
     "\n\nYou have access to agent tools: spawn_subtask, save_to_memory, recall_from_memory, check_subtask, emit_status." +
     "\nWhen you're done with all actions, provide a final summary response without any tool calls.";
 
