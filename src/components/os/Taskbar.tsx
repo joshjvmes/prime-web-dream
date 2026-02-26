@@ -7,6 +7,8 @@ import { startOfMonth, endOfMonth, eachDayOfInterval, getDay, isToday, format } 
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import WorkspaceSwitcher from '@/components/os/WorkspaceSwitcher';
 import VoiceControlIndicator from '@/components/os/VoiceControlIndicator';
+import CopPopover from '@/components/os/CopPopover';
+import CoresPopover from '@/components/os/CoresPopover';
 
 interface TaskbarProps {
   windows: WindowState[];
@@ -261,14 +263,8 @@ export default function Taskbar({ windows, onOpenApp, onFocusWindow, notificatio
           <span className="absolute inset-0 rounded-full bg-primary/20 animate-ping" style={{ animationDuration: '3s' }} />
         </div>
 
-        <div className="flex items-center gap-1.5 text-[10px] font-mono text-muted-foreground">
-          <Zap size={10} className="text-prime-amber" />
-          <span>COP 3.2</span>
-        </div>
-        <div className="flex items-center gap-1.5 text-[10px] font-mono text-muted-foreground">
-          <span className="w-1.5 h-1.5 rounded-full bg-prime-green animate-pulse-glow" />
-          <span>649 cores</span>
-        </div>
+        <CopPopover onOpenApp={onOpenApp} />
+        <CoresPopover onOpenApp={onOpenApp} />
         {userName && (
           <span className="text-[9px] font-mono text-muted-foreground/70 hidden md:inline">
             Op: {userName}
