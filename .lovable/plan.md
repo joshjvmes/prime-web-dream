@@ -1,119 +1,162 @@
 
 
-# Add Grok (xAI) as Primary AI Provider + Enhanced Settings
+# Security Audit + Full System Walkthrough: Mock vs Live Component Analysis
 
-## Overview
+## Part 1: Security Audit — User Data Partitioning
 
-Add xAI's Grok as a first-class AI provider in PRIME OS, making it the default for non-admin users. The xAI API is OpenAI-compatible (`https://api.x.ai/v1/chat/completions`), so integration is lightweight. ROKCAT's system prompt will be updated to reflect its Grok-powered personality.
+### Verdict: Properly Partitioned
 
-## Changes
+All tables containing user-specific data have Row-Level Security (RLS) enabled with `auth.uid() = user_id` policies. Here's the breakdown:
 
-### 1. Add xAI/Grok to the AI Router
+| Table | RLS | Partition Policy | Status |
+|-------|-----|-----------------|--------|
+| `user_ai_keys` | Yes | `auth.uid() = user_id` on SELECT/INSERT/UPDATE/DELETE | Secure |
+| `user_data` | Yes | `auth.uid() = user_id` on all operations | Secure |
+| `user_activity` | Yes | `auth.uid() = user_id` on SELECT/INSERT/DELETE | Secure |
+| `wallets` | Yes | `auth.uid() = user_id` for own wallet view | Secure |
+| `bot_registry` | Yes | `auth.uid() = user_id` on all operations | Secure |
+| `agent_tasks` | Yes | `auth.uid() = user_id` on all operations | Secure |
+| `ai_memories` | Yes | `auth.uid() = user_id` on all operations | Secure |
+| `ai_conversations` | Yes | `auth.uid() = user_id` on SELECT/INSERT/DELETE | Secure |
+| `calendar_events` | Yes | `auth.uid() = user_id` on all operations | Secure |
+| `file_metadata` | Yes | `auth.uid() = user_id` on all operations | Secure |
+| `profiles` | Yes | Public SELECT (by design), user-only INSERT/UPDATE | Acceptable |
 
-**File: `supabase/functions/_shared/ai-router.ts`**
+### API Key Security Details
 
-- Add `"xai"` to the `UserAIConfig.provider` type union
-- Add `getDefaultModel("xai")` returning `"grok-4-latest"`
-- Add `callXAI()` function -- since xAI uses OpenAI-compatible format, it's essentially `callOpenAI()` but pointed at `https://api.x.ai/v1/chat/completions`
-- Add `case "xai"` to the router switch
-- Add `testAIKey("xai", ...)` that hits `https://api.x.ai/v1/models` to validate the key
-- Update the provider CHECK constraint on `user_ai_keys` table to include `'xai'`
+- API keys are stored in `user_ai_keys.encrypted_key` column
+- RLS ensures User A cannot read User B's keys
+- The `ai-key-manager` edge function uses `service_role_key` server-side only -- never exposed to client
+- The `ai-router` loads keys server-side via `SUPABASE_SERVICE_ROLE_KEY`, scoped to the authenticated user's ID
+- Keys are never returned to the frontend (the `get-config` action only returns `provider, model, updated_at` -- never the key itself)
 
-### 2. Add xAI to Settings Panel
+### One Minor Concern
 
-**File: `src/components/os/SettingsApp.tsx`**
+The `encrypted_key` column name is misleading -- keys are stored as plaintext text, not actually encrypted. This is acceptable since RLS prevents cross-user access, but true encryption-at-rest would be ideal for production. This is a low-priority enhancement.
 
-Add to `PROVIDER_MODELS`:
-```text
-xai: { label: 'xAI (Grok)', models: [
-  { value: 'grok-4-latest', label: 'Grok 4' },
-  { value: 'grok-3', label: 'Grok 3' },
-  { value: 'grok-3-mini', label: 'Grok 3 Mini' },
-  { value: 'grok-3-fast', label: 'Grok 3 Fast' },
-]}
-```
+---
 
-Update the description text to mention xAI/Grok prominently as the recommended provider.
+## Part 2: Full System Walkthrough — Mock vs Live Components
 
-### 3. Update ai-key-manager
+### Category A: Fully Live / Backend-Connected (14 apps)
 
-**File: `supabase/functions/ai-key-manager/index.ts`**
+These apps use real database tables, edge functions, or external APIs:
 
-The `test-key` action routes to `testAIKey` in `ai-router.ts`, which will now handle `"xai"`.
+| App | Backend Integration |
+|-----|-------------------|
+| **HypersphereApp** | AI chat via `hyper-chat` edge function, `ai_memories`, `ai_conversations` tables |
+| **RokCatApp** | AI chat via `hyper-chat` with streaming, ElevenLabs TTS |
+| **PrimeChatApp** | Real-time chat via `chat_messages` table with Supabase Realtime |
+| **PrimeCalendarApp** | CRUD on `calendar_events` table |
+| **PrimeVaultApp** | Real portfolio tracking via `vault_holdings`, `vault_transactions`, `market-data` edge function |
+| **PrimeWalletApp** | Real token balances via `wallets` table, `prime-bank` edge function |
+| **PrimeBetsApp** | Real prediction markets via `bet_markets`, `bets` tables, `sports-odds` edge function |
+| **PrimeSignalsApp** | Live market data via `market-data` edge function |
+| **FilesApp** | Real file upload/download via Supabase Storage + `file_metadata` table |
+| **PrimeBookingApp** | CRUD on `bookings` table with conflict detection |
+| **BotLabApp** | Full bot lifecycle via `bot_registry`, `agent_tasks`, `bot_api_keys` tables |
+| **AdminConsoleApp** | Role management via `admin-actions` edge function |
+| **AppForgeApp** / **MiniAppsApp** | App marketplace via `forge_listings` table, `mini-app-gen` edge function |
+| **SettingsApp** | Profile persistence via `profiles` table, AI key management via `ai-key-manager` |
 
-### 4. Update ROKCAT System Prompt
+### Category B: Partially Live — Has Backend Hooks But Core Is Simulated (5 apps)
 
-**File: `supabase/functions/hyper-chat/index.ts`**
+| App | What's Live | What's Mocked |
+|-----|------------|---------------|
+| **PrimeSocialApp** | AI-generated posts via `ai-social` edge function | Core feed is hardcoded `INITIAL_POSTS` array, no real social database |
+| **PrimeMailApp** | AI-generated emails via edge function | Core inbox is hardcoded `INITIAL_EMAILS` array, no real mail storage |
+| **PrimeCommApp** | Loads contacts from `profiles` table, uses `chat_messages` for messaging | Phone/dialer is fully simulated with fake call timers |
+| **PrimeArcadeApp** | Rewards via `prime-bank` edge function, high scores via cloud storage | Games themselves are self-contained client-side |
+| **PrimeJournalApp** | Persists entries via `useCloudStorage` | No dedicated journal table -- uses generic key-value store |
 
-Update the `BASE_SYSTEM_PROMPT` to include ROKCAT's identity as powered by Grok when the user's provider is xAI. The system prompt already gets sent with every call, so when routed through xAI, it naturally uses Grok.
+### Category C: Fully Simulated / Demo Only (18 apps)
 
-### 5. Update Database Constraint
+These run entirely on hardcoded data or client-side randomization with zero backend integration:
 
-**New migration** to alter the CHECK constraint on `user_ai_keys.provider` to allow `'xai'` in addition to the existing providers. (If there's no CHECK constraint, just ensure the column accepts `'xai'` as a value -- checking the schema shows `provider` is just `text` with no CHECK, so no migration needed.)
+| App | What It Does | Proposed Integration |
+|-----|-------------|---------------------|
+| **PrimeNetApp** | Animated network topology with random packet flow | Could connect to real Supabase Realtime channel subscriptions to show actual data flow |
+| **PrimeStorageApp** | Static "128 TB" storage regions with animated counters | Could show real Supabase Storage bucket usage stats |
+| **EnergyMonitorApp** | Simulated COP/energy readings with random fluctuation | Could log energy simulation state to `user_data` for persistence |
+| **DataCenterApp** | 24 fake server nodes with random CPU/temp | Could represent real edge function invocation stats from analytics |
+| **PrimeMapsApp** | Static SVG network topology with pan/zoom | Could overlay real `user_activity` data as heat maps |
+| **PrimeStreamApp** | Fake streaming data pipelines generating random rows | Could subscribe to Supabase Realtime channels and display actual DB changes |
+| **SecurityConsoleApp** | Random threat events, fake firewall rules | Could query real auth logs, failed login attempts, RLS violations |
+| **PrimeRoboticsApp** | Simulated drones/rovers with random movement | Stays simulation (no real robots), but could persist fleet state |
+| **PrimeIoTApp** | Fake IoT sensor readings with random fluctuation | Stays simulation, but could persist device configs and alert thresholds |
+| **PrimeLinkApp** | Fake video call UI with simulated participants | No WebRTC -- purely cosmetic. Would need a real WebRTC integration |
+| **Q3InferenceApp** | Simulated "qutrit inference" with fake timing | Core OS lore app -- simulation is intentional |
+| **FoldMemApp** | Visual memory block allocator simulation | Core OS lore app -- simulation is intentional |
+| **GeomCApp** | Fake compiler with hardcoded optimization results + real GeomQ DSL | GeomQ tab has a real compiler; GeomC demo tab is intentionally simulated |
+| **PrimeGalleryApp** | Procedurally generated SVG art pieces | By design -- generative art gallery |
+| **PrimePkgApp** | Fake package manager with hardcoded packages | Could list real npm dependencies from `package.json` or forge listings |
+| **PrimeDocsApp** | Static documentation viewer | Content is intentionally static reference material |
+| **PrimeBoardApp** | Kanban board persisted via `useCloudStorage` | Works but uses generic key-value store instead of dedicated table |
+| **SystemMonitorApp** / **SysInfoApp** / **ProcessesApp** | Simulated OS metrics | Core OS lore -- simulation is intentional |
 
-### 6. Store xAI API Key as Secret
+### Category D: Functional But Could Be Enhanced (4 apps)
 
-The user's xAI API key will be stored securely via the existing `ai-key-manager` edge function (per-user, in `user_ai_keys` table). However, since the user wants to provide their key now, I'll prompt them to enter it through the Settings UI after implementation, or use the secrets tool if they want a system-wide default.
+| App | Current State | Enhancement |
+|-----|--------------|-------------|
+| **PrimeCanvasApp** | Client-side drawing, no persistence | Save/load canvases to Supabase Storage |
+| **PrimeGridApp** | Client-side spreadsheet, no persistence | Save/load spreadsheets via `useCloudStorage` (may already partially work) |
+| **TextEditorApp** | Client-side text editor | Save/load documents to cloud |
+| **CloudHooksApp** | Event automation rules -- client-side only | Persist hook configurations to database |
 
-## Technical Details
+---
 
-### xAI API Compatibility
+## Part 3: Proposed Integration Steps (Priority Order)
 
-The xAI API is fully OpenAI-compatible:
-- Endpoint: `https://api.x.ai/v1/chat/completions`
-- Auth: `Authorization: Bearer {key}`
-- Supports `stream: true` with standard SSE format
-- Same message format: `{role, content}`
+### High Priority -- Completes the "Live OS" Experience
 
-This means `callXAI` is essentially `callOpenAI` with a different base URL. No format conversion needed.
+1. **PrimeSocialApp: Real social feed**
+   - Create `social_posts` table (user_id, content, likes, created_at)
+   - Create `social_comments` table
+   - Enable Realtime so posts appear live across users
+   - Keep AI post generation as a feature
 
-### callXAI Implementation
+2. **PrimeMailApp: Persistent inbox**
+   - Create `user_emails` table (user_id, from, subject, body, folder, read, created_at)
+   - System-generated welcome emails on signup
+   - AI-generated emails persist to this table
+   - Bot-to-user notifications can arrive as emails
 
-```typescript
-async function callXAI(config: UserAIConfig, opts: AIRouterOptions): Promise<Response> {
-  const body: any = {
-    model: config.model,
-    messages: opts.messages,
-    stream: opts.stream ?? false,
-  };
-  if (opts.tools?.length) {
-    body.tools = opts.tools;
-    if (opts.toolChoice) body.tool_choice = opts.toolChoice;
-  }
-  if (opts.maxTokens) body.max_tokens = opts.maxTokens;
+3. **CloudHooksApp: Persist automation rules**
+   - Create `cloud_hooks` table (user_id, trigger_event, action_type, action_config, enabled)
+   - Execute hooks server-side via `cron-dispatcher` or EventBus
 
-  return fetch("https://api.x.ai/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${config.apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(body),
-  });
-}
-```
+4. **PrimeCanvasApp + TextEditorApp: Cloud save**
+   - Save canvas data as JSON blobs to Supabase Storage
+   - Save text documents to `user_data` or a dedicated `documents` table
 
-### ROKCAT Prompt Update
+### Medium Priority -- Adds Real Data to Simulation Apps
 
-When the active provider is xAI/Grok, ROKCAT's personality naturally channels through Grok. The existing system prompt in `hyper-chat` works as-is since it describes ROKCAT's personality and Grok will follow it. The prompt will be tweaked to say "You are ROKCAT, the Grok-powered AI companion of PRIME OS, a CEO orchestrator designed to interface the Prime OS by Rocket Logic Global."
+5. **DataCenterApp: Real analytics overlay**
+   - Query edge function invocation logs to show real request counts
+   - Map edge functions to "server nodes" in the visualization
 
-### Files Modified
+6. **PrimeStreamApp: Real Realtime subscription**
+   - Subscribe to actual Supabase Realtime channels
+   - Display real database changes as streaming rows
 
-| File | Change |
-|------|--------|
-| `supabase/functions/_shared/ai-router.ts` | Add `callXAI`, `case "xai"`, `testAIKey("xai")`, update `getDefaultModel` |
-| `src/components/os/SettingsApp.tsx` | Add xAI to `PROVIDER_MODELS`, update description text |
-| `supabase/functions/hyper-chat/index.ts` | Update ROKCAT system prompt to reference Grok/Rocket Logic |
-| `src/components/os/RokCatApp.tsx` | Update ROKCAT's chat system prompt to reference Grok identity |
+7. **SecurityConsoleApp: Real auth event logs**
+   - Query recent auth events (sign-ins, failed attempts)
+   - Show real RLS policy status
 
-### Execution Order
+8. **PrimePkgApp: Real forge listing integration**
+   - Show installed mini-apps from `forge_listings` table
+   - "Install" and "Update" actually modify user's installed apps list
 
-1. Update `ai-router.ts` with xAI support (callXAI + testAIKey + router case)
-2. Update Settings panel with xAI provider option
-3. Update ROKCAT and Hyper system prompts
-4. Deploy edge functions
+### Low Priority -- Polish and Lore Apps
 
-### API Key Handling
+9. **PrimeBoardApp: Dedicated table** (currently works via useCloudStorage but a proper table would enable sharing)
 
-The user shared an xAI API key in the chat. After implementation, they can paste it into Settings > AI Provider > xAI > API Key field. The key gets stored encrypted server-side via `ai-key-manager` and is never exposed to the client.
+10. **PrimeStorageApp: Real stats** (show actual Supabase Storage bucket usage)
+
+11. **Lore apps stay simulated**: Q3Inference, FoldMem, PrimeNet, EnergyMonitor, Robotics, IoT -- these are intentional OS worldbuilding. No backend needed.
+
+### Not Recommended for Integration
+
+- **PrimeLinkApp**: Real WebRTC video calls would require a TURN server and significant infrastructure. Keep as UI demo.
+- **PrimeMapsApp**: The lattice topology visualization is lore-accurate. Adding real data would dilute the aesthetic.
 
