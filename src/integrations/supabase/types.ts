@@ -14,6 +14,177 @@ export type Database = {
   }
   public: {
     Tables: {
+      agent_memory: {
+        Row: {
+          bot_id: string
+          created_at: string
+          id: string
+          key: string
+          namespace: string
+          updated_at: string
+          user_id: string
+          value: Json
+        }
+        Insert: {
+          bot_id: string
+          created_at?: string
+          id?: string
+          key: string
+          namespace?: string
+          updated_at?: string
+          user_id: string
+          value?: Json
+        }
+        Update: {
+          bot_id?: string
+          created_at?: string
+          id?: string
+          key?: string
+          namespace?: string
+          updated_at?: string
+          user_id?: string
+          value?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "agent_memory_bot_id_fkey"
+            columns: ["bot_id"]
+            isOneToOne: false
+            referencedRelation: "bot_registry"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      agent_runs: {
+        Row: {
+          bot_id: string
+          completed_at: string | null
+          id: string
+          started_at: string
+          status: string
+          steps: Json | null
+          task_id: string
+          token_usage: Json | null
+          user_id: string
+        }
+        Insert: {
+          bot_id: string
+          completed_at?: string | null
+          id?: string
+          started_at?: string
+          status?: string
+          steps?: Json | null
+          task_id: string
+          token_usage?: Json | null
+          user_id: string
+        }
+        Update: {
+          bot_id?: string
+          completed_at?: string | null
+          id?: string
+          started_at?: string
+          status?: string
+          steps?: Json | null
+          task_id?: string
+          token_usage?: Json | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "agent_runs_bot_id_fkey"
+            columns: ["bot_id"]
+            isOneToOne: false
+            referencedRelation: "bot_registry"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "agent_runs_task_id_fkey"
+            columns: ["task_id"]
+            isOneToOne: false
+            referencedRelation: "agent_tasks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      agent_tasks: {
+        Row: {
+          bot_id: string
+          completed_at: string | null
+          created_at: string
+          error: string | null
+          id: string
+          input_payload: Json | null
+          instruction: string
+          lane: string
+          max_steps: number
+          parent_task_id: string | null
+          result: Json | null
+          spawned_by_bot_id: string | null
+          started_at: string | null
+          status: string
+          steps: Json | null
+          user_id: string
+        }
+        Insert: {
+          bot_id: string
+          completed_at?: string | null
+          created_at?: string
+          error?: string | null
+          id?: string
+          input_payload?: Json | null
+          instruction: string
+          lane?: string
+          max_steps?: number
+          parent_task_id?: string | null
+          result?: Json | null
+          spawned_by_bot_id?: string | null
+          started_at?: string | null
+          status?: string
+          steps?: Json | null
+          user_id: string
+        }
+        Update: {
+          bot_id?: string
+          completed_at?: string | null
+          created_at?: string
+          error?: string | null
+          id?: string
+          input_payload?: Json | null
+          instruction?: string
+          lane?: string
+          max_steps?: number
+          parent_task_id?: string | null
+          result?: Json | null
+          spawned_by_bot_id?: string | null
+          started_at?: string | null
+          status?: string
+          steps?: Json | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "agent_tasks_bot_id_fkey"
+            columns: ["bot_id"]
+            isOneToOne: false
+            referencedRelation: "bot_registry"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "agent_tasks_parent_task_id_fkey"
+            columns: ["parent_task_id"]
+            isOneToOne: false
+            referencedRelation: "agent_tasks"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "agent_tasks_spawned_by_bot_id_fkey"
+            columns: ["spawned_by_bot_id"]
+            isOneToOne: false
+            referencedRelation: "bot_registry"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       ai_conversations: {
         Row: {
           content: string
