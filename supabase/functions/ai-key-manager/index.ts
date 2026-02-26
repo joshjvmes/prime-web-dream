@@ -17,11 +17,14 @@ async function getUserId(req: Request): Promise<string | null> {
       Deno.env.get("SUPABASE_ANON_KEY")!,
       { global: { headers: { Authorization: authHeader } } }
     );
-    const token = authHeader.replace("Bearer ", "");
-    const { data, error } = await db.auth.getClaims(token);
-    if (error || !data?.claims) return null;
-    return data.claims.sub as string;
-  } catch {
+    const { data: { user }, error } = await db.auth.getUser();
+    if (error || !user) {
+      console.error("Auth error:", error?.message);
+      return null;
+    }
+    return user.id;
+  } catch (e) {
+    console.error("getUserId exception:", e);
     return null;
   }
 }
@@ -56,8 +59,8 @@ serve(async (req) => {
         });
       }
 
-      // Upsert the key
-      await db.from("user_ai_keys").upsert(
+      // Upsert the key with error checking
+      const { error: upsertError } = await db.from("user_ai_keys").upsert(
         {
           user_id: userId,
           provider,
@@ -67,6 +70,14 @@ serve(async (req) => {
         },
         { onConflict: "user_id,provider" }
       );
+
+      if (upsertError) {
+        console.error("Upsert error:", upsertError);
+        return new Response(JSON.stringify({ error: "Failed to save key: " + upsertError.message }), {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
 
       return new Response(JSON.stringify({ success: true }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -90,10 +101,14 @@ serve(async (req) => {
 
     if (action === "get-config") {
       // Return which providers have keys configured (never return the actual key)
-      const { data: keys } = await db
+      const { data: keys, error: keysError } = await db
         .from("user_ai_keys")
         .select("provider, model, updated_at")
         .eq("user_id", userId);
+
+      if (keysError) {
+        console.error("get-config keys error:", keysError);
+      }
 
       // Also get the active provider preference
       const { data: pref } = await db
@@ -132,11 +147,15 @@ serve(async (req) => {
         });
       }
 
-      await db
+      const { error: deleteError } = await db
         .from("user_ai_keys")
         .delete()
         .eq("user_id", userId)
         .eq("provider", provider);
+
+      if (deleteError) {
+        console.error("delete-key error:", deleteError);
+      }
 
       return new Response(JSON.stringify({ success: true }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -148,6 +167,7 @@ serve(async (req) => {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {
+    console.error("ai-key-manager error:", e);
     return new Response(
       JSON.stringify({ error: e instanceof Error ? e.message : "Unknown error" }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }

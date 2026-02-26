@@ -1,0 +1,2 @@
+ALTER TABLE public.user_ai_keys DROP CONSTRAINT user_ai_keys_provider_check;
+ALTER TABLE public.user_ai_keys ADD CONSTRAINT user_ai_keys_provider_check CHECK (provider = ANY (ARRAY['openai'::text, 'anthropic'::text, 'google'::text, 'xai'::text]));
