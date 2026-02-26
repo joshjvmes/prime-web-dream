@@ -322,10 +322,13 @@ export default function PrimeBrowserApp() {
       }
       if (activeTab.externalHtml) {
         return (
-          <div
-            className="prime-browser-external p-2 overflow-auto h-full"
-            style={{ all: 'initial', fontFamily: 'sans-serif', fontSize: '14px', color: '#222', background: '#fff', display: 'block', overflow: 'auto', height: '100%', padding: '8px' }}
-            dangerouslySetInnerHTML={{ __html: activeTab.externalHtml }}
+          <iframe
+            srcDoc={activeTab.externalHtml}
+            sandbox="allow-same-origin"
+            title={activeTab.externalTitle || 'External page'}
+            className="w-full h-full border-0"
+            style={{ background: '#fff' }}
+            referrerPolicy="no-referrer"
           />
         );
       }
