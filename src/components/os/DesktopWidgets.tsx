@@ -2,6 +2,8 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { X, GripHorizontal, Rocket, TrendingUp, Store, Activity, Share2, Mail } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { eventBus } from '@/hooks/useEventBus';
+import RokCatFace, { type RokCatFaceHandle } from '@/components/os/RokCatFace';
+import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '@/components/ui/tooltip';
 
 interface WidgetPos { x: number; y: number; }
 interface WidgetState {
@@ -11,12 +13,13 @@ interface WidgetState {
   network: boolean;
   forge: boolean;
   agentLog: boolean;
+  rokcat: boolean;
   positions: Record<string, WidgetPos>;
 }
 
 const DEFAULTS: WidgetState = {
-  clock: true, stats: true, notes: false, network: false, forge: false, agentLog: false,
-  positions: { clock: { x: 200, y: 80 }, stats: { x: 200, y: 220 }, notes: { x: 400, y: 80 }, network: { x: 400, y: 220 }, forge: { x: 600, y: 80 }, agentLog: { x: 600, y: 220 } },
+  clock: true, stats: true, notes: false, network: false, forge: false, agentLog: false, rokcat: false,
+  positions: { clock: { x: 200, y: 80 }, stats: { x: 200, y: 220 }, notes: { x: 400, y: 80 }, network: { x: 400, y: 220 }, forge: { x: 600, y: 80 }, agentLog: { x: 600, y: 220 }, rokcat: { x: 900, y: 400 } },
 };
 
 function loadState(): WidgetState {
@@ -278,6 +281,93 @@ function AgentLogWidget() {
   );
 }
 
+// ROKCAT Mini Widget
+function RokCatWidget() {
+  const faceRef = useRef<RokCatFaceHandle>(null);
+  const [active, setActive] = useState(() => {
+    try { return localStorage.getItem('prime-os-rokcat-active') === 'true'; } catch { return false; }
+  });
+  const speakingQueue = useRef(false);
+
+  useEffect(() => {
+    localStorage.setItem('prime-os-rokcat-active', String(active));
+  }, [active]);
+
+  const speakText = useCallback(async (text: string) => {
+    if (!faceRef.current || speakingQueue.current) return;
+    speakingQueue.current = true;
+    try {
+      const res = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/elevenlabs-tts`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+            Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+          },
+          body: JSON.stringify({ text: text.slice(0, 200) }),
+        }
+      );
+      if (!res.ok) throw new Error('TTS failed');
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      await faceRef.current.speak(url);
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      console.error('[ROKCAT TTS]', e);
+    } finally {
+      speakingQueue.current = false;
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!active) return;
+    const onNotif = (payload: any) => {
+      const summary = payload?.message || payload?.title || 'New notification';
+      speakText(summary);
+    };
+    const onAgent = (payload: any) => {
+      const summary = payload?.summary || 'Agent action completed';
+      speakText(summary);
+    };
+    eventBus.on('notification.received', onNotif);
+    eventBus.on('agent.action.logged', onAgent);
+    return () => {
+      eventBus.off('notification.received', onNotif);
+      eventBus.off('agent.action.logged', onAgent);
+    };
+  }, [active, speakText]);
+
+  return (
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <div
+            className="relative"
+            onDoubleClick={(e) => { e.preventDefault(); setActive(a => !a); }}
+          >
+            <div className={`w-[120px] h-[120px] transition-all duration-300 ${active ? 'opacity-100' : 'opacity-40 grayscale'}`}>
+              <RokCatFace ref={faceRef} className="w-full h-full" />
+            </div>
+            {/* Status dot */}
+            <div className={`absolute bottom-1 right-1 w-2.5 h-2.5 rounded-full border border-background ${
+              active ? 'bg-prime-green animate-pulse' : 'bg-muted-foreground/40'
+            }`} />
+            {/* Sleep indicator */}
+            {!active && (
+              <span className="absolute top-1 right-1 text-[10px] text-muted-foreground/50 select-none">zzz</span>
+            )}
+          </div>
+        </TooltipTrigger>
+        <TooltipContent side="top" className="text-[10px]">
+          Double-click to {active ? 'sleep' : 'wake'} ROKCAT
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+}
+
 export default function DesktopWidgets() {
   const [state, setState] = useState<WidgetState>(loadState);
 
@@ -300,6 +390,7 @@ export default function DesktopWidgets() {
     { id: 'network', title: 'PrimeNet', enabled: state.network, content: <NetworkWidget /> },
     { id: 'forge', title: 'Forge Market', enabled: state.forge, content: <ForgeWidget /> },
     { id: 'agentLog', title: 'Agent Activity', enabled: state.agentLog, content: <AgentLogWidget /> },
+    { id: 'rokcat', title: 'ROKCAT', enabled: state.rokcat, content: <RokCatWidget /> },
   ];
 
   return (
