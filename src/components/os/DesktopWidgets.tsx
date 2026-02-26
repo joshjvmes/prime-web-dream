@@ -17,8 +17,29 @@ interface WidgetState {
   positions: Record<string, WidgetPos>;
 }
 
+export const WIDGET_IDS: Record<string, { id: string; name: string }> = {
+  clock: { id: 'clock', name: 'Clock' },
+  stats: { id: 'stats', name: 'System Stats' },
+  notes: { id: 'notes', name: 'Quick Notes' },
+  network: { id: 'network', name: 'PrimeNet' },
+  forge: { id: 'forge', name: 'Forge Market' },
+  agentlog: { id: 'agentLog', name: 'Agent Activity' },
+  agent: { id: 'agentLog', name: 'Agent Activity' },
+  rokcat: { id: 'rokcat', name: 'ROKCAT' },
+};
+
+export function resolveWidgetId(input: string): { id: string; name: string } | null {
+  const lower = input.toLowerCase().trim();
+  const direct = WIDGET_IDS[lower];
+  if (direct) return direct;
+  const match = Object.values(WIDGET_IDS).find(w => w.name.toLowerCase().includes(lower) || w.id.toLowerCase() === lower);
+  return match || null;
+}
+
+export const ALL_WIDGET_KEYS = ['clock', 'stats', 'notes', 'network', 'forge', 'agentLog', 'rokcat'] as const;
+
 const DEFAULTS: WidgetState = {
-  clock: true, stats: true, notes: false, network: false, forge: false, agentLog: false, rokcat: true,
+  clock: true, stats: true, notes: true, network: true, forge: true, agentLog: true, rokcat: true,
   positions: { clock: { x: 200, y: 80 }, stats: { x: 200, y: 220 }, notes: { x: 400, y: 80 }, network: { x: 400, y: 220 }, forge: { x: 600, y: 80 }, agentLog: { x: 600, y: 220 }, rokcat: { x: 900, y: 400 } },
 };
 
@@ -371,15 +392,56 @@ function RokCatWidget() {
 export default function DesktopWidgets() {
   const [state, setState] = useState<WidgetState>(loadState);
 
+  const updateState = useCallback((updater: (prev: WidgetState) => WidgetState) => {
+    setState(prev => {
+      const next = updater(prev);
+      saveState(next);
+      eventBus.emit('widgets.updated');
+      return next;
+    });
+  }, []);
+
   useEffect(() => {
     const handler = () => setState(loadState());
     eventBus.on('widgets.updated', handler);
-    return () => eventBus.off('widgets.updated', handler);
-  }, []);
 
-  const updateState = useCallback((updater: (prev: WidgetState) => WidgetState) => {
-    setState(prev => { const next = updater(prev); saveState(next); return next; });
-  }, []);
+    const onToggle = (payload: any) => {
+      if (!payload?.id) return;
+      updateState(s => {
+        const key = payload.id as keyof WidgetState;
+        if (!(key in s) || key === 'positions') return s;
+        const val = payload.enabled !== undefined ? !!payload.enabled : !(s as any)[key];
+        return { ...s, [key]: val };
+      });
+    };
+
+    const onMove = (payload: any) => {
+      if (!payload?.id || payload.x === undefined || payload.y === undefined) return;
+      updateState(s => ({ ...s, positions: { ...s.positions, [payload.id]: { x: Number(payload.x), y: Number(payload.y) } } }));
+    };
+
+    const onList = () => {
+      const current = loadState();
+      const widgets = ALL_WIDGET_KEYS.map(id => ({
+        id,
+        name: Object.values(WIDGET_IDS).find(w => w.id === id)?.name || id,
+        enabled: !!(current as any)[id],
+        position: current.positions[id] || { x: 0, y: 0 },
+      }));
+      eventBus.emit('widget.list.response', { widgets });
+    };
+
+    eventBus.on('widget.toggle', onToggle);
+    eventBus.on('widget.move', onMove);
+    eventBus.on('widget.list', onList);
+
+    return () => {
+      eventBus.off('widgets.updated', handler);
+      eventBus.off('widget.toggle', onToggle);
+      eventBus.off('widget.move', onMove);
+      eventBus.off('widget.list', onList);
+    };
+  }, [updateState]);
 
   const moveWidget = useCallback((id: string, pos: WidgetPos) => {
     updateState(s => ({ ...s, positions: { ...s.positions, [id]: pos } }));

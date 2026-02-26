@@ -1,5 +1,5 @@
 // Static command output data and the main command processor
-
+import { processWidgetCommand } from './widgetCommands';
 export const WELCOME = [
   'PRIME Shell (psh) v2.0.0',
   'Geometric Computing Interface — Full Ecosystem',
@@ -40,6 +40,7 @@ export const HELP_TEXT = [
   '  whoami            — Current user',
   '  date              — Current timestamp',
   '  history           — Show command history',
+  '  widget <sub>      — Control desktop widgets',
   '',
   'Operators: cmd1 | cmd2 (pipe)  cmd1 ; cmd2 (chain)',
   'Tab for autocomplete. $VAR for variable substitution.',
@@ -71,7 +72,7 @@ export const ALL_COMMANDS = [
   'foldmem stats', 'energy status', 'storage info',
   'psh debug', 'primenet trace', 'primenet scan',
   'disk', 'open', 'kill', 'export', 'env', 'grep',
-  'uptime', 'whoami', 'date', 'history',
+  'uptime', 'whoami', 'date', 'history', 'widget',
 ];
 
 export type CommandContext = {
@@ -358,6 +359,8 @@ export function processCommand(cmd: string, ctx: CommandContext): string[] | nul
     case 'ask':
       if (!args) return ['Usage: ask <question>', '▸ Chat with Hyper AI directly from the shell.', ''];
       return 'ai-ask';
+    case 'widget':
+      return processWidgetCommand(args);
     default:
       if (!command) return null;
       return [`psh: command not found: ${command}`, 'Type "help" for available commands.', ''];
