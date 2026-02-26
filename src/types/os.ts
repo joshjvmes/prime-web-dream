@@ -14,7 +14,7 @@ export interface WindowState {
   prevBounds?: { x: number; y: number; width: number; height: number };
 }
 
-export type AppType = 'terminal' | 'files' | 'processes' | 'sysinfo' | 'settings' | 'q3inference' | 'primenet' | 'geomc' | 'foldmem' | 'storage' | 'energy' | 'monitor' | 'editor' | 'chat' | 'security' | 'browser' | 'datacenter' | 'board' | 'gallery' | 'cloudhooks' | 'hypersphere' | 'calendar' | 'docs' | 'spreadsheet' | 'schemaforge' | 'canvas' | 'comm' | 'maps' | 'pkg' | 'audio' | 'bets' | 'signals' | 'stream' | 'vault' | 'videocall' | 'mail' | 'social' | 'agent' | 'robotics' | 'booking' | 'iot' | 'arcade' | 'admin' | 'journal' | 'wallet' | 'miniapps' | 'forge' | 'botlab';
+export type AppType = 'terminal' | 'files' | 'processes' | 'sysinfo' | 'settings' | 'q3inference' | 'primenet' | 'geomc' | 'foldmem' | 'storage' | 'energy' | 'monitor' | 'editor' | 'chat' | 'security' | 'browser' | 'datacenter' | 'board' | 'gallery' | 'cloudhooks' | 'hypersphere' | 'calendar' | 'docs' | 'spreadsheet' | 'schemaforge' | 'canvas' | 'comm' | 'maps' | 'pkg' | 'audio' | 'bets' | 'signals' | 'stream' | 'vault' | 'videocall' | 'mail' | 'social' | 'agent' | 'robotics' | 'booking' | 'iot' | 'arcade' | 'admin' | 'journal' | 'wallet' | 'miniapps' | 'forge' | 'botlab' | 'rokcat';
 
 export interface QutritProcess {
   id: string;

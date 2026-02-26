@@ -26,3 +26,6 @@ verify_jwt = false
 
 [functions.bot-runner]
 verify_jwt = false
+
+[functions.elevenlabs-tts]
+verify_jwt = false

@@ -77,6 +77,7 @@ const allApps: { app: AppType; title: string; icon: React.ReactNode; label: stri
   { app: 'miniapps', title: 'Mini Apps', icon: <Blocks size={18} />, label: 'Mini Apps' },
   { app: 'forge', title: 'App Forge', icon: <Store size={18} />, label: 'App Forge' },
   { app: 'admin', title: 'Admin Console', icon: <ShieldCheck size={18} />, label: 'Admin' },
+  { app: 'rokcat', title: 'ROKCAT', icon: <Bot size={18} />, label: 'ROKCAT' },
   { app: 'settings', title: 'Settings', icon: <Settings size={18} />, label: 'Settings' },
 ];
 
