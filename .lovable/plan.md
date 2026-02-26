@@ -1,177 +1,230 @@
 
-# Bring-Your-Own-AI-Key System
+
+# Full Agent Runtime: Lane-Based Queue, Sub-Agents, Persistent Memory, Streaming
 
 ## Overview
 
-Let users plug in their own API keys for Claude (Anthropic), ChatGPT (OpenAI), or Gemini (Google) directly from Settings. When a key is configured, the OS routes AI calls through their chosen provider instead of the default Lovable AI gateway -- giving them "unchained" access to their preferred model.
-
-## How It Works (User Perspective)
-
-1. Open **Settings > AI Provider** (new panel)
-2. Choose a provider: **Default (Built-in)**, **OpenAI**, **Anthropic**, or **Google Gemini**
-3. Paste their API key
-4. Pick a model (dropdown shows available models for that provider)
-5. All AI features (Hypersphere, ROKCAT, BotLab, mini-app generation) now use their key
-
-Keys are stored securely in the cloud database (encrypted at rest) and never leave the backend -- the frontend only sends a provider/model preference, and the edge function reads the key server-side.
+Transform the current stateless bot system into a persistent agent runtime with real orchestration. Agents get their own task queues with priority lanes, can spawn child agents, maintain isolated persistent memory, and stream execution logs back to the UI in real-time.
 
 ## Architecture
 
 ```text
-User Browser                    Edge Function (hyper-chat)
-    |                                    |
-    |-- provider: "openai"  ------------>|
-    |-- model: "gpt-4o"                  |
-    |                                    |-- Load user's API key from DB
-    |                                    |-- Route to OpenAI / Anthropic / Google
-    |                                    |-- OR fall back to Lovable AI gateway
-    |<--- streamed response -------------|
+                    ┌─────────────────────────────────────┐
+                    │         agent-runtime (edge fn)      │
+                    │                                      │
+  BotLab UI ──────> │  ┌──────────┐  ┌──────────────────┐ │
+  PrimeAgent ─────> │  │ Executor │  │  Lane Scheduler   │ │
+  Cron (pg_cron) ─> │  │          │──│  critical > high  │ │
+  EventBus ───────> │  │  AI Loop │  │  > normal > low   │ │
+                    │  │          │  │  > background     │ │
+                    │  └────┬─────┘  └──────────────────┘ │
+                    │       │                              │
+                    │  ┌────▼─────┐  ┌──────────────────┐ │
+                    │  │ Sub-agent│  │ Tool Executor     │ │
+                    │  │ Spawner  │──│ (reuses bot-api)  │ │
+                    │  └──────────┘  └──────────────────┘ │
+                    └──────────┬──────────────────────────┘
+                               │
+              ┌────────────────┼────────────────┐
+              │                │                │
+        agent_tasks      agent_memory     Realtime SSE
+        (queue table)    (per-bot KV)     (streaming logs)
 ```
 
-## Changes
+## Database Changes (3 new tables)
 
-### 1. New Settings Panel: "AI Provider"
+### `agent_tasks` -- The Task Queue
 
-**File: `src/components/os/SettingsApp.tsx`**
+Stores all tasks with lane-based priority. Agents pull from this queue.
 
-Add a new panel `'ai'` to PANELS list with a Brain/Cpu icon. The panel contains:
-- Provider selector (radio buttons): Default, OpenAI, Anthropic, Google Gemini
-- API key input field (password type, with show/hide toggle)
-- Model dropdown (populated based on selected provider)
-- "Save" button that stores config via `useCloudStorage`
-- "Test Connection" button that calls a new edge function endpoint to validate the key
-- Status indicator showing current active provider
+| Column | Type | Purpose |
+|--------|------|---------|
+| id | uuid PK | Task ID |
+| bot_id | uuid | Owning agent |
+| user_id | uuid | Owning user |
+| parent_task_id | uuid? | Parent task (for sub-agent work) |
+| spawned_by_bot_id | uuid? | Parent agent that spawned this |
+| lane | text | `critical`, `high`, `normal`, `low`, `background` |
+| status | text | `queued`, `running`, `completed`, `failed`, `cancelled` |
+| instruction | text | What the agent should do |
+| input_payload | jsonb | Input data/context |
+| result | jsonb? | Output when complete |
+| error | text? | Error message if failed |
+| steps | jsonb[] | Array of execution steps (for streaming log) |
+| max_steps | int | Safety limit (default 10) |
+| created_at | timestamptz | |
+| started_at | timestamptz? | When execution began |
+| completed_at | timestamptz? | When finished |
 
-Provider-to-model mappings:
-- **OpenAI**: gpt-4o, gpt-4o-mini, gpt-4-turbo, o1, o1-mini
-- **Anthropic**: claude-sonnet-4-20250514, claude-3.5-haiku, claude-3-opus
-- **Google Gemini**: gemini-2.5-pro, gemini-2.5-flash, gemini-2.0-flash
+RLS: Users can only see/manage their own tasks.
 
-### 2. Secure Key Storage via Cloud
+### `agent_memory` -- Per-Bot Persistent Memory
 
-**File: `src/components/os/SettingsApp.tsx`** (uses existing `useCloudStorage`)
+Isolated key-value store per bot (not shared like `ai_memories`).
 
-- Save provider config: `cloudStorage.save('ai-provider', { provider, model })`
-- Save API key separately via a **new edge function** (not stored in client-accessible cloud storage for security)
+| Column | Type | Purpose |
+|--------|------|---------|
+| id | uuid PK | |
+| bot_id | uuid | Which bot owns this memory |
+| user_id | uuid | Owning user |
+| namespace | text | Category: `facts`, `context`, `conversation`, `state` |
+| key | text | Memory key |
+| value | jsonb | Memory value |
+| created_at / updated_at | timestamptz | |
 
-### 3. New Edge Function: `ai-key-manager`
+RLS: Users can only access memory for their own bots. UNIQUE on (bot_id, namespace, key).
 
-**File: `supabase/functions/ai-key-manager/index.ts`**
+### `agent_runs` -- Execution History with Streaming
 
-Endpoints:
-- `POST { action: 'save-key', provider, apiKey }` -- stores encrypted key in `user_data` table with key `ai-api-key-{provider}`
-- `POST { action: 'test-key', provider, apiKey }` -- makes a minimal API call to validate the key works
-- `POST { action: 'get-config' }` -- returns which provider/model is configured (never returns the actual key)
-- `POST { action: 'delete-key', provider }` -- removes a stored key
+| Column | Type | Purpose |
+|--------|------|---------|
+| id | uuid PK | Run ID |
+| task_id | uuid | Which task this run executes |
+| bot_id | uuid | |
+| user_id | uuid | |
+| status | text | `running`, `completed`, `failed` |
+| steps | jsonb | Array of `{ step, action, result, timestamp }` |
+| token_usage | jsonb? | `{ prompt, completion, total }` |
+| started_at | timestamptz | |
+| completed_at | timestamptz? | |
 
-Requires authentication (reads user ID from auth header). Keys are stored server-side only.
+RLS: Users can only view their own runs. Enable realtime on this table so the UI can stream step updates.
 
-### 4. Update `hyper-chat` Edge Function
+## New Edge Function: `agent-runtime`
 
-**File: `supabase/functions/hyper-chat/index.ts`**
+**File: `supabase/functions/agent-runtime/index.ts`**
 
-Before making the AI call:
-1. Check if the authenticated user has a custom AI provider configured
-2. Load their API key from `user_data` table
-3. Route the request to the appropriate provider's API:
-   - **OpenAI**: `https://api.openai.com/v1/chat/completions` (same format as current gateway)
-   - **Anthropic**: `https://api.anthropic.com/v1/messages` (needs message format conversion)
-   - **Google Gemini**: `https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent` (needs format conversion)
-4. If no custom provider or key fails, fall back to the default Lovable AI gateway
+This is the core execution engine. Actions:
 
-Add a helper function `callAIProvider(provider, model, apiKey, messages, tools, stream)` that handles the format differences between providers:
-- OpenAI: native format (same as current)
-- Anthropic: convert `messages` array to Anthropic format, map `tools` to Anthropic tool format, handle streaming via SSE
-- Gemini: convert to Google's `contents` format, map tools to `function_declarations`
+### `enqueue` -- Add a task to the queue
+Accepts `{ bot_id, instruction, lane?, input_payload?, parent_task_id?, max_steps? }`. Inserts into `agent_tasks` with status `queued`.
 
-### 5. Update Other AI Edge Functions
+### `execute` -- Run the next task (or a specific task)
+The main agentic loop:
 
-**Files: `supabase/functions/ai-social/index.ts`, `supabase/functions/bot-runner/index.ts`, `supabase/functions/mini-app-gen/index.ts`**
+1. Pick the highest-priority `queued` task for the bot (ordered by lane priority, then created_at)
+2. Create an `agent_runs` record with status `running`
+3. Enter the AI loop (up to `max_steps` iterations):
+   a. Build context: system prompt + bot memory + task instruction + previous steps
+   b. Call AI (via `routeAICall`) with available tools + two special tools: `spawn_subtask` and `save_to_memory`
+   c. If AI returns tool calls, execute them and append step to `agent_runs.steps`
+   d. Update `agent_runs` in DB after each step (triggers realtime for streaming)
+   e. If AI returns a final text response (no tool calls), mark task `completed`
+4. If a step calls `spawn_subtask`, insert a child `agent_tasks` row with `parent_task_id` set
 
-Add the same provider routing logic (extract into a shared utility):
+### `cancel` -- Cancel a running/queued task
+Sets status to `cancelled`. If the task has child tasks, cascade-cancel them.
 
-**File: `supabase/functions/_shared/ai-router.ts`**
+### `status` -- Get queue status
+Returns tasks grouped by lane with counts.
 
-Shared module that:
-- Loads user AI config from DB
-- Provides `routeAICall({ userId, messages, tools, stream, systemPrompt })` function
-- Handles provider-specific request/response format conversion
-- Falls back to Lovable AI gateway when no custom key is set
+### `memory` -- Manage bot memory
+Sub-actions: `get`, `set`, `list`, `delete` for the bot's `agent_memory` entries.
 
-### 6. Database: User AI Keys Table
+### Special Tools Available to Agents
 
-**New migration** to create a dedicated table (more secure than generic `user_data`):
+In addition to the existing bot tools (from `bot-api`), agents get:
 
-```sql
-CREATE TABLE public.user_ai_keys (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID NOT NULL,
-  provider TEXT NOT NULL CHECK (provider IN ('openai', 'anthropic', 'google')),
-  encrypted_key TEXT NOT NULL,
-  model TEXT,
-  created_at TIMESTAMPTZ DEFAULT now(),
-  updated_at TIMESTAMPTZ DEFAULT now(),
-  UNIQUE(user_id, provider)
-);
+- **`spawn_subtask`**: `{ instruction, lane?, input_payload? }` -- creates a child task executed by a new sub-agent instance. Returns the child task ID. The parent can later check results.
+- **`save_to_memory`**: `{ namespace, key, value }` -- persists data to the bot's isolated memory store.
+- **`recall_from_memory`**: `{ namespace, key? }` -- retrieves from memory. If no key, lists all in namespace.
+- **`check_subtask`**: `{ task_id }` -- checks if a spawned subtask has completed and gets its result.
+- **`wait_for_subtask`**: `{ task_id }` -- blocks (within the loop) until subtask completes, then returns result.
+- **`emit_status`**: `{ message }` -- emits a status update to the streaming log without taking an action.
 
-ALTER TABLE public.user_ai_keys ENABLE ROW LEVEL SECURITY;
+### Lane Priority Order
 
-CREATE POLICY "Users can manage their own AI keys"
-  ON public.user_ai_keys FOR ALL
-  USING (auth.uid() = user_id)
-  WITH CHECK (auth.uid() = user_id);
+```text
+critical  (0) -- safety/security actions, execute immediately
+high      (1) -- user-initiated tasks
+normal    (2) -- default lane
+low       (3) -- background automation
+background(4) -- maintenance, cleanup
 ```
 
-## Technical Details
+The executor picks tasks in lane-priority order, then FIFO within each lane.
 
-### Provider API Format Differences
+## Frontend Changes
 
-| Feature | OpenAI | Anthropic | Google Gemini |
-|---------|--------|-----------|---------------|
-| Endpoint | `/v1/chat/completions` | `/v1/messages` | `/v1beta/models/{model}:generateContent` |
-| Auth header | `Authorization: Bearer` | `x-api-key` + `anthropic-version` | `?key=` query param |
-| Message format | `{role, content}` | `{role, content}` (no "system" in messages) | `{parts: [{text}]}` |
-| System prompt | In messages array | Separate `system` field | In `systemInstruction` |
-| Tool calling | `tools` array | `tools` array (similar) | `function_declarations` |
-| Streaming | SSE `data:` lines | SSE `event:` lines | SSE or JSON chunks |
+### Updated BotLabApp (`src/components/os/BotLabApp.tsx`)
 
-### AI Router Shared Module
+Add a new "Tasks" tab showing:
+- Active task queue grouped by lane (color-coded: red/orange/blue/gray/dim)
+- Each task shows status, instruction preview, step count
+- Click a task to see the live execution log (steps stream in via realtime)
+- "Enqueue Task" button to manually add tasks
+- "Cancel" button on running/queued tasks
+- Sub-task tree view (indented children under parent tasks)
 
-The `_shared/ai-router.ts` module will:
-1. Accept a unified request format (OpenAI-compatible)
-2. Transform to provider-specific format
-3. Make the API call
-4. Transform the response back to OpenAI-compatible format
-5. Handle streaming by converting provider-specific SSE to standard format
+Add a "Memory" tab showing:
+- Bot's persistent memory organized by namespace
+- Key-value browser with add/edit/delete
+- Memory usage stats
 
-### Security Model
+### Updated PrimeAgentApp (`src/components/os/PrimeAgentApp.tsx`)
 
-- API keys are stored in a dedicated RLS-protected table
-- Keys are only readable by the owning user
-- The edge function reads keys server-side -- they never transit through the client
-- The Settings UI only shows masked key values (last 4 characters)
-- Users can delete their keys at any time
+When the user gives an instruction:
+1. Instead of the hardcoded `parseInstruction`, call `agent-runtime?action=enqueue` to queue a real task
+2. Subscribe to realtime updates on `agent_runs` to stream execution steps into the UI
+3. Show a live step-by-step execution log with timestamps
+4. Support "Run with sub-agents" toggle for complex multi-step tasks
 
-### Files Modified/Created
+### Streaming Execution Log Component
+
+New component embedded in both BotLab and PrimeAgent:
+
+```text
+┌─ Task: "Analyze portfolio and rebalance" ──────────────┐
+│ Lane: high | Status: running | Steps: 3/10            │
+│                                                         │
+│ [00:00] Thinking... Loading portfolio data              │
+│ [00:02] Tool: check_portfolio -> 5 holdings loaded      │
+│ [00:03] Tool: get_market_data -> AAPL, MSFT, GOOGL...   │
+│ [00:05] Thinking... Analyzing allocation...             │
+│ [00:07] Spawned subtask: "Calculate optimal weights"    │
+│ [00:08] Waiting for subtask result...                   │
+│ [00:12] Subtask complete: {AAPL: 30%, MSFT: 25%...}    │
+│ [00:13] Tool: save_to_memory -> Saved rebalance plan    │
+│ [00:14] Complete: Portfolio analysis done.               │
+└─────────────────────────────────────────────────────────┘
+```
+
+## Execution Flow Example
+
+```text
+User: "Analyze my portfolio and create a report"
+
+1. PrimeAgent enqueues task (lane: high)
+2. agent-runtime picks up task
+3. Step 1: AI decides to check_portfolio -> gets holdings
+4. Step 2: AI decides to get_market_data -> gets prices
+5. Step 3: AI spawns subtask "Generate spreadsheet report"
+   └─ Child task executes:
+      └─ Step 1: create_spreadsheet with data
+      └─ Step 2: add_chart for performance
+      └─ Complete: returns spreadsheet ID
+6. Step 4: Parent checks subtask result
+7. Step 5: AI saves analysis to memory
+8. Step 6: AI responds with summary
+9. Task marked completed
+```
+
+## Files Created/Modified
 
 | File | Change |
 |------|--------|
-| `src/components/os/SettingsApp.tsx` | Add "AI Provider" panel with provider/model/key configuration UI |
-| `supabase/functions/ai-key-manager/index.ts` | **New** -- save, test, delete API keys securely |
-| `supabase/functions/_shared/ai-router.ts` | **New** -- shared AI provider routing and format conversion |
-| `supabase/functions/hyper-chat/index.ts` | Use `ai-router` to support custom providers |
-| `supabase/functions/ai-social/index.ts` | Use `ai-router` for custom provider support |
-| `supabase/functions/bot-runner/index.ts` | Use `ai-router` for custom provider support |
-| `supabase/functions/mini-app-gen/index.ts` | Use `ai-router` for custom provider support |
-| `supabase/config.toml` | Add `ai-key-manager` function config |
-| New migration | Create `user_ai_keys` table with RLS |
+| New migration | Create `agent_tasks`, `agent_memory`, `agent_runs` tables with RLS; enable realtime on `agent_runs` |
+| `supabase/functions/agent-runtime/index.ts` | **New** -- core execution engine with lane scheduler, AI loop, sub-agent spawning, memory ops |
+| `src/components/os/BotLabApp.tsx` | Add "Tasks" and "Memory" tabs with queue view, streaming log, memory browser |
+| `src/components/os/PrimeAgentApp.tsx` | Replace hardcoded parseInstruction with real task enqueueing + realtime streaming |
+| `supabase/config.toml` | Add `agent-runtime` function config |
+| `src/integrations/supabase/types.ts` | Auto-updated with new table types |
 
-### Execution Order
+## Execution Order
 
-1. Create the `user_ai_keys` database table with RLS
-2. Create `_shared/ai-router.ts` with provider routing logic
-3. Create `ai-key-manager` edge function
-4. Update `hyper-chat` to use the AI router
-5. Update other AI edge functions (`ai-social`, `bot-runner`, `mini-app-gen`)
-6. Add the AI Provider settings panel to the Settings app
-7. Update `supabase/config.toml` with the new function
+1. Create database tables (`agent_tasks`, `agent_memory`, `agent_runs`) with RLS and realtime
+2. Build `agent-runtime` edge function with full executor loop
+3. Update `BotLabApp` with Tasks and Memory tabs
+4. Update `PrimeAgentApp` to use real task queue + streaming
+5. Update config.toml
+
