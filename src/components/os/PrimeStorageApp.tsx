@@ -51,7 +51,7 @@ export default function PrimeStorageApp() {
         let regionTotal = 0;
         for (const table of tables) {
           try {
-            const { count } = await (supabase as any).from(table).select('*', { count: 'exact', head: true });
+            const { count } = await (supabase as any).from(table).select('id', { count: 'exact' }).limit(0);
             regionTotal += count || 0;
           } catch {}
         }
@@ -61,9 +61,7 @@ export default function PrimeStorageApp() {
 
       // Check storage bucket file count
       try {
-        const { data } = await supabase.from('file_metadata').select('id', { count: 'exact', head: true });
-        // data is null for head requests but count is in the response
-        const { count } = await supabase.from('file_metadata').select('*', { count: 'exact', head: true });
+        const { count } = await supabase.from('file_metadata').select('id', { count: 'exact' }).limit(0);
         setStorageFiles(count || 0);
       } catch {}
 
