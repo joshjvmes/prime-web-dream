@@ -55,6 +55,19 @@ npm run dev
 
 ---
 
+## Documentation
+
+Full internal documentation is available in the [`docs/`](./docs/README.md) directory:
+
+- [Architecture](./docs/ARCHITECTURE.md) — System flow, window manager, EventBus, auth
+- [App Catalog](./docs/APPS.md) — All 50+ apps with backend integration details
+- [Backend Reference](./docs/BACKEND.md) — Database tables, edge functions, secrets
+- [Hooks Reference](./docs/HOOKS.md) — Custom React hooks
+- [Terminal Reference](./docs/TERMINAL.md) — Commands, pipes, modes
+- [Security Overview](./docs/SECURITY.md) — RLS policies, auth patterns
+
+---
+
 ## License
 
 © Rocket Logic Global. All rights reserved.
