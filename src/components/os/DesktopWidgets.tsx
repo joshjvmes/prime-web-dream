@@ -202,7 +202,7 @@ function ForgeWidget() {
   const fetchData = useCallback(async () => {
     const [{ data: listings }, { count: orderCount }] = await Promise.all([
       supabase.from('forge_listings').select('name, icon, price, ipo_active, ipo_raised, ipo_target').eq('is_listed', true).order('created_at', { ascending: false }).limit(10),
-      supabase.from('share_orders').select('*', { count: 'exact', head: true }).eq('status', 'open'),
+      supabase.from('share_orders').select('id', { count: 'exact' }).eq('status', 'open').limit(0),
     ]);
     if (listings) {
       const ipos = listings.filter((l: any) => l.ipo_active);
@@ -217,7 +217,7 @@ function ForgeWidget() {
 
   useEffect(() => {
     fetchData();
-    const interval = setInterval(fetchData, 10000);
+    const interval = setInterval(fetchData, 60000);
     const channel = supabase.channel('forge-widget')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'forge_listings' }, fetchData)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'share_orders' }, fetchData)

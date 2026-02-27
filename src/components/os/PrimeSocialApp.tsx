@@ -97,20 +97,25 @@ export default function PrimeSocialApp() {
 
   // Generate AI posts and persist to DB
   const fetchAIPosts = async () => {
-    if (!userId) return;
+    if (!userId || loading) return;
     setLoading(true);
     try {
       const { data, error } = await supabase.functions.invoke('ai-social', {
         body: { action: 'generate-posts' },
       });
-      if (error) throw error;
+      if (error) {
+        console.error('ai-social invoke error:', error);
+        throw error;
+      }
       if (data?.posts) {
         for (const p of data.posts) {
-          const { data: inserted } = await (supabase.from('social_posts') as any).insert({
+          const { data: inserted, error: insertErr } = await (supabase.from('social_posts') as any).insert({
             user_id: userId, author: p.author, role: p.role,
             content: p.content, likes: p.likes || Math.floor(Math.random() * 80) + 5,
             ai_generated: true,
           }).select().single();
+
+          if (insertErr) console.error('Post insert error:', insertErr);
 
           // Insert AI comments
           if (inserted && p.comments?.length) {
@@ -135,7 +140,7 @@ export default function PrimeSocialApp() {
     if (!hasFetched.current && userId) {
       hasFetched.current = true;
       // Only generate if feed is empty
-      (supabase.from('social_posts') as any).select('id', { count: 'exact', head: true }).then(({ count }: any) => {
+      (supabase.from('social_posts') as any).select('id', { count: 'exact' }).limit(0).then(({ count }: any) => {
         if ((count ?? 0) === 0) fetchAIPosts();
       });
     }

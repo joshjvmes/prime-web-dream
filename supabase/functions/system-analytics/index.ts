@@ -51,7 +51,8 @@ Deno.serve(async (req) => {
       for (const table of tables) {
         const { count } = await supabase
           .from(table)
-          .select('*', { count: 'exact', head: true });
+          .select('id', { count: 'exact' })
+          .limit(0);
         tableCounts[table] = count ?? 0;
       }
 
@@ -105,7 +106,8 @@ Deno.serve(async (req) => {
       for (const table of securityTables) {
         const { count } = await supabase
           .from(table)
-          .select('*', { count: 'exact', head: true });
+          .select('id', { count: 'exact' })
+          .limit(0);
         rlsStatus.push({ table, rls: true, rowCount: count ?? 0 });
       }
 
