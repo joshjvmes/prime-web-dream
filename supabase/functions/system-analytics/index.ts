@@ -26,47 +26,47 @@ Deno.serve(async (req) => {
     const { action } = await req.json();
 
     if (action === 'edge-function-stats') {
-      // Query real edge function invocation counts from user_activity
       const serviceClient = createClient(
         Deno.env.get('SUPABASE_URL')!,
         Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
       );
 
-      // Get edge function invocation stats from user_activity for this user
-      const { data: activity } = await serviceClient
-        .from('user_activity')
-        .select('target, created_at, metadata')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false })
-        .limit(500);
-
-      // Get table row counts for tables accessible to this user
+      // Fetch activity and all table counts in parallel
       const tables = [
         'calendar_events', 'chat_messages', 'file_metadata', 'social_posts',
         'user_emails', 'bot_registry', 'agent_tasks', 'vault_holdings',
         'bookings', 'cloud_hooks', 'wallets', 'ai_conversations', 'ai_memories'
       ];
 
-      const tableCounts: Record<string, number> = {};
-      for (const table of tables) {
-        const { count } = await supabase
-          .from(table)
-          .select('id', { count: 'exact' })
-          .limit(0);
-        tableCounts[table] = count ?? 0;
-      }
+      const [activityResult, ...countResults] = await Promise.all([
+        serviceClient
+          .from('user_activity')
+          .select('target, created_at, metadata')
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: false })
+          .limit(500),
+        ...tables.map(table =>
+          supabase.from(table).select('id', { count: 'exact' }).limit(0)
+        ),
+      ]);
 
-      // Aggregate activity by target (app opened, etc.)
+      const activity = activityResult.data;
+      const tableCounts: Record<string, number> = {};
+      tables.forEach((table, i) => {
+        tableCounts[table] = countResults[i].count ?? 0;
+      });
+
+      // Aggregate activity by target
       const activityByTarget: Record<string, number> = {};
-      const activityTimeline: { hour: string; count: number }[] = [];
       const hourBuckets: Record<string, number> = {};
 
       for (const row of (activity || [])) {
         activityByTarget[row.target] = (activityByTarget[row.target] || 0) + 1;
-        const hour = row.created_at.slice(0, 13); // YYYY-MM-DDTHH
+        const hour = row.created_at.slice(0, 13);
         hourBuckets[hour] = (hourBuckets[hour] || 0) + 1;
       }
 
+      const activityTimeline: { hour: string; count: number }[] = [];
       const sortedHours = Object.keys(hourBuckets).sort().slice(-24);
       for (const h of sortedHours) {
         activityTimeline.push({ hour: h.slice(11) + ':00', count: hourBuckets[h] });
@@ -81,37 +81,36 @@ Deno.serve(async (req) => {
     }
 
     if (action === 'auth-events') {
-      // Return recent login/signup activity for SecurityConsole
       const serviceClient = createClient(
         Deno.env.get('SUPABASE_URL')!,
         Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
       );
 
-      // Get user's own activity as security events
-      const { data: activity } = await serviceClient
-        .from('user_activity')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false })
-        .limit(100);
-
-      // Get RLS-accessible table list with row counts for "scan"
       const securityTables = [
         'user_ai_keys', 'wallets', 'bot_registry', 'agent_tasks',
         'file_metadata', 'calendar_events', 'user_emails', 'cloud_hooks',
         'social_posts', 'profiles', 'user_data'
       ];
 
-      const rlsStatus: { table: string; rls: boolean; rowCount: number }[] = [];
-      for (const table of securityTables) {
-        const { count } = await supabase
-          .from(table)
-          .select('id', { count: 'exact' })
-          .limit(0);
-        rlsStatus.push({ table, rls: true, rowCount: count ?? 0 });
-      }
+      // Fetch activity and all RLS table counts in parallel
+      const [activityResult, ...rlsResults] = await Promise.all([
+        serviceClient
+          .from('user_activity')
+          .select('*')
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: false })
+          .limit(100),
+        ...securityTables.map(table =>
+          supabase.from(table).select('id', { count: 'exact' }).limit(0)
+        ),
+      ]);
 
-      // Check for recent failed operations (we'll derive from activity patterns)
+      const activity = activityResult.data;
+      const rlsStatus: { table: string; rls: boolean; rowCount: number }[] = [];
+      securityTables.forEach((table, i) => {
+        rlsStatus.push({ table, rls: true, rowCount: rlsResults[i].count ?? 0 });
+      });
+
       const events = (activity || []).map((a: any) => ({
         id: a.id,
         time: new Date(a.created_at).toLocaleTimeString('en-US', { hour12: false }),
