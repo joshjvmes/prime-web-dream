@@ -1,12 +1,13 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
-import { Radio, Pause, Play, Filter, AlertTriangle, Activity } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { Radio, Pause, Play, Filter, Activity, Database, Wifi } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
 
 interface Pipeline {
   id: string;
   name: string;
+  table: string;
   eventsPerSec: number;
   latencyMs: number;
-  errorRate: number;
   schema: { field: string; type: string }[];
 }
 
@@ -14,31 +15,16 @@ interface StreamRow {
   id: string;
   timestamp: string;
   data: Record<string, string | number>;
-  age: number;
+  source: 'realtime' | 'simulated';
 }
 
 const PIPELINES: Pipeline[] = [
-  { id: 'p1', name: 'Lattice Telemetry', eventsPerSec: 1240, latencyMs: 0.8, errorRate: 0.02, schema: [{ field: 'node_id', type: 'string' }, { field: 'coord', type: 'vec3' }, { field: 'load', type: 'float' }, { field: 'state', type: 'qutrit' }, { field: 'ts', type: 'timestamp' }] },
-  { id: 'p2', name: 'Qutrit State Stream', eventsPerSec: 890, latencyMs: 1.2, errorRate: 0.01, schema: [{ field: 'qutrit_id', type: 'string' }, { field: 'state', type: 'int(0-2)' }, { field: 'potential', type: 'float' }, { field: 'ts', type: 'timestamp' }] },
-  { id: 'p3', name: 'Energy Flow', eventsPerSec: 420, latencyMs: 2.1, errorRate: 0.05, schema: [{ field: 'mode', type: 'string' }, { field: 'cop', type: 'float' }, { field: 'input_w', type: 'float' }, { field: 'output_w', type: 'float' }, { field: 'ts', type: 'timestamp' }] },
-  { id: 'p4', name: 'Network Packets', eventsPerSec: 2100, latencyMs: 0.3, errorRate: 0.001, schema: [{ field: 'src', type: 'addr' }, { field: 'dst', type: 'addr' }, { field: 'size', type: 'int' }, { field: 'hops', type: 'int' }, { field: 'ts', type: 'timestamp' }] },
+  { id: 'social', name: 'Social Feed', table: 'social_posts', eventsPerSec: 0, latencyMs: 0, schema: [{ field: 'author', type: 'string' }, { field: 'content', type: 'text' }, { field: 'likes', type: 'int' }, { field: 'ts', type: 'timestamp' }] },
+  { id: 'chat', name: 'Chat Messages', table: 'chat_messages', eventsPerSec: 0, latencyMs: 0, schema: [{ field: 'username', type: 'string' }, { field: 'content', type: 'text' }, { field: 'channel', type: 'string' }, { field: 'ts', type: 'timestamp' }] },
+  { id: 'activity', name: 'User Activity', table: 'user_activity', eventsPerSec: 0, latencyMs: 0, schema: [{ field: 'action', type: 'string' }, { field: 'target', type: 'string' }, { field: 'ts', type: 'timestamp' }] },
+  { id: 'calendar', name: 'Calendar Events', table: 'calendar_events', eventsPerSec: 0, latencyMs: 0, schema: [{ field: 'title', type: 'string' }, { field: 'start_time', type: 'timestamp' }, { field: 'color', type: 'string' }] },
+  { id: 'emails', name: 'Mail Stream', table: 'user_emails', eventsPerSec: 0, latencyMs: 0, schema: [{ field: 'from_address', type: 'string' }, { field: 'subject', type: 'string' }, { field: 'folder', type: 'string' }, { field: 'ts', type: 'timestamp' }] },
 ];
-
-function generateRow(pipeline: Pipeline): StreamRow {
-  const now = new Date();
-  const data: Record<string, string | number> = {};
-  for (const f of pipeline.schema) {
-    switch (f.type) {
-      case 'string': case 'addr': data[f.field] = `${f.field.slice(0, 3)}-${Math.random().toString(36).slice(2, 6)}`; break;
-      case 'vec3': data[f.field] = `⟨${Math.floor(Math.random() * 100)},${Math.floor(Math.random() * 100)},${Math.floor(Math.random() * 100)}⟩`; break;
-      case 'float': data[f.field] = +(Math.random() * 100).toFixed(2); break;
-      case 'int': case 'int(0-2)': data[f.field] = Math.floor(Math.random() * (f.type.includes('0-2') ? 3 : 1500)); break;
-      case 'qutrit': data[f.field] = `|${Math.floor(Math.random() * 3)}⟩`; break;
-      case 'timestamp': data[f.field] = now.toISOString().slice(11, 23); break;
-    }
-  }
-  return { id: `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, timestamp: now.toISOString().slice(11, 23), data, age: 0 };
-}
 
 export default function PrimeStreamApp() {
   const [selectedPipeline, setSelectedPipeline] = useState(PIPELINES[0]);
@@ -46,30 +32,64 @@ export default function PrimeStreamApp() {
   const [paused, setPaused] = useState(false);
   const [filter, setFilter] = useState('');
   const [showSchema, setShowSchema] = useState(false);
-  const [metrics, setMetrics] = useState({ eps: 0, lat: 0, err: 0 });
-  const countRef = useRef(0);
+  const [metrics, setMetrics] = useState({ total: 0, realtime: 0, latency: 0 });
+  const [connected, setConnected] = useState(false);
+  const channelRef = useRef<any>(null);
 
+  // Load initial data from the selected table
   useEffect(() => {
     setRows([]);
-    countRef.current = 0;
+    setConnected(false);
+    setMetrics({ total: 0, realtime: 0, latency: 0 });
+
+    const loadInitial = async () => {
+      const { data } = await supabase
+        .from(selectedPipeline.table as any)
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(30);
+
+      if (data) {
+        const mapped = data.map((row: any) => mapRowToStream(row, selectedPipeline));
+        setRows(mapped);
+        setMetrics(m => ({ ...m, total: mapped.length }));
+      }
+    };
+    loadInitial();
   }, [selectedPipeline]);
 
+  // Subscribe to Realtime changes
   useEffect(() => {
     if (paused) return;
-    const id = setInterval(() => {
-      countRef.current++;
-      const newRow = generateRow(selectedPipeline);
-      setRows(prev => [newRow, ...prev].slice(0, 50));
-      setMetrics({
-        eps: selectedPipeline.eventsPerSec + Math.floor((Math.random() - 0.5) * 100),
-        lat: +(selectedPipeline.latencyMs + (Math.random() - 0.5) * 0.4).toFixed(2),
-        err: +(selectedPipeline.errorRate + (Math.random() - 0.5) * 0.01).toFixed(3),
+
+    channelRef.current = supabase
+      .channel(`stream-${selectedPipeline.table}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: selectedPipeline.table },
+        (payload) => {
+          const start = performance.now();
+          const row = mapRowToStream(payload.new as any, selectedPipeline, 'realtime');
+          const latency = +(performance.now() - start).toFixed(1);
+          setRows(prev => [row, ...prev].slice(0, 50));
+          setMetrics(m => ({ total: m.total + 1, realtime: m.realtime + 1, latency }));
+          setConnected(true);
+        }
+      )
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') setConnected(true);
       });
-    }, 400);
-    return () => clearInterval(id);
+
+    return () => {
+      if (channelRef.current) {
+        supabase.removeChannel(channelRef.current);
+      }
+    };
   }, [selectedPipeline, paused]);
 
-  const filteredRows = filter ? rows.filter(r => JSON.stringify(r.data).toLowerCase().includes(filter.toLowerCase())) : rows;
+  const filteredRows = filter
+    ? rows.filter(r => JSON.stringify(r.data).toLowerCase().includes(filter.toLowerCase()))
+    : rows;
 
   return (
     <div className="h-full flex bg-background text-foreground font-mono text-xs">
@@ -77,16 +97,16 @@ export default function PrimeStreamApp() {
       <div className="w-44 shrink-0 border-r border-border flex flex-col">
         <div className="px-2 py-1.5 border-b border-border flex items-center gap-1">
           <Radio size={12} className="text-primary" />
-          <span className="font-display text-[9px] tracking-wider text-primary">PIPELINES</span>
+          <span className="font-display text-[9px] tracking-wider text-primary">REALTIME STREAMS</span>
         </div>
         <div className="flex-1 overflow-auto p-1 space-y-0.5">
           {PIPELINES.map(p => (
             <button key={p.id} onClick={() => setSelectedPipeline(p)} className={`w-full text-left px-2 py-1.5 rounded text-[9px] transition-colors ${selectedPipeline.id === p.id ? 'bg-primary/20 text-primary' : 'text-muted-foreground hover:bg-muted'}`}>
               <div className="flex items-center gap-1">
-                <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
+                <Database size={8} className="text-primary shrink-0" />
                 {p.name}
               </div>
-              <div className="text-[8px] text-muted-foreground mt-0.5">{p.eventsPerSec} evt/s</div>
+              <div className="text-[8px] text-muted-foreground mt-0.5">{p.table}</div>
             </button>
           ))}
         </div>
@@ -96,9 +116,15 @@ export default function PrimeStreamApp() {
       <div className="flex-1 flex flex-col min-w-0">
         {/* Metrics bar */}
         <div className="flex items-center gap-4 px-3 py-1.5 border-b border-border">
-          <div className="flex items-center gap-1"><Activity size={10} className="text-primary" /><span className="text-muted-foreground">Events/s:</span><span className="text-foreground font-bold">{metrics.eps.toLocaleString()}</span></div>
-          <div className="flex items-center gap-1"><span className="text-muted-foreground">Latency:</span><span className="text-foreground">{metrics.lat}ms</span></div>
-          <div className="flex items-center gap-1"><span className="text-muted-foreground">Errors:</span><span className={metrics.err > 0.03 ? 'text-destructive' : 'text-foreground'}>{(metrics.err * 100).toFixed(1)}%</span></div>
+          <div className="flex items-center gap-1">
+            <Wifi size={10} className={connected ? 'text-prime-green' : 'text-muted-foreground'} />
+            <span className="text-[9px]" style={{ color: connected ? 'hsl(var(--prime-green))' : undefined }}>
+              {connected ? 'LIVE' : 'CONNECTING'}
+            </span>
+          </div>
+          <div className="flex items-center gap-1"><Activity size={10} className="text-primary" /><span className="text-muted-foreground">Total:</span><span className="text-foreground font-bold">{metrics.total}</span></div>
+          <div className="flex items-center gap-1"><span className="text-muted-foreground">Realtime:</span><span className="text-prime-green">{metrics.realtime}</span></div>
+          <div className="flex items-center gap-1"><span className="text-muted-foreground">Latency:</span><span className="text-foreground">{metrics.latency}ms</span></div>
           <div className="ml-auto flex items-center gap-1">
             <button onClick={() => setShowSchema(!showSchema)} className={`px-1.5 py-0.5 rounded text-[8px] ${showSchema ? 'bg-primary/20 text-primary' : 'text-muted-foreground hover:bg-muted'}`}>Schema</button>
             <button onClick={() => setPaused(!paused)} className="p-1 rounded hover:bg-muted text-muted-foreground">
@@ -115,7 +141,7 @@ export default function PrimeStreamApp() {
 
         {showSchema ? (
           <div className="flex-1 overflow-auto p-3">
-            <p className="text-[9px] text-muted-foreground mb-2">SCHEMA — {selectedPipeline.name}</p>
+            <p className="text-[9px] text-muted-foreground mb-2">SCHEMA — {selectedPipeline.name} ({selectedPipeline.table})</p>
             <div className="border border-border rounded">
               {selectedPipeline.schema.map((f, i) => (
                 <div key={f.field} className={`flex items-center gap-3 px-3 py-1.5 text-[9px] ${i < selectedPipeline.schema.length - 1 ? 'border-b border-border/50' : ''}`}>
@@ -130,6 +156,7 @@ export default function PrimeStreamApp() {
             <table className="w-full">
               <thead>
                 <tr className="border-b border-border">
+                  <th className="px-2 py-1 text-left text-[8px] text-muted-foreground font-normal">SRC</th>
                   <th className="px-2 py-1 text-left text-[8px] text-muted-foreground font-normal">TIME</th>
                   {selectedPipeline.schema.filter(f => f.type !== 'timestamp').map(f => (
                     <th key={f.field} className="px-2 py-1 text-left text-[8px] text-muted-foreground font-normal">{f.field.toUpperCase()}</th>
@@ -139,12 +166,20 @@ export default function PrimeStreamApp() {
               <tbody>
                 {filteredRows.map((r, i) => (
                   <tr key={r.id} className="border-b border-border/30 hover:bg-muted/20" style={{ opacity: Math.max(0.3, 1 - i * 0.015) }}>
+                    <td className="px-2 py-0.5">
+                      <span className={`text-[7px] px-1 py-0.5 rounded ${r.source === 'realtime' ? 'bg-prime-green/20 text-prime-green' : 'bg-muted text-muted-foreground'}`}>
+                        {r.source === 'realtime' ? 'RT' : 'DB'}
+                      </span>
+                    </td>
                     <td className="px-2 py-0.5 text-[9px] text-muted-foreground">{r.timestamp}</td>
                     {selectedPipeline.schema.filter(f => f.type !== 'timestamp').map(f => (
-                      <td key={f.field} className="px-2 py-0.5 text-[9px] text-foreground">{String(r.data[f.field])}</td>
+                      <td key={f.field} className="px-2 py-0.5 text-[9px] text-foreground max-w-[200px] truncate">{String(r.data[f.field] ?? '')}</td>
                     ))}
                   </tr>
                 ))}
+                {filteredRows.length === 0 && (
+                  <tr><td colSpan={10} className="px-3 py-6 text-center text-muted-foreground text-[10px]">No data yet. Interact with {selectedPipeline.name} to see events here.</td></tr>
+                )}
               </tbody>
             </table>
           </div>
@@ -152,4 +187,21 @@ export default function PrimeStreamApp() {
       </div>
     </div>
   );
+}
+
+function mapRowToStream(row: any, pipeline: Pipeline, source: 'realtime' | 'simulated' = 'simulated'): StreamRow {
+  if (!row) return { id: Date.now().toString(), timestamp: '', data: {}, source };
+  const ts = row.created_at || row.start_time || '';
+  const timestamp = ts ? new Date(ts).toLocaleTimeString('en-US', { hour12: false }) : '';
+  const data: Record<string, string | number> = {};
+  for (const f of pipeline.schema) {
+    if (f.type === 'timestamp') continue;
+    const val = row[f.field];
+    if (val !== undefined && val !== null) {
+      data[f.field] = typeof val === 'string' && val.length > 80 ? val.slice(0, 77) + '...' : val;
+    } else {
+      data[f.field] = '';
+    }
+  }
+  return { id: row.id || `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, timestamp, data, source };
 }
