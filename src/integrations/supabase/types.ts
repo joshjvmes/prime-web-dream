@@ -383,6 +383,42 @@ export type Database = {
           },
         ]
       }
+      board_tasks: {
+        Row: {
+          column_name: string
+          created_at: string
+          eta: number
+          id: string
+          name: string
+          node: string
+          priority: string
+          progress: number
+          user_id: string
+        }
+        Insert: {
+          column_name?: string
+          created_at?: string
+          eta?: number
+          id?: string
+          name: string
+          node?: string
+          priority?: string
+          progress?: number
+          user_id: string
+        }
+        Update: {
+          column_name?: string
+          created_at?: string
+          eta?: number
+          id?: string
+          name?: string
+          node?: string
+          priority?: string
+          progress?: number
+          user_id?: string
+        }
+        Relationships: []
+      }
       bookings: {
         Row: {
           created_at: string

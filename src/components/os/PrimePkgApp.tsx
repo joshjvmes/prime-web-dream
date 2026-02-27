@@ -1,6 +1,7 @@
-import { useState, useCallback } from 'react';
-import { Search, Download, RefreshCw, Trash2, Package } from 'lucide-react';
+import { useState, useCallback, useEffect } from 'react';
+import { Search, Download, RefreshCw, Trash2, Package, Loader2, Store } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { supabase } from '@/integrations/supabase/client';
 
 interface Pkg {
   name: string;
@@ -8,36 +9,62 @@ interface Pkg {
   size: string;
   category: string;
   status: 'installed' | 'update' | 'available';
+  forgeId?: string;
 }
 
-const INITIAL_PKGS: Pkg[] = [
+const SYSTEM_PKGS: Pkg[] = [
   { name: 'qk-kernel', version: '2.0.0', size: '12.4 MB', category: 'Core', status: 'installed' },
   { name: 'fibonacci-waltz', version: '1.3.1', size: '2.1 MB', category: 'Core', status: 'installed' },
-  { name: 'primenet-router', version: '3.0.2', size: '8.7 MB', category: 'Network', status: 'update' },
+  { name: 'primenet-router', version: '3.0.2', size: '8.7 MB', category: 'Network', status: 'installed' },
   { name: 'geodesic-dns', version: '1.1.0', size: '3.2 MB', category: 'Network', status: 'installed' },
   { name: 'q3-inference', version: '1.0.0', size: '45.8 MB', category: 'Compute', status: 'installed' },
-  { name: 'geomc-compiler', version: '1.2.0', size: '18.3 MB', category: 'Compute', status: 'update' },
   { name: 'foldmem-allocator', version: '2.0.0', size: '5.6 MB', category: 'Storage', status: 'installed' },
   { name: 'adinkra-codec', version: '1.4.0', size: '7.9 MB', category: 'Storage', status: 'installed' },
   { name: 'lattice-shield', version: '1.1.0', size: '9.1 MB', category: 'Security', status: 'installed' },
-  { name: 'qutrit-crypt', version: '0.9.0', size: '4.3 MB', category: 'Security', status: 'available' },
   { name: 'prime-fs', version: '2.1.0', size: '6.2 MB', category: 'Core', status: 'installed' },
-  { name: 'energy-harvester', version: '1.5.1', size: '3.8 MB', category: 'Core', status: 'update' },
-  { name: 'hypersphere-ai', version: '0.8.0', size: '52.1 MB', category: 'Compute', status: 'available' },
-  { name: 'cloud-hooks-sdk', version: '1.0.0', size: '2.4 MB', category: 'Network', status: 'available' },
+  { name: 'energy-harvester', version: '1.5.1', size: '3.8 MB', category: 'Core', status: 'installed' },
 ];
 
-const CATEGORIES = ['All', 'Core', 'Network', 'Compute', 'Storage', 'Security'];
+const CATEGORIES = ['All', 'Core', 'Network', 'Compute', 'Storage', 'Security', 'Forge'];
+
+function forgeCategoryMap(cat: string): string {
+  const m: Record<string, string> = { utility: 'Core', game: 'Compute', dashboard: 'Network', productivity: 'Core', social: 'Network' };
+  return m[cat] || 'Forge';
+}
 
 export default function PrimePkgApp() {
-  const [pkgs, setPkgs] = useState(INITIAL_PKGS);
+  const [pkgs, setPkgs] = useState<Pkg[]>(SYSTEM_PKGS);
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState('All');
-  const [log, setLog] = useState<string[]>(['[init] Package manager ready.', `[sync] ${INITIAL_PKGS.length} packages indexed.`]);
+  const [log, setLog] = useState<string[]>(['[init] Package manager ready.', `[sync] ${SYSTEM_PKGS.length} system packages indexed.`]);
+  const [loadingForge, setLoadingForge] = useState(true);
 
   const addLog = useCallback((msg: string) => {
     setLog(prev => [...prev, `[${new Date().toLocaleTimeString('en-US', { hour12: false })}] ${msg}`].slice(-20));
   }, []);
+
+  // Load forge listings as available packages
+  useEffect(() => {
+    const fetchForge = async () => {
+      try {
+        const { data } = await supabase.from('forge_listings').select('id, name, category, version, is_listed').eq('is_listed', true);
+        if (data && data.length > 0) {
+          const forgePkgs: Pkg[] = data.map(l => ({
+            name: l.name.toLowerCase().replace(/\s+/g, '-'),
+            version: `${l.version}.0.0`,
+            size: `${(Math.random() * 10 + 1).toFixed(1)} MB`,
+            category: forgeCategoryMap(l.category),
+            status: 'available' as const,
+            forgeId: l.id,
+          }));
+          setPkgs(prev => [...prev, ...forgePkgs]);
+          addLog(`[forge] ${forgePkgs.length} forge packages discovered.`);
+        }
+      } catch {}
+      setLoadingForge(false);
+    };
+    fetchForge();
+  }, [addLog]);
 
   const install = useCallback((name: string) => {
     setPkgs(prev => prev.map(p => p.name === name ? { ...p, status: 'installed' as const } : p));
@@ -57,7 +84,8 @@ export default function PrimePkgApp() {
   }, [addLog]);
 
   const filtered = pkgs.filter(p => {
-    if (category !== 'All' && p.category !== category) return false;
+    if (category === 'Forge' && !p.forgeId) return false;
+    if (category !== 'All' && category !== 'Forge' && p.category !== category) return false;
     if (search && !p.name.toLowerCase().includes(search.toLowerCase())) return false;
     return true;
   });
@@ -76,9 +104,13 @@ export default function PrimePkgApp() {
         </div>
         <div className="flex items-center gap-0.5 ml-2">
           {CATEGORIES.map(c => (
-            <button key={c} onClick={() => setCategory(c)} className={`text-[8px] px-1.5 py-0.5 rounded ${category === c ? 'bg-primary/15 text-primary' : 'text-muted-foreground hover:bg-muted/50'}`}>{c}</button>
+            <button key={c} onClick={() => setCategory(c)} className={`text-[8px] px-1.5 py-0.5 rounded ${category === c ? 'bg-primary/15 text-primary' : 'text-muted-foreground hover:bg-muted/50'}`}>
+              {c === 'Forge' && <Store size={8} className="inline mr-0.5" />}
+              {c}
+            </button>
           ))}
         </div>
+        {loadingForge && <Loader2 size={10} className="animate-spin text-primary" />}
       </div>
 
       {/* Package list */}
@@ -97,7 +129,10 @@ export default function PrimePkgApp() {
           <tbody>
             {filtered.map(p => (
               <tr key={p.name} className="border-b border-border/30 hover:bg-muted/20">
-                <td className="px-3 py-1.5 text-[10px] text-foreground">{p.name}</td>
+                <td className="px-3 py-1.5 text-[10px] text-foreground flex items-center gap-1">
+                  {p.forgeId && <Store size={8} className="text-primary shrink-0" />}
+                  {p.name}
+                </td>
                 <td className="px-2 py-1.5 text-[10px] text-muted-foreground">{p.version}</td>
                 <td className="px-2 py-1.5 text-[10px] text-muted-foreground">{p.size}</td>
                 <td className="px-2 py-1.5 text-[10px] text-muted-foreground">{p.category}</td>
