@@ -725,7 +725,7 @@ async function executeFinancialTool(fnName: string, args: Record<string, unknown
     } else {
       await db.from("app_shares").update({ shares: newShares }).eq("id", holding.id);
     }
-    const { data: userW } = await db.from("wallets").select("*").eq("user_id", user.id).maybeSingle();
+    const { data: userW } = await db.from("wallets").select("*").eq("user_id", userId).maybeSingle();
     if (userW) {
       await db.from("wallets").update({ os_balance: Number(userW.os_balance) + proceeds }).eq("id", userW.id);
       await db.from("transactions").insert({
