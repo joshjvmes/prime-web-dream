@@ -680,6 +680,21 @@ ${APP_ACTION_PROMPT}`;
                   {imagineMode === 'video' ? 'Cancel Video Mode' : 'Grok Imagine (Video)'}
                 </TooltipContent>
               </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className={`h-7 w-7 ${showGallery ? 'text-[#00e5ff] bg-[#00e5ff]/20' : 'text-[#00e5ff]/60 hover:text-[#00e5ff]'} hover:bg-[#00e5ff]/10`}
+                    onClick={() => setShowGallery(prev => !prev)}
+                  >
+                    <GalleryHorizontalEnd size={13} />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="text-xs">
+                  {showGallery ? 'Close Gallery' : 'Media Gallery'}
+                </TooltipContent>
+              </Tooltip>
             </>
           )}
           {/* Search toggles — only visible when Grok 4.20 is active */}
