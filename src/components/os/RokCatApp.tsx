@@ -346,12 +346,11 @@ ${APP_ACTION_PROMPT}`;
         setMessages(prev => prev.map(m => m.id === rokcatId ? { ...m, text: `Here's your video:\n\n[VIDEO:${data.url}]` } : m));
       } else if (type === 'video' && data.status === 'pending' && data.requestId) {
         // Client-side polling for async video generation
-        let dots = 1;
         const maxAttempts = 40;
         for (let i = 0; i < maxAttempts; i++) {
           await new Promise(r => setTimeout(r, 5000));
-          dots = (dots % 4) + 1;
-          setMessages(prev => prev.map(m => m.id === rokcatId ? { ...m, text: `⏳ Generating video${'.'.repeat(dots)} (${i + 1}/${maxAttempts})` } : m));
+          const progress = Math.round(((i + 1) / maxAttempts) * 100);
+          setMessages(prev => prev.map(m => m.id === rokcatId ? { ...m, text: `[PROGRESS:${progress}]` } : m));
           scrollToBottom();
 
           try {
