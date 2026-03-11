@@ -7,19 +7,28 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-bot-key, x-bot-id, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-// In-memory rate limit tracking (per edge function instance)
-const rateLimits = new Map<string, { count: number; windowStart: number }>();
+// Database-backed rate limit check using bot_audit_log timestamps
+async function checkRateLimit(
+  botId: string,
+  limit: number,
+  supabaseAdmin: ReturnType<typeof createClient>
+): Promise<{ allowed: boolean; used: number }> {
+  const windowStart = new Date(Date.now() - 3600000).toISOString(); // 1 hour ago
 
-function checkRateLimit(botId: string, limit: number): boolean {
-  const now = Date.now();
-  const entry = rateLimits.get(botId);
-  if (!entry || now - entry.windowStart > 3600000) {
-    rateLimits.set(botId, { count: 1, windowStart: now });
-    return true;
+  const { count, error } = await supabaseAdmin
+    .from("bot_audit_log")
+    .select("*", { count: "exact", head: true })
+    .eq("bot_id", botId)
+    .gte("created_at", windowStart);
+
+  if (error) {
+    console.error("Rate limit check error:", error);
+    // Fail open if we can't check — better than blocking all requests
+    return { allowed: true, used: 0 };
   }
-  if (entry.count >= limit) return false;
-  entry.count++;
-  return true;
+
+  const used = count || 0;
+  return { allowed: used < limit, used };
 }
 
 async function hashKey(key: string): Promise<string> {
@@ -252,9 +261,10 @@ serve(async (req) => {
       case "execute": {
         if (!botId) return new Response(JSON.stringify({ error: "Bot ID required for execution" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
-        // Rate limit check
-        if (!checkRateLimit(botId, botRateLimit)) {
-          return new Response(JSON.stringify({ error: "Rate limit exceeded", limit: botRateLimit, window: "1 hour" }), { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        // Rate limit check (database-backed, distributed)
+        const execRL = await checkRateLimit(botId, botRateLimit, supabaseAdmin);
+        if (!execRL.allowed) {
+          return new Response(JSON.stringify({ error: "Rate limit exceeded", limit: botRateLimit, used: execRL.used, window: "1 hour" }), { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } });
         }
 
         const body = await req.json();
@@ -292,8 +302,9 @@ serve(async (req) => {
 
       case "chat": {
         if (!botId) return new Response(JSON.stringify({ error: "Bot ID required" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-        if (!checkRateLimit(botId, botRateLimit)) {
-          return new Response(JSON.stringify({ error: "Rate limit exceeded" }), { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        const chatRL = await checkRateLimit(botId, botRateLimit, supabaseAdmin);
+        if (!chatRL.allowed) {
+          return new Response(JSON.stringify({ error: "Rate limit exceeded", limit: botRateLimit, used: chatRL.used, window: "1 hour" }), { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } });
         }
 
         const body = await req.json();
@@ -330,11 +341,10 @@ serve(async (req) => {
           const { data } = await supabaseAdmin.from("bot_registry").select("*").eq("user_id", userId).order("created_at", { ascending: false });
           return new Response(JSON.stringify({ bots: data || [] }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
         }
-        const entry = rateLimits.get(botId);
-        const used = entry && Date.now() - entry.windowStart < 3600000 ? entry.count : 0;
+        const statusRL = await checkRateLimit(botId, botRateLimit, supabaseAdmin);
         return new Response(JSON.stringify({
           bot: botRecord,
-          rate_limit: { limit: botRateLimit, used, remaining: botRateLimit - used, window: "1 hour" },
+          rate_limit: { limit: botRateLimit, used: statusRL.used, remaining: botRateLimit - statusRL.used, window: "1 hour" },
         }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
 

@@ -38,3 +38,9 @@ verify_jwt = false
 
 [functions.system-analytics]
 verify_jwt = false
+
+[functions.hook-dispatcher]
+verify_jwt = false
+
+[functions.resolve-markets]
+verify_jwt = false

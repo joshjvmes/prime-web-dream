@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { testAIKey } from "../_shared/ai-router.ts";
+import { testAIKey, encryptApiKey } from "../_shared/ai-router.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -59,12 +59,15 @@ serve(async (req) => {
         });
       }
 
-      // Upsert the key with error checking
+      // Encrypt the key before storing
+      const encryptedKey = await encryptApiKey(apiKey);
+
+      // Upsert the encrypted key
       const { error: upsertError } = await db.from("user_ai_keys").upsert(
         {
           user_id: userId,
           provider,
-          encrypted_key: apiKey,
+          encrypted_key: encryptedKey,
           model: model || null,
           updated_at: new Date().toISOString(),
         },
