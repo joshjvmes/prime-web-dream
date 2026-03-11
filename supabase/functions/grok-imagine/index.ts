@@ -95,9 +95,12 @@ async function generateImage(apiKey: string, prompt: string, n: number = 1): Pro
 
 // ── Video Generation via xAI Grok (async with polling) ──
 async function generateVideo(apiKey: string, prompt: string, duration?: number, imageUrl?: string): Promise<Response> {
-  const body: any = { model: "grok-2-video", prompt };
+  const model = "grok-imagine-video";
+  const body: any = { model, prompt };
   if (duration) body.duration = duration;
   if (imageUrl) body.image_url = imageUrl;
+
+  console.log(`[grok-imagine] VIDEO request — model: ${model}, prompt length: ${prompt.length}, duration: ${duration || "default"}`);
 
   const submitResp = await fetch("https://api.x.ai/v1/videos/generations", {
     method: "POST",
