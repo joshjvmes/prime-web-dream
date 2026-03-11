@@ -566,6 +566,7 @@ async function callXAIResponses(config: UserAIConfig, opts: AIRouterOptions): Pr
 }
 
 // Convert xAI Responses API streaming to OpenAI-compatible SSE
+// Also forwards multi-agent reasoning events as custom SSE data
 function convertXAIResponsesStreamToOpenAI(resp: Response): Response {
   const reader = resp.body!.getReader();
   const encoder = new TextEncoder();
@@ -598,6 +599,35 @@ function convertXAIResponsesStreamToOpenAI(resp: Response): Response {
           }
           try {
             const evt = JSON.parse(jsonStr);
+
+            // Forward multi-agent reasoning/thinking events
+            if (evt.type === "reasoning.delta" || evt.type === "reasoning_content.delta") {
+              const agentName = evt.agent_name || evt.agent || "Grok";
+              const thinkingText = evt.delta || evt.content || "";
+              const agentEvt = { agentThinking: { agent: agentName, text: thinkingText } };
+              controller.enqueue(encoder.encode(`data: ${JSON.stringify(agentEvt)}\n\n`));
+              continue;
+            }
+
+            // Forward agent status changes (agent started/completed)
+            if (evt.type === "agent.start" || evt.type === "agent.started") {
+              const agentEvt = { agentStatus: { agent: evt.agent_name || evt.name || "Agent", status: "thinking" } };
+              controller.enqueue(encoder.encode(`data: ${JSON.stringify(agentEvt)}\n\n`));
+              continue;
+            }
+            if (evt.type === "agent.completed" || evt.type === "agent.done") {
+              const agentEvt = { agentStatus: { agent: evt.agent_name || evt.name || "Agent", status: "done" } };
+              controller.enqueue(encoder.encode(`data: ${JSON.stringify(agentEvt)}\n\n`));
+              continue;
+            }
+
+            // Forward reasoning summary
+            if (evt.type === "reasoning.summary" || evt.type === "reasoning_summary") {
+              const agentEvt = { agentThinking: { agent: evt.agent_name || "Grok", text: evt.summary || evt.text || "", final: true } };
+              controller.enqueue(encoder.encode(`data: ${JSON.stringify(agentEvt)}\n\n`));
+              continue;
+            }
+
             // xAI Responses API streams output_text.delta events
             if (evt.type === "output_text.delta" && evt.delta) {
               const chunk = {

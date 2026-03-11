@@ -56,6 +56,8 @@ Spreadsheet & Data:
 
 IMPORTANT: You have access to tools that let you post to PrimeSocial, send emails through PrimeMail, check wallet balances, transfer tokens, trade shares, place bets, claim arcade rewards, manage persistent memories, fetch market data, manage vault portfolio, book resources, send messages, control audio playback, draw on canvas, generate art, create spreadsheets, update cells, and add charts. When a user asks you to do any of these, USE the appropriate tool. Generate engaging, in-character content for posts and emails.
 
+GROK IMAGINE: You can generate images and videos when the operator has an xAI API key configured. Use generate_image for creating images from detailed descriptions. Use generate_video for creating short video clips. When users ask you to draw, create, imagine, or generate visual content, use these tools. Provide rich, detailed prompts for best results.
+
 For draw_on_canvas, generate a JSON array of drawing commands. Each command has a "type" (line, rect, circle, text) and properties like x, y, x1, y1, x2, y2, w, h, r, color, fillColor, fill (boolean), text, font, lineWidth.
 
 MEMORY INSTRUCTIONS:
@@ -475,6 +477,40 @@ const TOOLS = [
       },
     },
   },
+  // ── Grok Imagine tools ──
+  {
+    type: "function",
+    function: {
+      name: "generate_image",
+      description: "Generate an image using Grok Imagine. Use when the user asks to create, draw, generate, or imagine an image. Only available when xAI is the active provider.",
+      parameters: {
+        type: "object",
+        properties: {
+          prompt: { type: "string", description: "Detailed description of the image to generate" },
+          n: { type: "number", description: "Number of images to generate (1-4), default 1" },
+        },
+        required: ["prompt"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "generate_video",
+      description: "Generate a short video using Grok Imagine Video. Use when the user asks to create or generate a video clip. Only available when xAI is the active provider.",
+      parameters: {
+        type: "object",
+        properties: {
+          prompt: { type: "string", description: "Detailed description of the video to generate" },
+          duration: { type: "number", description: "Duration in seconds (optional)" },
+          image_url: { type: "string", description: "Optional reference image URL to guide the video" },
+        },
+        required: ["prompt"],
+        additionalProperties: false,
+      },
+    },
+  },
 ];
 
 // ── Helper: call prime-bank ──
@@ -740,6 +776,7 @@ const FINANCIAL_TOOLS = new Set(["check_balance", "transfer_tokens", "buy_shares
 const MEMORY_TOOLS = new Set(["save_memory", "recall_memories"]);
 const EXTENDED_TOOLS = new Set(["get_market_data", "get_stock_chart", "check_portfolio", "trade_stock", "create_booking", "list_bookings", "cancel_booking", "send_message", "list_conversations", "control_audio"]);
 const CLIENT_SIDE_TOOLS = new Set(["draw_on_canvas", "generate_canvas_art", "create_spreadsheet", "update_cells", "add_chart"]);
+const IMAGINE_TOOLS = new Set(["generate_image", "generate_video"]);
 
 async function executeExtendedTool(fnName: string, args: Record<string, unknown>, authHeader: string, userId: string | null) {
   const db = getServiceDb();
@@ -1070,6 +1107,59 @@ serve(async (req) => {
           JSON.stringify({ type: "tool_call", tool: fnName, data: result.data, reply: result.reply, clientSide: true }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
+      }
+
+      // Imagine tools — proxy to grok-imagine edge function
+      if (IMAGINE_TOOLS.has(fnName)) {
+        const imagineBody: any = { prompt: args.prompt };
+        if (fnName === "generate_video") {
+          imagineBody.type = "video";
+          if (args.duration) imagineBody.duration = args.duration;
+          if (args.image_url) imagineBody.image_url = args.image_url;
+        } else {
+          imagineBody.type = "image";
+          if (args.n) imagineBody.n = args.n;
+        }
+        try {
+          const imagineResp = await fetch(`${Deno.env.get("SUPABASE_URL")!}/functions/v1/grok-imagine`, {
+            method: "POST",
+            headers: {
+              Authorization: authHeader,
+              "Content-Type": "application/json",
+              apikey: Deno.env.get("SUPABASE_ANON_KEY")!,
+            },
+            body: JSON.stringify(imagineBody),
+          });
+          const imagineData = await imagineResp.json();
+          if (!imagineResp.ok) {
+            const reply = `⚠️ ${imagineData.error || "Image generation failed"}`;
+            return new Response(
+              JSON.stringify({ type: "tool_call", tool: fnName, data: {}, reply }),
+              { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+            );
+          }
+          let reply: string;
+          if (imagineData.type === "video") {
+            reply = `🎬 Video generated! Here's your clip:\n\n[VIDEO:${imagineData.url}]`;
+          } else {
+            const urls = imagineData.urls || [];
+            reply = `🖼️ Generated ${urls.length} image(s):\n\n${urls.map((u: string, i: number) => `[IMAGE:${u}]`).join('\n')}`;
+          }
+          if (userId) {
+            const lastUserMsg = messages.filter((m: any) => m.role === "user").pop();
+            if (lastUserMsg) saveConversationMessage(userId, "user", lastUserMsg.content).catch(() => {});
+            saveConversationMessage(userId, "assistant", reply).catch(() => {});
+          }
+          return new Response(
+            JSON.stringify({ type: "tool_call", tool: fnName, data: imagineData, reply }),
+            { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        } catch (e) {
+          return new Response(
+            JSON.stringify({ type: "tool_call", tool: fnName, data: {}, reply: `⚠️ Imagine error: ${e}` }),
+            { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
       }
 
       // Social/Mail tools — return data for frontend

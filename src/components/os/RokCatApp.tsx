@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
-import { Send, Volume2, VolumeX, Loader2, Globe, Twitter } from 'lucide-react';
+import { Send, Volume2, VolumeX, Loader2, Globe, Twitter, Image, Video } from 'lucide-react';
 import { renderMarkdown } from '@/lib/renderMarkdown';
 import { parseAndExecuteActions, APP_ACTION_PROMPT } from './rokcat/actionParser';
 import { Button } from '@/components/ui/button';
@@ -8,11 +8,19 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { supabase } from '@/integrations/supabase/client';
 import RokCatFace, { type RokCatFaceHandle } from './RokCatFace';
+import RokCatThinkingPanel from './rokcat/ThinkingPanel';
+import RokCatMediaRenderer from './rokcat/MediaRenderer';
 
 interface Message {
   id: string;
   role: 'user' | 'rokcat';
   text: string;
+}
+
+interface AgentThought {
+  agent: string;
+  text: string;
+  status: 'thinking' | 'done';
 }
 
 export default function RokCatApp() {
@@ -24,10 +32,13 @@ export default function RokCatApp() {
   const [webSearchEnabled, setWebSearchEnabled] = useState(true);
   const [xSearchEnabled, setXSearchEnabled] = useState(true);
   const [isGrok420, setIsGrok420] = useState(false);
+  const [isXAI, setIsXAI] = useState(false);
+  const [isMultiAgent, setIsMultiAgent] = useState(false);
+  const [agentThoughts, setAgentThoughts] = useState<AgentThought[]>([]);
   const faceRef = useRef<RokCatFaceHandle>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  // Check if user has a Grok 4.20 model selected
+  // Check user's AI provider config
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -42,7 +53,9 @@ export default function RokCatApp() {
       if (cancelled) return;
       if (data?.value) {
         const pref = typeof data.value === 'string' ? JSON.parse(data.value) : data.value;
+        setIsXAI(pref.provider === 'xai');
         setIsGrok420(pref.provider === 'xai' && pref.model?.startsWith('grok-4.20'));
+        setIsMultiAgent(pref.provider === 'xai' && pref.model?.includes('multi-agent'));
       }
     })();
     return () => { cancelled = true; };
@@ -55,9 +68,10 @@ export default function RokCatApp() {
   const speakText = useCallback(async (text: string) => {
     if (!ttsEnabled || !faceRef.current) return;
     try {
-      // Strip markdown formatting for cleaner speech
       const cleanText = text
         .replace(/```[\s\S]*?```/g, ' code block ')
+        .replace(/\[IMAGE:[^\]]+\]/g, ' generated image ')
+        .replace(/\[VIDEO:[^\]]+\]/g, ' generated video ')
         .replace(/\*\*(.+?)\*\*/g, '$1')
         .replace(/\*(.+?)\*/g, '$1')
         .replace(/`(.+?)`/g, '$1')
@@ -68,14 +82,10 @@ export default function RokCatApp() {
         .replace(/\n{2,}/g, '. ')
         .trim();
 
-      // Chunk into ~900 char segments at sentence boundaries for ElevenLabs limit
       const chunks: string[] = [];
       let remaining = cleanText;
       while (remaining.length > 0) {
-        if (remaining.length <= 900) {
-          chunks.push(remaining);
-          break;
-        }
+        if (remaining.length <= 900) { chunks.push(remaining); break; }
         let splitAt = remaining.lastIndexOf('. ', 900);
         if (splitAt < 200) splitAt = remaining.lastIndexOf(' ', 900);
         if (splitAt < 200) splitAt = 900;
@@ -83,7 +93,6 @@ export default function RokCatApp() {
         remaining = remaining.slice(splitAt + 1).trim();
       }
 
-      // Play chunks sequentially
       for (const chunk of chunks) {
         if (!chunk) continue;
         const response = await fetch(
@@ -117,6 +126,7 @@ export default function RokCatApp() {
     scrollToBottom();
     setLoading(true);
     setSearchStatus(null);
+    setAgentThoughts([]);
 
     const rokcatId = crypto.randomUUID();
     let fullText = '';
@@ -156,7 +166,6 @@ export default function RokCatApp() {
 
       if (contentType.includes('application/json')) {
         const data = await resp.json();
-        // Check if this is a search indicator
         if (data?.searchActive) {
           setSearchStatus(data.searchActive as 'web' | 'x');
         }
@@ -167,6 +176,7 @@ export default function RokCatApp() {
         speakText(aiText);
         setLoading(false);
         setSearchStatus(null);
+        setAgentThoughts([]);
         return;
       }
 
@@ -209,6 +219,32 @@ export default function RokCatApp() {
               setSearchStatus(null);
               continue;
             }
+            // Multi-agent thinking events
+            if (parsed.agentThinking) {
+              const { agent, text: thinkText, final: isFinal } = parsed.agentThinking;
+              setAgentThoughts(prev => {
+                const existing = prev.find(a => a.agent === agent);
+                if (existing) {
+                  return prev.map(a => a.agent === agent
+                    ? { ...a, text: isFinal ? thinkText : a.text + thinkText, status: isFinal ? 'done' as const : 'thinking' as const }
+                    : a
+                  );
+                }
+                return [...prev, { agent, text: thinkText, status: 'thinking' as const }];
+              });
+              continue;
+            }
+            if (parsed.agentStatus) {
+              const { agent, status } = parsed.agentStatus;
+              setAgentThoughts(prev => {
+                const existing = prev.find(a => a.agent === agent);
+                if (existing) {
+                  return prev.map(a => a.agent === agent ? { ...a, status } : a);
+                }
+                return [...prev, { agent, text: '', status }];
+              });
+              continue;
+            }
             const content = parsed.choices?.[0]?.delta?.content as string | undefined;
             if (content) {
               fullText += content;
@@ -247,7 +283,7 @@ export default function RokCatApp() {
         }
       }
 
-      // Parse and execute any action tags, then update final message
+      // Parse and execute any action tags
       if (fullText) {
         const cleanText = parseAndExecuteActions(fullText);
         fullText = cleanText;
@@ -270,6 +306,8 @@ export default function RokCatApp() {
     } finally {
       setLoading(false);
       setSearchStatus(null);
+      // Clear agent thoughts after a short delay
+      setTimeout(() => setAgentThoughts([]), 2000);
     }
   }, [input, loading, speakText, isGrok420, webSearchEnabled, xSearchEnabled]);
 
@@ -279,6 +317,37 @@ export default function RokCatApp() {
       <div className="flex-1 min-h-0 relative">
         <RokCatFace ref={faceRef} />
         <div className="absolute top-2 right-2 z-10 flex items-center gap-1">
+          {/* Imagine toggles — only visible when xAI is active */}
+          {isXAI && (
+            <>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7 text-[#00e5ff]/60 hover:text-[#00e5ff] hover:bg-[#00e5ff]/10"
+                    title="Image generation available"
+                  >
+                    <Image size={13} />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="text-xs">Grok Imagine (Image)</TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7 text-[#00e5ff]/60 hover:text-[#00e5ff] hover:bg-[#00e5ff]/10"
+                    title="Video generation available"
+                  >
+                    <Video size={13} />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="text-xs">Grok Imagine (Video)</TooltipContent>
+              </Tooltip>
+            </>
+          )}
           {/* Search toggles — only visible when Grok 4.20 is active */}
           {isGrok420 && (
             <>
@@ -329,6 +398,11 @@ export default function RokCatApp() {
         </div>
       </div>
 
+      {/* Multi-agent thinking panel */}
+      {isMultiAgent && agentThoughts.length > 0 && (
+        <RokCatThinkingPanel thoughts={agentThoughts} />
+      )}
+
       {/* Search status indicator */}
       {searchStatus && (
         <div className="flex items-center justify-center gap-2 py-1.5 bg-[#00e5ff]/5 border-t border-[#00e5ff]/15 animate-pulse">
@@ -353,7 +427,7 @@ export default function RokCatApp() {
                 <span className="opacity-50">{m.role === 'user' ? '> ' : 'ROKCAT: '}</span>
                 {m.role === 'user' ? m.text : (
                   <div className="inline rokcat-md [&_p]:mb-1 [&_p]:leading-relaxed [&_pre]:bg-[#0a1929] [&_pre]:border-[#00e5ff]/20 [&_code]:text-[#00e5ff]/80 [&_h1]:text-[#00e5ff] [&_h2]:text-[#00e5ff] [&_h3]:text-[#00e5ff] [&_strong]:text-[#e2e8f0] [&_table]:text-[10px]">
-                    {renderMarkdown(m.text)}
+                    <RokCatMediaRenderer text={m.text} />
                   </div>
                 )}
               </div>
