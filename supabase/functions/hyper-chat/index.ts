@@ -972,272 +972,220 @@ serve(async (req) => {
       ...messages,
     ];
 
-    // Phase 1: Non-streaming call with tools
-    // For Grok 4.20 models, inject xAI built-in tools based on client toggles
-    const phase1Tools = [...TOOLS];
+    // Build tools list with optional xAI search tools
+    const allTools = [...TOOLS];
     if (userId) {
       try {
-        const { data: prefData } = await db.from("user_data").select("value").eq("user_id", userId).eq("key", "ai-provider").maybeSingle();
+        const db2 = getServiceDb();
+        const { data: prefData } = await db2.from("user_data").select("value").eq("user_id", userId).eq("key", "ai-provider").maybeSingle();
         if (prefData?.value) {
           const pref = typeof prefData.value === "string" ? JSON.parse(prefData.value) : prefData.value;
           if (pref.provider === "xai" && pref.model?.startsWith("grok-4.20")) {
-            // Respect client-side toggles (default to enabled)
             const webOn = searchToggles?.web_search !== false;
             const xOn = searchToggles?.x_search !== false;
-            if (webOn) phase1Tools.push({ type: "web_search" } as any);
-            if (xOn) phase1Tools.push({ type: "x_search" } as any);
+            if (webOn) allTools.push({ type: "web_search" } as any);
+            if (xOn) allTools.push({ type: "x_search" } as any);
           }
         }
       } catch { /* ignore */ }
     }
 
-    const phase1Resp = await routeAICall({
-      userId,
-      messages: fullMessages,
-      tools: phase1Tools,
-      stream: false,
-    });
+    // ── Multi-turn tool loop ──
+    // The AI can call tools, get results, reason about them, and call more tools.
+    // Max 5 iterations to prevent runaway loops.
+    const MAX_TOOL_ITERATIONS = 5;
+    let loopMessages = [...fullMessages];
+    let clientSideActions: Array<{ tool: string; data: any; reply: string }> = [];
+    let toolResultSummaries: string[] = [];
 
-    if (!phase1Resp.ok) {
-      if (phase1Resp.status === 429) {
-        return new Response(
-          JSON.stringify({ error: "Rate limit exceeded. The lattice needs a moment to recalibrate." }),
-          { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-      if (phase1Resp.status === 402) {
-        return new Response(
-          JSON.stringify({ error: "Energy credits depleted. Please add credits to continue." }),
-          { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-      const t = await phase1Resp.text();
-      console.error("AI gateway error (phase1):", phase1Resp.status, t);
-      return new Response(
-        JSON.stringify({ error: "AI gateway error" }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
+    for (let iteration = 0; iteration < MAX_TOOL_ITERATIONS; iteration++) {
+      const phaseResp = await routeAICall({
+        userId,
+        messages: loopMessages,
+        tools: allTools,
+        stream: false,
+      });
 
-    const phase1Data = await phase1Resp.json();
-    const choice = phase1Data.choices?.[0];
-    const toolCalls = choice?.message?.tool_calls;
-
-    // If tool call detected
-    if (toolCalls && toolCalls.length > 0) {
-      const tc = toolCalls[0];
-      const fnName = tc.function.name;
-      let args: Record<string, unknown>;
-      try {
-        args = JSON.parse(tc.function.arguments);
-      } catch {
-        args = {};
-      }
-
-      // Memory tools — execute server-side
-      if (MEMORY_TOOLS.has(fnName)) {
-        if (fnName === "save_memory" && userId) {
-          await saveMemory(userId, String(args.category || "fact"), String(args.content || ""));
-          // Save the user's last message to conversation history too
-          const lastUserMsg = messages.filter((m: any) => m.role === "user").pop();
-          if (lastUserMsg) await saveConversationMessage(userId, "user", lastUserMsg.content);
-          
-          // Re-run without tools to get a natural response after saving
-          const phase2Resp = await routeAICall({
-            userId,
-            messages: fullMessages,
-            stream: true,
-          });
-          if (!phase2Resp.ok) {
-            return new Response(JSON.stringify({ error: "AI gateway error" }),
-              { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-          }
-          // Save assistant response asynchronously (best effort)
-          return new Response(phase2Resp.body, {
-            headers: { ...corsHeaders, "Content-Type": "text/event-stream" },
-          });
+      if (!phaseResp.ok) {
+        if (phaseResp.status === 429) {
+          return new Response(
+            JSON.stringify({ error: "Rate limit exceeded. The lattice needs a moment to recalibrate." }),
+            { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
         }
-
-        if (fnName === "recall_memories" && userId) {
-          const recalled = await recallMemories(userId, String(args.query || ""));
-          // Feed recalled memories back to the model
-          const recallMessages = [
-            ...fullMessages,
-            { role: "assistant", content: null, tool_calls: [tc] },
-            { role: "tool", tool_call_id: tc.id, content: recalled.length > 0 ? `Found memories:\n${recalled.join('\n')}` : "No matching memories found." },
-          ];
-          const recallResp = await routeAICall({
-            userId,
-            messages: recallMessages,
-            stream: true,
-          });
-          if (!recallResp.ok) {
-            return new Response(JSON.stringify({ error: "AI gateway error" }),
-              { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-          }
-          return new Response(recallResp.body, {
-            headers: { ...corsHeaders, "Content-Type": "text/event-stream" },
-          });
+        if (phaseResp.status === 402) {
+          return new Response(
+            JSON.stringify({ error: "Energy credits depleted. Please add credits to continue." }),
+            { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
         }
-
-        // Fallback for unauthenticated memory calls
+        const t = await phaseResp.text();
+        console.error(`AI gateway error (iteration ${iteration}):`, phaseResp.status, t);
         return new Response(
-          JSON.stringify({ type: "tool_call", tool: fnName, data: {}, reply: "⚠️ Memory features require authentication." }),
-          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          JSON.stringify({ error: "AI gateway error" }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
 
-      // Financial tools — execute server-side
-      if (FINANCIAL_TOOLS.has(fnName)) {
-        const result = await executeFinancialTool(fnName, args, authHeader, userId);
-        // Save conversation for authenticated users
-        if (userId) {
-          const lastUserMsg = messages.filter((m: any) => m.role === "user").pop();
-          if (lastUserMsg) saveConversationMessage(userId, "user", lastUserMsg.content).catch(() => {});
-          saveConversationMessage(userId, "assistant", result.reply).catch(() => {});
-        }
-        return new Response(
-          JSON.stringify({ type: "tool_call", tool: fnName, data: result.data, reply: result.reply }),
-          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
+      const phaseData = await phaseResp.json();
+      const choice = phaseData.choices?.[0];
+      const toolCalls = choice?.message?.tool_calls;
+      const finishReason = choice?.finish_reason;
+
+      // No tool calls — AI wants to respond with text. Break out to streaming phase.
+      if (!toolCalls || toolCalls.length === 0) {
+        break;
       }
 
-      // Extended tools (market, portfolio, booking, messaging, audio) — execute server-side
-      if (EXTENDED_TOOLS.has(fnName)) {
-        const result = await executeExtendedTool(fnName, args, authHeader, userId);
-        if (userId) {
-          const lastUserMsg = messages.filter((m: any) => m.role === "user").pop();
-          if (lastUserMsg) saveConversationMessage(userId, "user", lastUserMsg.content).catch(() => {});
-          saveConversationMessage(userId, "assistant", result.reply).catch(() => {});
-        }
-        return new Response(
-          JSON.stringify({ type: "tool_call", tool: fnName, data: result.data, reply: result.reply, clientSide: (result as any).clientSide }),
-          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
+      // Process all tool calls in this iteration
+      const assistantMsg: any = { role: "assistant", content: choice.message.content || null, tool_calls: toolCalls };
+      loopMessages.push(assistantMsg);
 
-      // Client-side tools (canvas, spreadsheet) — return for frontend
-      if (CLIENT_SIDE_TOOLS.has(fnName)) {
-        const result = executeClientSideTool(fnName, args);
-        if (userId) {
-          const lastUserMsg = messages.filter((m: any) => m.role === "user").pop();
-          if (lastUserMsg) saveConversationMessage(userId, "user", lastUserMsg.content).catch(() => {});
-          saveConversationMessage(userId, "assistant", result.reply).catch(() => {});
-        }
-        return new Response(
-          JSON.stringify({ type: "tool_call", tool: fnName, data: result.data, reply: result.reply, clientSide: true }),
-          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
+      for (const tc of toolCalls) {
+        const fnName = tc.function.name;
+        let args: Record<string, unknown>;
+        try { args = JSON.parse(tc.function.arguments); } catch { args = {}; }
 
-      // Imagine tools — proxy to grok-imagine edge function
-      if (IMAGINE_TOOLS.has(fnName)) {
-        const imagineBody: any = { prompt: args.prompt };
-        if (fnName === "generate_video") {
-          imagineBody.type = "video";
-          if (args.duration) imagineBody.duration = args.duration;
-          if (args.image_url) imagineBody.image_url = args.image_url;
-        } else {
-          imagineBody.type = "image";
-          if (args.n) imagineBody.n = args.n;
-        }
-        try {
-          const imagineResp = await fetch(`${Deno.env.get("SUPABASE_URL")!}/functions/v1/grok-imagine`, {
-            method: "POST",
-            headers: {
-              Authorization: authHeader,
-              "Content-Type": "application/json",
-              apikey: Deno.env.get("SUPABASE_ANON_KEY")!,
-            },
-            body: JSON.stringify(imagineBody),
-          });
-          const imagineData = await imagineResp.json();
-          if (!imagineResp.ok) {
-            const reply = `⚠️ ${imagineData.error || "Image generation failed"}`;
-            return new Response(
-              JSON.stringify({ type: "tool_call", tool: fnName, data: {}, reply }),
-              { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-            );
-          }
-          let reply: string;
-          if (imagineData.type === "video") {
-            reply = `🎬 Video generated! Here's your clip:\n\n[VIDEO:${imagineData.url}]`;
+        let toolResult: { data: any; reply: string; clientSide?: boolean } = { data: {}, reply: "Unknown tool." };
+
+        if (MEMORY_TOOLS.has(fnName)) {
+          if (fnName === "save_memory" && userId) {
+            await saveMemory(userId, String(args.category || "fact"), String(args.content || ""));
+            toolResult = { data: {}, reply: "Memory saved." };
+          } else if (fnName === "recall_memories" && userId) {
+            const recalled = await recallMemories(userId, String(args.query || ""));
+            toolResult = { data: { memories: recalled }, reply: recalled.length > 0 ? `Found memories:\n${recalled.join('\n')}` : "No matching memories found." };
           } else {
-            const urls = imagineData.urls || [];
-            reply = `🖼️ Generated ${urls.length} image(s):\n\n${urls.map((u: string, i: number) => `[IMAGE:${u}]`).join('\n')}`;
+            toolResult = { data: {}, reply: "⚠️ Memory features require authentication." };
           }
-          if (userId) {
-            const lastUserMsg = messages.filter((m: any) => m.role === "user").pop();
-            if (lastUserMsg) saveConversationMessage(userId, "user", lastUserMsg.content).catch(() => {});
-            saveConversationMessage(userId, "assistant", reply).catch(() => {});
+        } else if (FINANCIAL_TOOLS.has(fnName)) {
+          toolResult = await executeFinancialTool(fnName, args, authHeader, userId);
+        } else if (EXTENDED_TOOLS.has(fnName)) {
+          toolResult = await executeExtendedTool(fnName, args, authHeader, userId);
+        } else if (CLIENT_SIDE_TOOLS.has(fnName)) {
+          toolResult = executeClientSideTool(fnName, args);
+          toolResult.clientSide = true;
+        } else if (IMAGINE_TOOLS.has(fnName)) {
+          const imagineBody: any = { prompt: args.prompt };
+          if (fnName === "generate_video") {
+            imagineBody.type = "video";
+            if (args.duration) imagineBody.duration = args.duration;
+            if (args.image_url) imagineBody.image_url = args.image_url;
+          } else {
+            imagineBody.type = "image";
+            if (args.n) imagineBody.n = args.n;
           }
-          return new Response(
-            JSON.stringify({ type: "tool_call", tool: fnName, data: imagineData, reply }),
-            { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-          );
-        } catch (e) {
-          return new Response(
-            JSON.stringify({ type: "tool_call", tool: fnName, data: {}, reply: `⚠️ Imagine error: ${e}` }),
-            { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-          );
+          try {
+            const imagineResp = await fetch(`${Deno.env.get("SUPABASE_URL")!}/functions/v1/grok-imagine`, {
+              method: "POST",
+              headers: { Authorization: authHeader, "Content-Type": "application/json", apikey: Deno.env.get("SUPABASE_ANON_KEY")! },
+              body: JSON.stringify(imagineBody),
+            });
+            const imagineData = await imagineResp.json();
+            if (!imagineResp.ok) {
+              toolResult = { data: {}, reply: `⚠️ ${imagineData.error || "Image generation failed"}` };
+            } else if (imagineData.type === "video") {
+              toolResult = { data: imagineData, reply: `🎬 Video generated!\n\n[VIDEO:${imagineData.url}]` };
+            } else {
+              const urls = imagineData.urls || [];
+              toolResult = { data: imagineData, reply: `🖼️ Generated ${urls.length} image(s):\n\n${urls.map((u: string) => `[IMAGE:${u}]`).join('\n')}` };
+            }
+          } catch (e) {
+            toolResult = { data: {}, reply: `⚠️ Imagine error: ${e}` };
+          }
+        } else if (fnName === "post_to_social") {
+          toolResult = {
+            data: { content: args.content || "", author: args.author || "Hyper", role: args.role || "Geometric AI" },
+            reply: `✅ Posted to PrimeSocial: "${String(args.content || "").substring(0, 80)}"`,
+            clientSide: true,
+          };
+        } else if (fnName === "send_email") {
+          toolResult = {
+            data: { to: args.to || "operator", subject: args.subject || "Message from Hyper", body: args.body || "", from: args.from || "hyper@prime.os" },
+            reply: `✅ Email sent to ${args.to}: "${args.subject}"`,
+            clientSide: true,
+          };
         }
+
+        // Collect client-side actions for the final response
+        if (toolResult.clientSide) {
+          clientSideActions.push({ tool: fnName, data: toolResult.data, reply: toolResult.reply });
+        }
+        toolResultSummaries.push(toolResult.reply);
+
+        // Feed tool result back to the AI for reasoning
+        loopMessages.push({
+          role: "tool",
+          tool_call_id: tc.id,
+          content: toolResult.reply,
+        });
       }
-
-      // Social/Mail tools — return data for frontend
-      let reply = "";
-      let data: Record<string, unknown> = {};
-
-      if (fnName === "post_to_social") {
-        data = {
-          content: args.content || "",
-          author: args.author || "Hyper",
-          role: args.role || "Geometric AI",
-        };
-        const preview = String(data.content).length > 80 ? String(data.content).substring(0, 80) + "…" : data.content;
-        reply = `✅ Posted to PrimeSocial: "${preview}"`;
-      } else if (fnName === "send_email") {
-        data = {
-          to: args.to || "operator",
-          subject: args.subject || "Message from Hyper",
-          body: args.body || "",
-          from: args.from || "hyper@prime.os",
-        };
-        reply = `✅ Email sent to ${data.to}: "${data.subject}"`;
-      }
-
-      // Save conversation for authenticated users
-      if (userId) {
-        const lastUserMsg = messages.filter((m: any) => m.role === "user").pop();
-        if (lastUserMsg) saveConversationMessage(userId, "user", lastUserMsg.content).catch(() => {});
-        saveConversationMessage(userId, "assistant", reply).catch(() => {});
-      }
-
-      return new Response(
-        JSON.stringify({ type: "tool_call", tool: fnName, data, reply }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
     }
 
-    // Phase 2: Re-call with streaming (no tools)
-    // Save user message for authenticated users
+    // ── Final streaming response ──
+    // The AI now has all tool results in context and can reason + include action tags
     if (userId) {
       const lastUserMsg = messages.filter((m: any) => m.role === "user").pop();
       if (lastUserMsg) saveConversationMessage(userId, "user", lastUserMsg.content).catch(() => {});
     }
 
+    // If we have client-side actions, include them as a prefix header
+    const hasClientActions = clientSideActions.length > 0;
+
     const phase2Resp = await routeAICall({
       userId,
-      messages: fullMessages,
+      messages: loopMessages,
       stream: true,
     });
 
     if (!phase2Resp.ok) {
+      // If streaming fails but we have tool results, return those
+      if (toolResultSummaries.length > 0) {
+        const fallbackReply = toolResultSummaries.join('\n\n');
+        if (userId) saveConversationMessage(userId, "assistant", fallbackReply).catch(() => {});
+        return new Response(
+          JSON.stringify({
+            type: "tool_call",
+            reply: fallbackReply,
+            clientActions: clientSideActions.length > 0 ? clientSideActions : undefined,
+          }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
       const t = await phase2Resp.text();
-      console.error("AI gateway error (phase2):", phase2Resp.status, t);
+      console.error("AI gateway error (final):", phase2Resp.status, t);
       return new Response(
         JSON.stringify({ error: "AI gateway error" }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
+    }
+
+    // If we have client-side actions, prepend them as a JSON event before the stream
+    if (hasClientActions) {
+      const actionEvent = `data: ${JSON.stringify({ clientActions: clientSideActions })}\n\n`;
+      const encoder = new TextEncoder();
+      const actionChunk = encoder.encode(actionEvent);
+
+      const originalStream = phase2Resp.body!;
+      const merged = new ReadableStream({
+        async start(controller) {
+          controller.enqueue(actionChunk);
+          const reader = originalStream.getReader();
+          try {
+            while (true) {
+              const { done, value } = await reader.read();
+              if (done) break;
+              controller.enqueue(value);
+            }
+          } finally {
+            controller.close();
+          }
+        },
+      });
+
+      return new Response(merged, {
+        headers: { ...corsHeaders, "Content-Type": "text/event-stream" },
+      });
     }
 
     return new Response(phase2Resp.body, {
