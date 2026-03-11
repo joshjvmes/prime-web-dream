@@ -1075,7 +1075,7 @@ serve(async (req) => {
 
       // Financial tools — execute server-side
       if (FINANCIAL_TOOLS.has(fnName)) {
-        const result = await executeFinancialTool(fnName, args, authHeader);
+        const result = await executeFinancialTool(fnName, args, authHeader, userId);
         // Save conversation for authenticated users
         if (userId) {
           const lastUserMsg = messages.filter((m: any) => m.role === "user").pop();
