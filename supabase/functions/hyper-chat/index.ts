@@ -1142,16 +1142,72 @@ serve(async (req) => {
       }
     }
 
-    // ── Final streaming response ──
-    // The AI now has all tool results in context and can reason + include action tags
+    // ── Final response ──
     if (userId) {
       const lastUserMsg = messages.filter((m: any) => m.role === "user").pop();
       if (lastUserMsg) saveConversationMessage(userId, "user", lastUserMsg.content).catch(() => {});
     }
 
-    // If we have client-side actions, include them as a prefix header
     const hasClientActions = clientSideActions.length > 0;
 
+    // Case 1: Tools were used AND we got a final text response from the loop
+    // Return as JSON with tool results + AI commentary
+    if (usedTools && finalTextContent) {
+      if (userId) saveConversationMessage(userId, "assistant", finalTextContent).catch(() => {});
+      return new Response(
+        JSON.stringify({
+          reply: finalTextContent,
+          clientActions: hasClientActions ? clientSideActions : undefined,
+        }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Case 2: Tools were used but no final text — ask AI to summarize with streaming
+    // Build clean messages (replace tool messages with a summary to avoid model confusion)
+    if (usedTools && !finalTextContent) {
+      const summaryMessages = [
+        ...fullMessages,
+        { role: "user", content: `Here are the results of the actions I performed:\n\n${toolResultSummaries.join('\n\n')}\n\nPlease provide a brief, natural summary of what happened and suggest next steps. Use action tags if appropriate.` },
+      ];
+
+      const phase2Resp = await routeAICall({
+        userId,
+        messages: summaryMessages,
+        stream: true,
+      });
+
+      if (!phase2Resp.ok) {
+        // Fallback to raw tool results
+        const fallbackReply = toolResultSummaries.join('\n\n');
+        if (userId) saveConversationMessage(userId, "assistant", fallbackReply).catch(() => {});
+        return new Response(
+          JSON.stringify({ reply: fallbackReply, clientActions: hasClientActions ? clientSideActions : undefined }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      if (hasClientActions) {
+        const actionEvent = `data: ${JSON.stringify({ clientActions: clientSideActions })}\n\n`;
+        const encoder = new TextEncoder();
+        const actionChunk = encoder.encode(actionEvent);
+        const originalStream = phase2Resp.body!;
+        const merged = new ReadableStream({
+          async start(controller) {
+            controller.enqueue(actionChunk);
+            const reader = originalStream.getReader();
+            try {
+              while (true) { const { done, value } = await reader.read(); if (done) break; controller.enqueue(value); }
+            } finally { controller.close(); }
+          },
+        });
+        return new Response(merged, { headers: { ...corsHeaders, "Content-Type": "text/event-stream" } });
+      }
+
+      return new Response(phase2Resp.body, { headers: { ...corsHeaders, "Content-Type": "text/event-stream" } });
+    }
+
+    // Case 3: No tools used — standard streaming response (same as before)
     const phase2Resp = await routeAICall({
       userId,
       messages: loopMessages,
@@ -1159,53 +1215,12 @@ serve(async (req) => {
     });
 
     if (!phase2Resp.ok) {
-      // If streaming fails but we have tool results, return those
-      if (toolResultSummaries.length > 0) {
-        const fallbackReply = toolResultSummaries.join('\n\n');
-        if (userId) saveConversationMessage(userId, "assistant", fallbackReply).catch(() => {});
-        return new Response(
-          JSON.stringify({
-            type: "tool_call",
-            reply: fallbackReply,
-            clientActions: clientSideActions.length > 0 ? clientSideActions : undefined,
-          }),
-          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
       const t = await phase2Resp.text();
       console.error("AI gateway error (final):", phase2Resp.status, t);
       return new Response(
         JSON.stringify({ error: "AI gateway error" }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
-    }
-
-    // If we have client-side actions, prepend them as a JSON event before the stream
-    if (hasClientActions) {
-      const actionEvent = `data: ${JSON.stringify({ clientActions: clientSideActions })}\n\n`;
-      const encoder = new TextEncoder();
-      const actionChunk = encoder.encode(actionEvent);
-
-      const originalStream = phase2Resp.body!;
-      const merged = new ReadableStream({
-        async start(controller) {
-          controller.enqueue(actionChunk);
-          const reader = originalStream.getReader();
-          try {
-            while (true) {
-              const { done, value } = await reader.read();
-              if (done) break;
-              controller.enqueue(value);
-            }
-          } finally {
-            controller.close();
-          }
-        },
-      });
-
-      return new Response(merged, {
-        headers: { ...corsHeaders, "Content-Type": "text/event-stream" },
-      });
     }
 
     return new Response(phase2Resp.body, {
