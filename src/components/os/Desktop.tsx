@@ -247,7 +247,16 @@ export default function Desktop() {
       const match = APP_NAME_MAP[payload.app?.toLowerCase()];
       if (match) openWindow(match.app, payload.title || match.title);
     };
+    // EventBus listener for closing apps
+    const handleEventBusClose = (payload: { app: string }) => {
+      const match = APP_NAME_MAP[payload.app?.toLowerCase()];
+      if (match) {
+        const win = windows.find(w => w.app === match.app);
+        if (win) closeWindow(win.id);
+      }
+    };
     eventBus.on('app.request-open', handleEventBusOpen);
+    eventBus.on('app.request-close', handleEventBusClose);
 
     window.addEventListener('cloudhook-notification', handleNotif);
     window.addEventListener('cloudhook-open-app', handleOpenApp);
@@ -255,12 +264,13 @@ export default function Desktop() {
     window.addEventListener('prime-create-bot', handleCreateBot);
     return () => {
       eventBus.off('app.request-open', handleEventBusOpen);
+      eventBus.off('app.request-close', handleEventBusClose);
       window.removeEventListener('cloudhook-notification', handleNotif);
       window.removeEventListener('cloudhook-open-app', handleOpenApp);
       window.removeEventListener('cloudhook-lock', handleLockEvt);
       window.removeEventListener('prime-create-bot', handleCreateBot);
     };
-  }, [pushNotification, openWindow]);
+  }, [pushNotification, openWindow, closeWindow, windows]);
 
   // Handle GitHub OAuth redirect — claim installation and open PrimeGit
   useEffect(() => {
