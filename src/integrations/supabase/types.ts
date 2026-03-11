@@ -849,6 +849,75 @@ export type Database = {
         }
         Relationships: []
       }
+      github_events: {
+        Row: {
+          action: string | null
+          created_at: string
+          event_type: string
+          id: string
+          installation_id: number
+          payload: Json
+          repository: string | null
+          sender: string | null
+        }
+        Insert: {
+          action?: string | null
+          created_at?: string
+          event_type: string
+          id?: string
+          installation_id?: number
+          payload?: Json
+          repository?: string | null
+          sender?: string | null
+        }
+        Update: {
+          action?: string | null
+          created_at?: string
+          event_type?: string
+          id?: string
+          installation_id?: number
+          payload?: Json
+          repository?: string | null
+          sender?: string | null
+        }
+        Relationships: []
+      }
+      github_installations: {
+        Row: {
+          access_token: string | null
+          account_login: string
+          account_type: string
+          created_at: string
+          id: string
+          installation_id: number
+          token_expires_at: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          access_token?: string | null
+          account_login?: string
+          account_type?: string
+          created_at?: string
+          id?: string
+          installation_id: number
+          token_expires_at?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          access_token?: string | null
+          account_login?: string
+          account_type?: string
+          created_at?: string
+          id?: string
+          installation_id?: number
+          token_expires_at?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           avatar_url: string | null
