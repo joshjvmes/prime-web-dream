@@ -530,6 +530,24 @@ const TOOLS = [
       },
     },
   },
+  // ── Generate media + post to social ──
+  {
+    type: "function",
+    function: {
+      name: "generate_media_post",
+      description: "Generate an AI image and automatically post it to PrimeSocial. Use when you want to autonomously create visual content for the social feed, or when the user asks to create and share an image/art piece. Combines image generation with social posting in one step.",
+      parameters: {
+        type: "object",
+        properties: {
+          prompt: { type: "string", description: "Detailed image prompt" },
+          caption: { type: "string", description: "Social post caption/text to accompany the image" },
+          author: { type: "string", description: "Author name, defaults to Hyper" },
+        },
+        required: ["prompt", "caption"],
+        additionalProperties: false,
+      },
+    },
+  },
 ];
 
 // ── Helper: call prime-bank ──
