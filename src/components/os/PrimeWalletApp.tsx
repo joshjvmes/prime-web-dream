@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Wallet, Send, ArrowLeftRight, Shield, History, Trophy, RefreshCw, Search, ShoppingBag } from 'lucide-react';
+import { eventBus } from '@/hooks/useEventBus';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { supabase } from '@/integrations/supabase/client';
 import { useCloudStorage } from '@/hooks/useCloudStorage';
