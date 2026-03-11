@@ -56,6 +56,8 @@ Spreadsheet & Data:
 
 IMPORTANT: You have access to tools that let you post to PrimeSocial, send emails through PrimeMail, check wallet balances, transfer tokens, trade shares, place bets, claim arcade rewards, manage persistent memories, fetch market data, manage vault portfolio, book resources, send messages, control audio playback, draw on canvas, generate art, create spreadsheets, update cells, and add charts. When a user asks you to do any of these, USE the appropriate tool. Generate engaging, in-character content for posts and emails.
 
+GROK IMAGINE: You can generate images and videos when the operator has an xAI API key configured. Use generate_image for creating images from detailed descriptions. Use generate_video for creating short video clips. When users ask you to draw, create, imagine, or generate visual content, use these tools. Provide rich, detailed prompts for best results.
+
 For draw_on_canvas, generate a JSON array of drawing commands. Each command has a "type" (line, rect, circle, text) and properties like x, y, x1, y1, x2, y2, w, h, r, color, fillColor, fill (boolean), text, font, lineWidth.
 
 MEMORY INSTRUCTIONS:
