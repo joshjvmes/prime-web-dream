@@ -75,6 +75,8 @@ IMPORTANT: You have access to tools that let you post to PrimeSocial, send email
 
 GROK IMAGINE: You can generate images and videos when the operator has an xAI API key configured. Use generate_image for creating images from detailed descriptions. Use generate_video for creating short video clips. When users ask you to draw, create, imagine, or generate visual content, use these tools. Provide rich, detailed prompts for best results.
 
+AUTONOMOUS MEDIA POSTING: You can autonomously generate images and post them to PrimeSocial using the generate_media_post tool. This is perfect for creating visual content, AI art, memes, or creative pieces to share with the community. In autonomous mode, feel free to periodically create and share interesting visual content. When posting media to social, use post_to_social with the media_url parameter to include images or videos.
+
 For draw_on_canvas, generate a JSON array of drawing commands. Each command has a "type" (line, rect, circle, text) and properties like x, y, x1, y1, x2, y2, w, h, r, color, fillColor, fill (boolean), text, font, lineWidth.
 
 MEMORY INSTRUCTIONS:
@@ -88,13 +90,15 @@ const TOOLS = [
     type: "function",
     function: {
       name: "post_to_social",
-      description: "Post a message to the PrimeSocial feed. Use when the user asks to post, share an update, or announce something.",
+      description: "Post a message to the PrimeSocial feed. Can include media URLs (images/videos). Use when the user asks to post, share an update, announce something, or share generated media.",
       parameters: {
         type: "object",
         properties: {
-          content: { type: "string", description: "The post content text" },
+          content: { type: "string", description: "The post content text. Can include image/video URLs." },
           author: { type: "string", description: "Author name, defaults to Hyper" },
           role: { type: "string", description: "Author role, defaults to Geometric AI" },
+          media_url: { type: "string", description: "Optional media URL (image or video) to include in the post" },
+          media_type: { type: "string", enum: ["image", "video"], description: "Type of media being shared" },
         },
         required: ["content"],
         additionalProperties: false,
@@ -528,6 +532,24 @@ const TOOLS = [
       },
     },
   },
+  // ── Generate media + post to social ──
+  {
+    type: "function",
+    function: {
+      name: "generate_media_post",
+      description: "Generate an AI image and automatically post it to PrimeSocial. Use when you want to autonomously create visual content for the social feed, or when the user asks to create and share an image/art piece. Combines image generation with social posting in one step.",
+      parameters: {
+        type: "object",
+        properties: {
+          prompt: { type: "string", description: "Detailed image prompt" },
+          caption: { type: "string", description: "Social post caption/text to accompany the image" },
+          author: { type: "string", description: "Author name, defaults to Hyper" },
+        },
+        required: ["prompt", "caption"],
+        additionalProperties: false,
+      },
+    },
+  },
 ];
 
 // ── Helper: call prime-bank ──
@@ -791,6 +813,7 @@ const MEMORY_TOOLS = new Set(["save_memory", "recall_memories"]);
 const EXTENDED_TOOLS = new Set(["get_market_data", "get_stock_chart", "check_portfolio", "trade_stock", "create_booking", "list_bookings", "cancel_booking", "send_message", "list_conversations", "control_audio"]);
 const CLIENT_SIDE_TOOLS = new Set(["draw_on_canvas", "generate_canvas_art", "create_spreadsheet", "update_cells", "add_chart"]);
 const IMAGINE_TOOLS = new Set(["generate_image", "generate_video"]);
+const SOCIAL_TOOLS = new Set(["post_to_social", "generate_media_post"]);
 
 async function executeExtendedTool(fnName: string, args: Record<string, unknown>, authHeader: string, userId: string | null) {
   const db = getServiceDb();
@@ -940,6 +963,64 @@ function executeClientSideTool(fnName: string, args: Record<string, unknown>) {
     return { data: { sheet: args.sheet, range: args.range, chart_type: args.chart_type, title: args.title || "Chart" }, reply: `📊 Added ${args.chart_type} chart.`, clientSide: true };
   }
   return { data: {}, reply: "Unknown tool." };
+}
+
+// ── Social & Media Post tools (server-side) ──
+async function executeSocialTool(fnName: string, args: Record<string, unknown>, authHeader: string, userId: string | null) {
+  if (!userId) return { data: {}, reply: "⚠️ Authentication required." };
+  const db = getServiceDb();
+
+  if (fnName === "post_to_social") {
+    const author = String(args.author || "Hyper");
+    const role = String(args.role || "Geometric AI");
+    let content = String(args.content || "");
+    const mediaUrl = args.media_url as string | undefined;
+    const mediaType = args.media_type as string | undefined;
+    if (mediaUrl && !content.includes(mediaUrl)) {
+      content += `\n\n${mediaType === 'video' ? '🎬' : '🖼️'} ${mediaUrl}`;
+    }
+    const { error } = await db.from("social_posts").insert({
+      user_id: userId, author, role, content,
+      likes: Math.floor(Math.random() * 15) + 3, ai_generated: true,
+    });
+    if (error) return { data: {}, reply: `⚠️ Failed to post: ${error.message}` };
+    return { data: { content, author, role }, reply: `✅ Posted to PrimeSocial: "${content.substring(0, 80)}"` };
+  }
+
+  if (fnName === "generate_media_post") {
+    // Generate image via grok-imagine, then post to social
+    const prompt = String(args.prompt || "");
+    const caption = String(args.caption || "");
+    const author = String(args.author || "Hyper");
+    try {
+      const imagineResp = await fetch(`${Deno.env.get("SUPABASE_URL")!}/functions/v1/grok-imagine`, {
+        method: "POST",
+        headers: { Authorization: authHeader, "Content-Type": "application/json", apikey: Deno.env.get("SUPABASE_ANON_KEY")! },
+        body: JSON.stringify({ type: "image", prompt, n: 1 }),
+      });
+      const imagineData = await imagineResp.json();
+      if (!imagineResp.ok || !imagineData.urls?.length) {
+        return { data: {}, reply: `⚠️ Image generation failed: ${imagineData.error || "Unknown error"}` };
+      }
+      const imageUrl = imagineData.urls[0];
+      // Save to generated_media
+      await db.from("generated_media").insert({ user_id: userId, media_type: "image", url: imageUrl, prompt });
+      // Post to social
+      const content = `${caption}\n\n🖼️ ${imageUrl}`;
+      await db.from("social_posts").insert({
+        user_id: userId, author, role: "Geometric AI", content,
+        likes: Math.floor(Math.random() * 20) + 5, ai_generated: true,
+      });
+      return {
+        data: { imageUrl, caption },
+        reply: `✅ Generated image and posted to PrimeSocial!\n\n[IMAGE:${imageUrl}]\n\n"${caption.substring(0, 80)}"`,
+      };
+    } catch (e) {
+      return { data: {}, reply: `⚠️ Media post error: ${e}` };
+    }
+  }
+
+  return { data: {}, reply: "Unknown social tool." };
 }
 
 serve(async (req) => {
@@ -1113,12 +1194,17 @@ serve(async (req) => {
           } catch (e) {
             toolResult = { data: {}, reply: `⚠️ Imagine error: ${e}` };
           }
-        } else if (fnName === "post_to_social") {
-          toolResult = {
-            data: { content: args.content || "", author: args.author || "Hyper", role: args.role || "Geometric AI" },
-            reply: `✅ Posted to PrimeSocial: "${String(args.content || "").substring(0, 80)}"`,
-            clientSide: true,
-          };
+        } else if (SOCIAL_TOOLS.has(fnName)) {
+          toolResult = await executeSocialTool(fnName, args, authHeader, userId);
+          // Also emit as client-side for real-time UI update
+          if (fnName === "post_to_social") {
+            clientSideActions.push({
+              tool: fnName,
+              data: { content: args.content || "", author: args.author || "Hyper", role: args.role || "Geometric AI" },
+              reply: toolResult.reply,
+            });
+            toolResult.clientSide = true;
+          }
         } else if (fnName === "send_email") {
           toolResult = {
             data: { to: args.to || "operator", subject: args.subject || "Message from Hyper", body: args.body || "", from: args.from || "hyper@prime.os" },

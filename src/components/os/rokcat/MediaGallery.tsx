@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Button } from '@/components/ui/button';
-import { Trash2, Video, Image, Download, X } from 'lucide-react';
+import { Trash2, Video, Image, Download, X, Share2 } from 'lucide-react';
 
 interface MediaItem {
   id: string;
@@ -15,9 +15,10 @@ interface MediaItem {
 interface Props {
   onClose: () => void;
   onAnimateImage?: (imageUrl: string) => void;
+  onShareToSocial?: (mediaUrl: string, mediaType: 'image' | 'video') => void;
 }
 
-export default function MediaGallery({ onClose, onAnimateImage }: Props) {
+export default function MediaGallery({ onClose, onAnimateImage, onShareToSocial }: Props) {
   const [items, setItems] = useState<MediaItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<'all' | 'image' | 'video'>('all');
@@ -97,6 +98,11 @@ export default function MediaGallery({ onClose, onAnimateImage }: Props) {
                   {item.media_type === 'image' && onAnimateImage && (
                     <Button size="icon" variant="ghost" className="h-5 w-5 bg-[#02040a]/80 text-[#00e5ff]/70 hover:text-[#00e5ff]" onClick={() => onAnimateImage(item.url)}>
                       <Video size={10} />
+                    </Button>
+                  )}
+                  {onShareToSocial && (
+                    <Button size="icon" variant="ghost" className="h-5 w-5 bg-[#02040a]/80 text-[#00e5ff]/70 hover:text-[#00e5ff]" onClick={() => onShareToSocial(item.url, item.media_type as 'image' | 'video')}>
+                      <Share2 size={10} />
                     </Button>
                   )}
                   <a href={item.url} download target="_blank" rel="noopener noreferrer">

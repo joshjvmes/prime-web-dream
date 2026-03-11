@@ -306,6 +306,31 @@ ${APP_ACTION_PROMPT}`;
     } catch {}
   }, []);
 
+  // Share media to PrimeSocial
+  const shareToSocial = useCallback(async (mediaUrl: string, mediaType: 'image' | 'video') => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user?.id) {
+        setMessages(prev => [...prev, { id: crypto.randomUUID(), role: 'rokcat', text: '⚠️ Sign in to share to PrimeSocial.' }]);
+        return;
+      }
+      const { data: profile } = await supabase.from('profiles').select('display_name').eq('user_id', session.user.id).single();
+      const author = profile?.display_name || 'Operator';
+      const content = mediaType === 'image'
+        ? `🖼️ Check out this AI-generated image!\n\n${mediaUrl}`
+        : `🎬 Check out this AI-generated video!\n\n${mediaUrl}`;
+      await (supabase.from('social_posts') as any).insert({
+        user_id: session.user.id, author, role: 'Creator',
+        content, likes: 0, ai_generated: false,
+      });
+      eventBus.emit('social.post.created', { content, author, role: 'Creator', ai_generated: false });
+      setMessages(prev => [...prev, { id: crypto.randomUUID(), role: 'rokcat', text: `✅ Shared to PrimeSocial!` }]);
+      scrollToBottom();
+    } catch {
+      setMessages(prev => [...prev, { id: crypto.randomUUID(), role: 'rokcat', text: '❌ Failed to share to PrimeSocial.' }]);
+    }
+  }, [scrollToBottom]);
+
   // Handle Grok Imagine (image/video generation)
   const handleImagine = useCallback(async (prompt: string, type: 'image' | 'video', imageUrl?: string) => {
     if (!prompt || loading) return;
@@ -776,7 +801,7 @@ ${APP_ACTION_PROMPT}`;
       {/* Gallery or Chat transcript */}
       {showGallery ? (
         <div className="h-48 border-t border-[#00e5ff]/20">
-          <MediaGallery onClose={() => setShowGallery(false)} onAnimateImage={(imageUrl) => { setShowGallery(false); handleImagine('Animate this image into a short video', 'video', imageUrl); }} />
+          <MediaGallery onClose={() => setShowGallery(false)} onAnimateImage={(imageUrl) => { setShowGallery(false); handleImagine('Animate this image into a short video', 'video', imageUrl); }} onShareToSocial={shareToSocial} />
         </div>
       ) : (
       <div className="h-32 border-t border-[#00e5ff]/20 bg-[#02040a]/80">
@@ -792,7 +817,7 @@ ${APP_ACTION_PROMPT}`;
                 <span className="opacity-50">{m.role === 'user' ? '> ' : 'ROKCAT: '}</span>
                 {m.role === 'user' ? m.text : (
                   <div className="inline rokcat-md [&_p]:mb-1 [&_p]:leading-relaxed [&_pre]:bg-[#0a1929] [&_pre]:border-[#00e5ff]/20 [&_code]:text-[#00e5ff]/80 [&_h1]:text-[#00e5ff] [&_h2]:text-[#00e5ff] [&_h3]:text-[#00e5ff] [&_strong]:text-[#e2e8f0] [&_table]:text-[10px]">
-                    <RokCatMediaRenderer text={m.text} onAnimateImage={(imageUrl) => handleImagine('Animate this image into a short video', 'video', imageUrl)} />
+                    <RokCatMediaRenderer text={m.text} onAnimateImage={(imageUrl) => handleImagine('Animate this image into a short video', 'video', imageUrl)} onShareToSocial={shareToSocial} />
                   </div>
                 )}
               </div>
