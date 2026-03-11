@@ -688,6 +688,7 @@ async function executeFinancialTool(fnName: string, args: Record<string, unknown
   }
 
   if (fnName === "buy_shares") {
+    if (!userId) return { data: {}, reply: "⚠️ Authentication required." };
     const listing = await findListing(String(args.app_name || ""));
     if (!listing) return { data: {}, reply: `⚠️ Could not find app "${args.app_name}" on the Forge marketplace.` };
     const sharesToBuy = Math.floor(Number(args.amount) / Number(listing.share_price));
@@ -696,9 +697,7 @@ async function executeFinancialTool(fnName: string, args: Record<string, unknown
     const chargeResult = await callPrimeBank("ai-charge", authHeader, { amount: cost, description: `Buy ${sharesToBuy} shares of ${listing.name}` });
     if (!chargeResult.charged) return { data: {}, reply: `⚠️ Insufficient OS to buy shares. Need ${cost} OS.` };
     const db = getServiceDb();
-    const { data: { user } } = await db.auth.getUser(authHeader.replace("Bearer ", ""));
-    if (!user) return { data: {}, reply: "⚠️ Auth error." };
-    const { data: existing } = await db.from("app_shares").select("*").eq("user_id", user.id).eq("listing_id", listing.id).maybeSingle();
+    const { data: existing } = await db.from("app_shares").select("*").eq("user_id", userId).eq("listing_id", listing.id).maybeSingle();
     if (existing) {
       const newShares = existing.shares + sharesToBuy;
       const newAvg = ((existing.avg_cost * existing.shares) + cost) / newShares;
