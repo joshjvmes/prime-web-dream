@@ -642,6 +642,7 @@ export default function Desktop() {
             onToggleClipboard={() => setClipboardOpen(prev => !prev)}
             isAdmin={isAdmin}
             deviceClass={deviceClass}
+            user={user}
           />
 
           <GlobalSearch
