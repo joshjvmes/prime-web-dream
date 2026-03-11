@@ -5,6 +5,7 @@ import { useCloudStorage } from '@/hooks/useCloudStorage';
 import { useIntranetPages } from '@/hooks/useIntranetPages';
 import { renderMarkdown } from '@/lib/renderMarkdown';
 import { supabase } from '@/integrations/supabase/client';
+import { eventBus } from '@/hooks/useEventBus';
 
 interface JournalEntry {
   id: string;
