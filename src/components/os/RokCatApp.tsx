@@ -773,7 +773,12 @@ ${APP_ACTION_PROMPT}`;
         </div>
       )}
 
-      {/* Chat transcript */}
+      {/* Gallery or Chat transcript */}
+      {showGallery ? (
+        <div className="h-48 border-t border-[#00e5ff]/20">
+          <MediaGallery onClose={() => setShowGallery(false)} onAnimateImage={(imageUrl) => { setShowGallery(false); handleImagine('Animate this image into a short video', 'video', imageUrl); }} />
+        </div>
+      ) : (
       <div className="h-32 border-t border-[#00e5ff]/20 bg-[#02040a]/80">
         <ScrollArea className="h-full" ref={scrollRef as any}>
           <div className="p-2 space-y-1.5">
