@@ -801,7 +801,7 @@ ${APP_ACTION_PROMPT}`;
       {/* Gallery or Chat transcript */}
       {showGallery ? (
         <div className="h-48 border-t border-[#00e5ff]/20">
-          <MediaGallery onClose={() => setShowGallery(false)} onAnimateImage={(imageUrl) => { setShowGallery(false); handleImagine('Animate this image into a short video', 'video', imageUrl); }} />
+          <MediaGallery onClose={() => setShowGallery(false)} onAnimateImage={(imageUrl) => { setShowGallery(false); handleImagine('Animate this image into a short video', 'video', imageUrl); }} onShareToSocial={shareToSocial} />
         </div>
       ) : (
       <div className="h-32 border-t border-[#00e5ff]/20 bg-[#02040a]/80">
