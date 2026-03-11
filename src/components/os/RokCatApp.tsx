@@ -329,7 +329,7 @@ ${APP_ACTION_PROMPT}`;
         return { resp, data: await resp.json() };
       };
 
-      const { resp, data } = await invokeGrok({ type, prompt, n: type === 'image' ? 2 : 1 });
+      const { resp, data } = await invokeGrok({ type, prompt, n: type === 'image' ? 2 : 1, ...(imageUrl ? { image_url: imageUrl } : {}) });
 
       if (!resp.ok) {
         const errMsg = data?.error || `${type} generation failed.`;
