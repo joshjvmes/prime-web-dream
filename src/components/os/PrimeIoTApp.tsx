@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Wifi, WifiOff, AlertTriangle, Thermometer, Droplets, Gauge, Radio, Power, Eye } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { eventBus } from '@/hooks/useEventBus';
 
 type DeviceType = 'temp' | 'humidity' | 'pressure' | 'radiation' | 'valve' | 'switch' | 'motor' | 'camera';
 type DeviceStatus = 'online' | 'offline' | 'warning';
@@ -64,6 +65,20 @@ export default function PrimeIoTApp() {
   const [selected, setSelected] = useState<string | null>('iot-01');
   const [zoneFilter, setZoneFilter] = useState<Zone | 'all'>('all');
   const [view, setView] = useState<'list' | 'alerts'>('list');
+
+  // ROKCAT navigation listener
+  const ZONE_MAP: Record<string, Zone> = { 'lab-a': 'Lab A', 'server-room': 'Server Room', 'energy-wing': 'Energy Wing', 'perimeter': 'Perimeter' };
+  useEffect(() => {
+    const handler = (payload: any) => {
+      if (payload?.app === 'iot' && payload?.context) {
+        const ctx = payload.context.toLowerCase();
+        if (ctx === 'alerts') setView('alerts');
+        else if (ZONE_MAP[ctx]) { setView('list'); setZoneFilter(ZONE_MAP[ctx]); }
+      }
+    };
+    eventBus.on('app.navigate', handler);
+    return () => eventBus.off('app.navigate', handler);
+  }, []);
 
   // Simulated live updates
   useEffect(() => {
