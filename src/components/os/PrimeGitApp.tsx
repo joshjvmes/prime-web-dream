@@ -56,7 +56,7 @@ type View = 'repos' | 'repo-detail' | 'issues' | 'prs' | 'commits' | 'connect';
 const GITHUB_APP_SLUG = 'primeos-dev';
 
 export default function PrimeGitApp() {
-  const [view, setView] = useState<View>('repos');
+  const [view, setView] = useState<View>('connect');
   const [installation, setInstallation] = useState<Installation | null>(null);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
@@ -79,7 +79,7 @@ export default function PrimeGitApp() {
     const checkInstallation = async () => {
       setLoading(true);
       const { data: { session } } = await supabase.auth.getSession();
-      if (!session) { setLoading(false); return; }
+      if (!session) { setView('connect'); setLoading(false); return; }
       setAccessToken(session.access_token);
 
       // Clean up URL params from OAuth redirect
