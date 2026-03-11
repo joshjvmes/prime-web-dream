@@ -822,9 +822,13 @@ async function executeExtendedTool(fnName: string, args: Record<string, unknown>
     try {
       const to = new Date().toISOString().slice(0, 10);
       const from = new Date(Date.now() - days * 86400000).toISOString().slice(0, 10);
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 8000);
       const resp = await fetch(`${Deno.env.get("SUPABASE_URL")!}/functions/v1/market-data?action=get-chart&ticker=${ticker}&from=${from}&to=${to}`, {
         headers: { Authorization: authHeader, apikey: Deno.env.get("SUPABASE_ANON_KEY")! },
+        signal: controller.signal,
       });
+      clearTimeout(timeout);
       const rawData = await resp.json();
       const chartData = rawData.data || rawData;
       const results = chartData.results || [];
