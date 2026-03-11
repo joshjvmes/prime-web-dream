@@ -70,6 +70,7 @@ import MiniAppsApp from '@/components/os/MiniAppsApp';
 import AppForgeApp from '@/components/os/AppForgeApp';
 import BotLabApp from '@/components/os/BotLabApp';
 import RokCatApp from '@/components/os/RokCatApp';
+import PrimeGitApp from '@/components/os/PrimeGitApp';
 import DesktopContextMenu from '@/components/os/DesktopContextMenu';
 import BotCreatorPrompt from '@/components/os/BotCreatorPrompt';
 import NotificationSystem from '@/components/os/NotificationSystem';
@@ -111,6 +112,8 @@ const APP_NAME_MAP: Record<string, { app: AppType; title: string }> = {
   'botlab': { app: 'botlab', title: 'BotLab' },
   'bots': { app: 'botlab', title: 'BotLab' },
   'rokcat': { app: 'rokcat', title: 'ROKCAT' },
+  'github': { app: 'github', title: 'PrimeGit' },
+  'git': { app: 'github', title: 'PrimeGit' },
 };
 
 export default function Desktop() {
@@ -431,6 +434,7 @@ export default function Desktop() {
       case 'forge': return <AppForgeApp />;
       case 'botlab': return <BotLabApp />;
       case 'rokcat': return <RokCatApp />;
+      case 'github': return <PrimeGitApp />;
       default: return <div className="p-4 text-muted-foreground font-mono text-xs">App not found</div>;
     }
   };

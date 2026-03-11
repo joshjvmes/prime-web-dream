@@ -65,8 +65,8 @@ async function verifyWebhookSignature(
 /** Convert a PEM-encoded PKCS#8 private key into a CryptoKey for RS256 signing. */
 async function importPrivateKey(pem: string): Promise<CryptoKey> {
   const pemBody = pem
-    .replace(/-----BEGIN PRIVATE KEY-----/, "")
-    .replace(/-----END PRIVATE KEY-----/, "")
+    .replace(/-----BEGIN (RSA )?PRIVATE KEY-----/, "")
+    .replace(/-----END (RSA )?PRIVATE KEY-----/, "")
     .replace(/\s/g, "");
   const binary = Uint8Array.from(atob(pemBody), (c) => c.charCodeAt(0));
   return crypto.subtle.importKey(
@@ -256,14 +256,32 @@ async function handleOAuthCallback(req: Request): Promise<Response> {
   });
   const ghUser = ghUserResp.ok ? await ghUserResp.json() : null;
 
-  // Store installation record linked to the PrimeOS user
+  // Store installation record linked to the PrimeOS user.
+  // The user's Supabase JWT is passed via the OAuth `state` parameter since
+  // GitHub's redirect won't include an Authorization header.
   if (installationId) {
-    // Try to find the PrimeOS user from the state parameter or auth header
-    const user = await getUserFromAuth(req);
-    const userId = user?.id;
+    const state = url.searchParams.get("state") ?? "";
+    let userId: string | undefined;
+
+    // Try state (JWT passed through OAuth flow) first, then auth header
+    if (state) {
+      const db = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+      const { data: { user }, error: authErr } = await db.auth.getUser(state);
+      if (!authErr && user) userId = user.id;
+    }
+    if (!userId) {
+      const user = await getUserFromAuth(req);
+      userId = user?.id;
+    }
 
     if (!userId) {
-      return json({ error: "PrimeOS authentication required to link GitHub" }, 401);
+      // Can't link — redirect with error so user can retry from within PrimeOS
+      const errUrl = new URL("http://os.rlgix.com");
+      errUrl.searchParams.set("github_error", "auth_required");
+      return new Response(null, {
+        status: 302,
+        headers: { ...corsHeaders, Location: errUrl.toString() },
+      });
     }
 
     const db = serviceClient();
@@ -280,14 +298,24 @@ async function handleOAuthCallback(req: Request): Promise<Response> {
       { onConflict: "installation_id" },
     );
     if (error) {
-      return json({ error: `Failed to store installation: ${error.message}` }, 500);
+      const errUrl = new URL("http://os.rlgix.com");
+      errUrl.searchParams.set("github_error", "storage_failed");
+      return new Response(null, {
+        status: 302,
+        headers: { ...corsHeaders, Location: errUrl.toString() },
+      });
     }
   }
 
-  return json({
-    ok: true,
-    installation_id: installationId ? Number(installationId) : null,
-    github_login: ghUser?.login || null,
+  // Redirect back to PrimeOS so the app can pick up the installation
+  const redirectUrl = new URL("http://os.rlgix.com");
+  redirectUrl.searchParams.set("github_connected", "true");
+  if (installationId) redirectUrl.searchParams.set("installation_id", installationId);
+  if (ghUser?.login) redirectUrl.searchParams.set("github_login", ghUser.login);
+
+  return new Response(null, {
+    status: 302,
+    headers: { ...corsHeaders, Location: redirectUrl.toString() },
   });
 }
 

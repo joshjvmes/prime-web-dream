@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Terminal, FolderTree, Activity, Cpu, Brain, Network, Code, HardDrive, Database, Zap, Settings, Globe, Server, LayoutList, Image, Link2, Orbit, CalendarDays, BookOpen, Table, Workflow, Paintbrush, Smartphone, Map, Package, Music, Dices, TrendingUp, Radio, Vault, Video, Bot, Cog, CalendarCheck, Wifi, Monitor, FileText, MessageSquare, Shield, Mail, Users, ChevronDown, ChevronRight, Gamepad2, ShieldCheck, PenLine, Wallet, Blocks, Store } from 'lucide-react';
+import { Terminal, FolderTree, Activity, Cpu, Brain, Network, Code, HardDrive, Database, Zap, Settings, Globe, Server, LayoutList, Image, Link2, Orbit, CalendarDays, BookOpen, Table, Workflow, Paintbrush, Smartphone, Map, Package, Music, Dices, TrendingUp, Radio, Vault, Video, Bot, Cog, CalendarCheck, Wifi, Monitor, FileText, MessageSquare, Shield, Mail, Users, ChevronDown, ChevronRight, Gamepad2, ShieldCheck, PenLine, Wallet, Blocks, Store, GitBranch } from 'lucide-react';
 import { AppType } from '@/types/os';
 import type { DeviceClass } from '@/hooks/useDeviceClass';
 
@@ -43,6 +43,7 @@ const categories: { name: string; apps: AppEntry[] }[] = [
       { app: 'datacenter', title: 'LatticeCore', icon: <Server size={22} />, label: 'Data Center' },
       { app: 'cloudhooks', title: 'Cloud Hooks', icon: <Link2 size={22} />, label: 'Cloud Hooks' },
       { app: 'signals', title: 'PrimeSignals', icon: <TrendingUp size={22} />, label: 'Signals' },
+      { app: 'github', title: 'PrimeGit', icon: <GitBranch size={22} />, label: 'PrimeGit' },
     ],
   },
   {
