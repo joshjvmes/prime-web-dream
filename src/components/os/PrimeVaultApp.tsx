@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { Vault, TrendingUp, TrendingDown } from 'lucide-react';
+import { eventBus } from '@/hooks/useEventBus';
 import { LineChart, Line, XAxis, YAxis, ResponsiveContainer, Tooltip, PieChart, Pie, Cell } from 'recharts';
 import { Skeleton } from '@/components/ui/skeleton';
 import { supabase } from '@/integrations/supabase/client';
@@ -41,6 +42,21 @@ export default function PrimeVaultApp() {
   const [userId, setUserId] = useState<string | null>(null);
   const [showBenchmark, setShowBenchmark] = useState(false);
   const [perfData, setPerfData] = useState<{ day: number; portfolio: number; benchmark: number }[]>([]);
+
+  // Listen for app.navigate events
+  useEffect(() => {
+    const handler = (payload: any) => {
+      if (payload?.app === 'vault' && payload?.context) {
+        const ctx = payload.context.toLowerCase();
+        const tabMap: Record<string, 'overview' | 'holdings' | 'history'> = {
+          overview: 'overview', holdings: 'holdings', history: 'history', trade: 'holdings',
+        };
+        if (tabMap[ctx]) setTab(tabMap[ctx]);
+      }
+    };
+    eventBus.on('app.navigate', handler);
+    return () => eventBus.off('app.navigate', handler);
+  }, []);
 
   // Auth check
   useEffect(() => {

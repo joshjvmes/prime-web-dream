@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Cpu, HardDrive, Network, Zap, Activity, Database } from 'lucide-react';
+import { eventBus } from '@/hooks/useEventBus';
 
 function ArcGauge({ value, max, label, color, icon: Icon }: { value: number; max: number; label: string; color: string; icon: React.ElementType }) {
   const pct = Math.min(value / max, 1);
@@ -73,6 +74,21 @@ function DonutChart({ used, total, color }: { used: number; total: number; color
 }
 
 export default function SystemMonitorApp() {
+  const [activePanel, setActivePanel] = useState<string | null>(null);
+
+  // Listen for app.navigate events
+  useEffect(() => {
+    const handler = (payload: any) => {
+      if (payload?.app === 'monitor' && payload?.context) {
+        setActivePanel(payload.context);
+        // Clear highlight after 3s
+        setTimeout(() => setActivePanel(null), 3000);
+      }
+    };
+    eventBus.on('app.navigate', handler);
+    return () => eventBus.off('app.navigate', handler);
+  }, []);
+
   const [cpu, setCpu] = useState(45);
   const [mem, setMem] = useState(62);
   const [netPps, setNetPps] = useState(180);
@@ -117,13 +133,13 @@ export default function SystemMonitorApp() {
 
       <div className="grid grid-cols-3 grid-rows-2 gap-3 flex-1 min-h-0">
         {/* CPU Gauge */}
-        <div className="rounded border border-border bg-card/60 p-3 flex flex-col items-center justify-center">
+        <div className={`rounded border bg-card/60 p-3 flex flex-col items-center justify-center transition-all duration-500 ${activePanel === 'cpu' ? 'border-primary ring-1 ring-primary/30' : 'border-border'}`}>
           <ArcGauge value={cpu} max={100} label="CPU Load" color="primary" icon={Cpu} />
           <Sparkline data={cpuHistory} color="primary" width={90} height={25} />
         </div>
 
         {/* Memory Gauge */}
-        <div className="rounded border border-border bg-card/60 p-3 flex flex-col items-center justify-center">
+        <div className={`rounded border bg-card/60 p-3 flex flex-col items-center justify-center transition-all duration-500 ${activePanel === 'memory' ? 'border-prime-violet ring-1 ring-prime-violet/30' : 'border-border'}`}>
           <ArcGauge value={mem} max={100} label="FoldMem" color="prime-violet" icon={HardDrive} />
           <div className="font-mono text-[9px] text-muted-foreground mt-1">
             {(mem * 0.11).toFixed(1)} / 11.0 D-units
@@ -131,7 +147,7 @@ export default function SystemMonitorApp() {
         </div>
 
         {/* Process Sparklines */}
-        <div className="rounded border border-border bg-card/60 p-3 flex flex-col items-center justify-center gap-2">
+        <div className={`rounded border bg-card/60 p-3 flex flex-col items-center justify-center gap-2 transition-all duration-500 ${activePanel === 'processes' ? 'border-prime-amber ring-1 ring-prime-amber/30' : 'border-border'}`}>
           <div className="font-display text-[9px] tracking-wider uppercase text-prime-amber flex items-center gap-1">
             <Activity size={10} /> Processes
           </div>
@@ -144,7 +160,7 @@ export default function SystemMonitorApp() {
         </div>
 
         {/* Network Throughput */}
-        <div className="rounded border border-border bg-card/60 p-3 flex flex-col items-center justify-center gap-2">
+        <div className={`rounded border bg-card/60 p-3 flex flex-col items-center justify-center gap-2 transition-all duration-500 ${activePanel === 'network' ? 'border-prime-green ring-1 ring-prime-green/30' : 'border-border'}`}>
           <div className="font-display text-[9px] tracking-wider uppercase text-prime-green flex items-center gap-1">
             <Network size={10} /> Network
           </div>

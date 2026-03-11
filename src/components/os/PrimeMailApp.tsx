@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Mail, Inbox, ArrowLeft, Trash2, Bot, Loader2, RefreshCw } from 'lucide-react';
+import { Mail, Inbox, Send, FileText, ArrowLeft, Trash2, Bot, Loader2, RefreshCw } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { Badge } from '@/components/ui/badge';
 import { eventBus } from '@/hooks/useEventBus';
@@ -19,10 +19,26 @@ interface Email {
 export default function PrimeMailApp() {
   const [emails, setEmails] = useState<Email[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [activeFolder, setActiveFolder] = useState('inbox');
   const [loading, setLoading] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
   const [userId, setUserId] = useState<string | null>(null);
   const hasFetched = useRef(false);
+
+  // Listen for app.navigate events
+  useEffect(() => {
+    const handler = (payload: any) => {
+      if (payload?.app === 'mail' && payload?.context) {
+        const folder = payload.context.toLowerCase();
+        if (['inbox', 'sent', 'drafts'].includes(folder)) {
+          setActiveFolder(folder);
+          setSelectedId(null);
+        }
+      }
+    };
+    eventBus.on('app.navigate', handler);
+    return () => eventBus.off('app.navigate', handler);
+  }, []);
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => setUserId(data.user?.id ?? null));
@@ -136,9 +152,9 @@ export default function PrimeMailApp() {
     return () => eventBus.off('mail.received', handler);
   }, [userId, loadEmails]);
 
-  const inboxEmails = emails.filter(e => e.folder === 'inbox');
+  const filteredEmails = emails.filter(e => e.folder === activeFolder);
   const selected = selectedId ? emails.find(e => e.id === selectedId) : null;
-  const unreadCount = inboxEmails.filter(e => !e.read).length;
+  const unreadCount = emails.filter(e => e.folder === 'inbox' && !e.read).length;
 
   const openEmail = async (id: string) => {
     setSelectedId(id);
@@ -199,13 +215,16 @@ export default function PrimeMailApp() {
           </h2>
         </div>
         <div className="flex flex-col py-1">
-          <button className="flex items-center gap-2 px-3 py-2 text-left bg-primary/10 text-primary border-r-2 border-primary">
-            <Inbox size={14} />
-            <span className="text-[10px]">Inbox</span>
-            {unreadCount > 0 && (
-              <span className="ml-auto text-[8px] bg-primary/20 text-primary px-1 rounded">{unreadCount}</span>
-            )}
-          </button>
+          {([['inbox', Inbox, 'Inbox'], ['sent', Send, 'Sent'], ['drafts', FileText, 'Drafts']] as const).map(([folder, FolderIcon, label]) => (
+            <button key={folder} onClick={() => { setActiveFolder(folder); setSelectedId(null); }}
+              className={`flex items-center gap-2 px-3 py-2 text-left transition-colors ${activeFolder === folder ? 'bg-primary/10 text-primary border-r-2 border-primary' : 'text-muted-foreground hover:bg-muted/20'}`}>
+              <FolderIcon size={14} />
+              <span className="text-[10px]">{label}</span>
+              {folder === 'inbox' && unreadCount > 0 && (
+                <span className="ml-auto text-[8px] bg-primary/20 text-primary px-1 rounded">{unreadCount}</span>
+              )}
+            </button>
+          ))}
         </div>
         <div className="mt-auto p-2 border-t border-border space-y-1.5">
           <button
@@ -229,10 +248,10 @@ export default function PrimeMailApp() {
             <Loader2 size={12} className="animate-spin" /> Generating mail…
           </div>
         )}
-        {inboxEmails.length === 0 ? (
+        {filteredEmails.length === 0 ? (
           <div className="p-4 text-center text-muted-foreground/50 text-[10px]">No messages</div>
         ) : (
-          inboxEmails.map(e => (
+          filteredEmails.map(e => (
             <button key={e.id} onClick={() => openEmail(e.id)}
               className={`w-full text-left px-3 py-2.5 border-b border-border/30 hover:bg-muted/20 transition-colors ${!e.read ? 'bg-primary/5' : ''}`}>
               <div className="flex items-center justify-between">
