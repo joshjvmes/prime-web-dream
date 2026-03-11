@@ -1,91 +1,72 @@
 
 
-# Internal Documentation for PRIME OS
+# Preset Workflow Templates Showcasing ROKCAT's Full Capabilities
 
-Create a set of `.md` documentation files in a `docs/` directory covering the full system architecture, app catalog, backend integrations, hooks, edge functions, and developer guide.
+## What We're Building
 
-## Files to Create
+Expand the CloudHooks template library from the current 3 basic templates to a comprehensive set of ~12-15 preset workflows organized by category. These presets will serve as both ready-to-use automations and a discoverable catalog showing ROKCAT (and users) everything the system can do.
 
-### 1. `docs/README.md` — Documentation Index
-- Table of contents linking to all other docs
-- Quick-start for developers (clone, install, run)
-- Project overview: browser-based OS with 50+ apps, Lovable Cloud backend
+## Current State
 
-### 2. `docs/ARCHITECTURE.md` — System Architecture
-- Route structure: `/` (LandingPage) -> `/os` (Desktop)
-- Core flow: `App.tsx` -> `LandingPage` / `Index` -> `Desktop.tsx`
-- Desktop composition: LockScreen -> BootSequence -> Desktop (Taskbar + OSWindow + DesktopWidgets)
-- Window manager (`useWindowManager`): how windows open, focus, minimize, maximize, workspace switching
-- EventBus singleton: pub/sub for cross-app communication, list all event types
-- Authentication flow: Lovable Cloud auth, `LockScreen` sign-in/sign-up, session persistence
-- Mobile vs desktop rendering (`useDeviceClass`, `MobileLauncher`, `MobileAppView`)
+CloudHooks has 3 simple templates: File Upload Notifier, Calendar Reminder, Welcome Workflow. All just trigger notifications. The system supports 5 action types: `notification`, `open_app`, `copy_text`, `lock_screen`, `webhook`.
 
-### 3. `docs/APPS.md` — Application Catalog
-For each of the 50+ apps, document:
-- **Name**, **AppType key**, **Category** (Productivity, Finance, Infrastructure, Lore, etc.)
-- **Backend integration**: which tables/edge functions it uses, or "Client-only"
-- **Status**: Fully Live, Partially Live, Simulated, or Cloud-Persisted (via `useCloudStorage`)
+ROKCAT has 25+ tools (social posting, email, wallet, trading, canvas, spreadsheets, booking, messaging, audio, image/video generation) plus desktop control via action tags (open/close/navigate 37+ apps).
 
-Organized into sections:
-- **Fully Live** (14 apps): HypersphereApp, PrimeChatApp, PrimeCalendarApp, PrimeVaultApp, PrimeWalletApp, PrimeBetsApp, PrimeSignalsApp, FilesApp, PrimeBookingApp, BotLabApp, AdminConsoleApp, AppForgeApp/MiniAppsApp, SettingsApp, PrimeSocialApp, PrimeMailApp, PrimeBoardApp
-- **Cloud-Persisted** (via useCloudStorage): PrimeCanvasApp, TextEditorApp, PrimeGridApp, PrimeJournalApp
-- **Simulated/Lore** (18 apps): PrimeNetApp, EnergyMonitorApp, DataCenterApp, Q3InferenceApp, FoldMemApp, etc.
+## Plan
 
-### 4. `docs/BACKEND.md` — Backend & Database Reference
-- **Database tables**: All 30+ tables with columns, RLS policy summary, and which app uses them
-- **Edge functions**: All 16 functions with purpose, auth requirements, request/response format
-  - `hyper-chat`: AI chat with streaming, memory persistence
-  - `ai-social`: AI post generation for PrimeSocial
-  - `prime-bank`: Token economy (mint, transfer, debit)
-  - `market-data`: Stock/crypto price lookup via Polygon API
-  - `sports-odds`: Sports betting odds via The Odds API
-  - `bot-api` / `bot-runner` / `agent-runtime`: Bot lifecycle and autonomous agent execution
-  - `admin-actions`: Role management and admin operations
-  - `mini-app-gen`: AI-powered mini-app code generation
-  - `ai-key-manager`: User API key CRUD
-  - `elevenlabs-tts`: Text-to-speech via ElevenLabs
-  - `system-analytics`: Real-time table counts and activity aggregation
-  - `web-proxy`: CORS proxy for PrimeBrowser
-  - `cron-dispatcher`: Scheduled task execution
-- **Secrets**: Which secrets are configured and what they power
-- **Storage buckets**: `user-files` bucket for FilesApp
+### 1. Add new action types to CloudHooks
 
-### 5. `docs/HOOKS.md` — Custom Hooks Reference
-Document each hook in `src/hooks/`:
-- `useWindowManager` — Window CRUD, focus, workspace management
-- `useEventBus` — Cross-app event pub/sub (list all event types)
-- `useCloudStorage` — localStorage + database sync for app state persistence
-- `useActivityTracker` — Logs user actions to `user_activity` table
-- `useNotifications` — Toast notification system
-- `useCalendarReminders` — Polls upcoming events, fires alerts
-- `useGlobalShortcuts` — Keyboard shortcuts (Ctrl+K search, etc.)
-- `useIdleTimeout` — Auto-lock after inactivity
-- `useVoiceControl` — Voice command recognition
-- `useSystemPulse` — Simulated system metrics
-- `useDeviceClass` — Mobile/tablet/desktop detection
-- `useIntranetPages` — PrimeBrowser intranet content
+Currently CloudHooks only supports 5 basic action types. Add new ones that map to ROKCAT's tool capabilities:
 
-### 6. `docs/TERMINAL.md` — Terminal & Command Reference
-- Available commands from `terminal/commands.ts`
-- Pipe system from `terminal/pipes.ts`
-- Terminal modes from `terminal/modes.ts`
-- Widget commands from `terminal/widgetCommands.ts`
+- `ai_command` — sends a natural language instruction to ROKCAT via `hyper-chat` (e.g., "check my balance", "post a status update"). This is the key addition: it lets any workflow trigger ROKCAT's full tool suite.
+- `emit_event` — emit a custom EventBus event (for chaining workflows)
 
-### 7. `docs/SECURITY.md` — Security & RLS Overview
-- All tables have RLS enabled with `auth.uid() = user_id`
-- Public-read tables: `profiles`, `bet_markets`, `forge_listings`
-- Edge function auth pattern: Authorization header -> `getUser()` -> scoped queries
-- API key storage note (plaintext in `encrypted_key` column)
-- Service role key usage: only in edge functions, never client-side
+**In `CloudHooksApp.tsx`**: Add these to `ACTION_TYPES`, add corresponding config inputs (text field for the AI command, event name + payload for emit), and wire the execution handler to call `hyper-chat` for `ai_command`.
 
-## Update Existing File
+### 2. Expand TEMPLATES array with categorized presets
 
-### `README.md` (root)
-- Add a "Documentation" section linking to `docs/README.md`
-- Keep existing content but add links to the new docs
+Organize into categories and add ~12 new templates:
 
-## Technical Notes
-- All docs are pure Markdown, no code changes needed
-- Total: 7 new files + 1 updated file
-- Estimated ~3,000 lines of documentation covering the full system
+**System & Security**
+- "Morning System Check" — trigger: `user.signed-in` → ai_command: "Check system health, open the monitor, and give me a status report"
+- "Security Alert Handler" — trigger: `security.threat` → notification + open_app: security
+- "Lock on Idle" — trigger: `system.idle` → lock_screen
+
+**Financial & Trading**
+- "Market Open Brief" — trigger: `calendar.event.starting` (condition: "market") → ai_command: "Check my portfolio and get market data for my top holdings"
+- "Balance Low Alert" — trigger: `wallet.transaction` → ai_command: "Check my balance and warn me if it's below 100 tokens"
+
+**Productivity**
+- "Daily Standup Prep" — trigger: `user.signed-in` → ai_command: "Open my board, check today's bookings, and summarize what's on my plate"
+- "New Email Reactor" — trigger: `mail.received` → notification + open_app: mail
+- "Meeting Auto-Book" — trigger: `calendar.event.created` → ai_command: "List my bookings and check for conflicts"
+
+**Creative & Social**
+- "Auto Social Post" — trigger: `file.uploaded` → ai_command: "Post to PrimeSocial about the new file upload"
+- "Canvas Art Generator" — trigger: `system.idle` → ai_command: "Generate a random piece of generative art on PrimeCanvas"
+
+**Autonomous & Advanced**
+- "Full System Tour" — trigger: `user.signed-in` → ai_command: "Open terminal, then monitor, then mail, then social — give me a full tour of the OS"
+- "Data Report Builder" — trigger: `calendar.event.starting` (condition: "report") → ai_command: "Create a spreadsheet with today's system metrics and add a chart"
+
+### 3. UI improvements to template picker
+
+- Replace the flat template list with a categorized dropdown/section layout
+- Show a brief description under each template name
+- Add a "Browse All Presets" button that shows a modal/panel with all templates organized by category, each with description and a one-click "Add" button
+
+### Files Changed
+
+1. **`src/components/os/CloudHooksApp.tsx`** — Add `ai_command` and `emit_event` action types, expand TEMPLATES array with categories, update template picker UI, wire `ai_command` execution to call `hyper-chat`
+2. **`src/hooks/useEventBus.ts`** — Potentially add new event types if missing (e.g., `system.idle`, `security.threat`) to the `EVENT_TYPES` array so they appear in the trigger dropdown
+
+### Execution Flow for `ai_command`
+
+When a hook with an `ai_command` action fires:
+1. Get user session token
+2. POST to `hyper-chat` with the command as the user message
+3. Parse response for action tags (reuse `parseAndExecuteActions`)
+4. Log execution result
+
+This effectively gives every workflow access to ROKCAT's entire 25+ tool suite without needing individual action types for each one.
 
