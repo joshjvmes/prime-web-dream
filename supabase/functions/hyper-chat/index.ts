@@ -475,6 +475,40 @@ const TOOLS = [
       },
     },
   },
+  // ── Grok Imagine tools ──
+  {
+    type: "function",
+    function: {
+      name: "generate_image",
+      description: "Generate an image using Grok Imagine. Use when the user asks to create, draw, generate, or imagine an image. Only available when xAI is the active provider.",
+      parameters: {
+        type: "object",
+        properties: {
+          prompt: { type: "string", description: "Detailed description of the image to generate" },
+          n: { type: "number", description: "Number of images to generate (1-4), default 1" },
+        },
+        required: ["prompt"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "generate_video",
+      description: "Generate a short video using Grok Imagine Video. Use when the user asks to create or generate a video clip. Only available when xAI is the active provider.",
+      parameters: {
+        type: "object",
+        properties: {
+          prompt: { type: "string", description: "Detailed description of the video to generate" },
+          duration: { type: "number", description: "Duration in seconds (optional)" },
+          image_url: { type: "string", description: "Optional reference image URL to guide the video" },
+        },
+        required: ["prompt"],
+        additionalProperties: false,
+      },
+    },
+  },
 ];
 
 // ── Helper: call prime-bank ──
