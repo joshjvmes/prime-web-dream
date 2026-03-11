@@ -247,6 +247,15 @@ export default function RokCatApp() {
         }
       }
 
+      // Parse and execute any action tags, then update final message
+      if (fullText) {
+        const cleanText = parseAndExecuteActions(fullText);
+        fullText = cleanText;
+        setMessages(prev =>
+          prev.map(m => m.id === rokcatId ? { ...m, text: cleanText } : m)
+        );
+      }
+
       if (!fullText) {
         setMessages(prev =>
           prev.map(m => m.id === rokcatId ? { ...m, text: 'Neural link disrupted. Try again.' } : m)
