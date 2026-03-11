@@ -20,7 +20,7 @@ export default function RokCatMediaRenderer({ text }: { text: string }) {
 
   // Split text into segments: regular text and media tags
   const segments: Array<{ type: 'text' | 'image' | 'video'; content: string }> = [];
-  const combinedRe = /\[(IMAGE|VIDEO):(https?:\/\/[^\]]+)\]/g;
+  const combinedRe = /\[(IMAGE|VIDEO):((?:https?:\/\/|data:)[^\]]+)\]/g;
   let lastIndex = 0;
   let match: RegExpExecArray | null;
 
