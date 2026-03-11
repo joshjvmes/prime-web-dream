@@ -28,6 +28,7 @@ interface TaskbarProps {
   onToggleClipboard?: () => void;
   isAdmin?: boolean;
   deviceClass?: DeviceClass;
+  user?: import('@supabase/supabase-js').User | null;
 }
 
 const allApps: { app: AppType; title: string; icon: React.ReactNode; label: string }[] = [
