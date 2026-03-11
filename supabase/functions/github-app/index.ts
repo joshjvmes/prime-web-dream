@@ -256,9 +256,10 @@ async function handleOAuthCallback(req: Request): Promise<Response> {
   });
   const ghUser = ghUserResp.ok ? await ghUserResp.json() : null;
 
-  // Store installation record linked to the PrimeOS user.
-  // The user's Supabase JWT is passed via the OAuth `state` parameter since
-  // GitHub's redirect won't include an Authorization header.
+  // Store the installation record. We may or may not have the PrimeOS user at
+  // this point (GitHub's install flow doesn't always forward `state`). If we
+  // can identify the user, link it now; otherwise store it as pending and let
+  // the frontend claim it via the `link-installation` action.
   if (installationId) {
     const state = url.searchParams.get("state") ?? "";
     let userId: string | undefined;
@@ -274,36 +275,36 @@ async function handleOAuthCallback(req: Request): Promise<Response> {
       userId = user?.id;
     }
 
-    if (!userId) {
-      // Can't link — redirect with error so user can retry from within PrimeOS
-      const errUrl = new URL("http://os.rlgix.com");
-      errUrl.searchParams.set("github_error", "auth_required");
-      return new Response(null, {
-        status: 302,
-        headers: { ...corsHeaders, Location: errUrl.toString() },
-      });
-    }
-
     const db = serviceClient();
-    const { error } = await db.from("github_installations").upsert(
-      {
-        user_id: userId,
-        installation_id: Number(installationId),
-        account_login: ghUser?.login || "unknown",
-        account_type: ghUser?.type || "User",
-        access_token: tokenData.access_token,
-        token_expires_at: null,
-        updated_at: new Date().toISOString(),
-      },
-      { onConflict: "installation_id" },
-    );
-    if (error) {
-      const errUrl = new URL("http://os.rlgix.com");
-      errUrl.searchParams.set("github_error", "storage_failed");
-      return new Response(null, {
-        status: 302,
-        headers: { ...corsHeaders, Location: errUrl.toString() },
-      });
+
+    if (userId) {
+      // Full link — we know the PrimeOS user
+      await db.from("github_installations").upsert(
+        {
+          user_id: userId,
+          installation_id: Number(installationId),
+          account_login: ghUser?.login || "unknown",
+          account_type: ghUser?.type || "User",
+          access_token: tokenData.access_token,
+          token_expires_at: null,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "installation_id" },
+      );
+    } else {
+      // Store as pending — frontend will claim it
+      await db.from("github_installations").upsert(
+        {
+          user_id: "00000000-0000-0000-0000-000000000000",
+          installation_id: Number(installationId),
+          account_login: ghUser?.login || "unknown",
+          account_type: ghUser?.type || "User",
+          access_token: tokenData.access_token,
+          token_expires_at: null,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "installation_id" },
+      );
     }
   }
 
@@ -470,6 +471,30 @@ async function handleApiProxy(req: Request): Promise<Response> {
 
   const url = new URL(req.url);
   const action = url.searchParams.get("action");
+
+  // Special action: claim a pending installation for the current user
+  if (action === "link-installation") {
+    const installationId = url.searchParams.get("installation_id");
+    if (!installationId) {
+      return json({ error: "installation_id required" }, 400);
+    }
+    const db = serviceClient();
+    const { error } = await db
+      .from("github_installations")
+      .update({ user_id: user.id, updated_at: new Date().toISOString() })
+      .eq("installation_id", Number(installationId));
+    if (error) {
+      return json({ error: error.message }, 500);
+    }
+    // Return the updated record
+    const { data } = await db
+      .from("github_installations")
+      .select("*")
+      .eq("installation_id", Number(installationId))
+      .single();
+    return json({ ok: true, installation: data });
+  }
+
   if (!action || !actions[action]) {
     return json(
       { error: `Unknown action: ${action}`, available: Object.keys(actions) },

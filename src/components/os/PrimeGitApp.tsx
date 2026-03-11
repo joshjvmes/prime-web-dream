@@ -82,9 +82,27 @@ export default function PrimeGitApp() {
       if (!session) { setView('connect'); setLoading(false); return; }
       setAccessToken(session.access_token);
 
-      // Clean up URL params from OAuth redirect
+      // Handle OAuth redirect — claim pending installation if needed
       const params = new URLSearchParams(window.location.search);
-      if (params.has('github_connected')) {
+      const redirectInstallationId = params.get('installation_id');
+      if (params.has('github_connected') && redirectInstallationId) {
+        // Claim the installation for this user
+        try {
+          const qp = new URLSearchParams({ action: 'link-installation', installation_id: redirectInstallationId });
+          await fetch(
+            `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/github-app?${qp.toString()}`,
+            {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${session.access_token}`,
+                'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+              },
+            }
+          );
+        } catch (e) {
+          console.error('Failed to link installation:', e);
+        }
+        // Clean URL
         params.delete('github_connected');
         params.delete('installation_id');
         params.delete('github_login');
