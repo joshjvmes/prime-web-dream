@@ -306,6 +306,12 @@ export default function TerminalApp({ onOpenApp, onCloseApp, isFirstOpen }: Term
         if (question) {
           streamAiResponse(question, 'The user is asking a question from the PRIME OS terminal shell. Answer concisely. No markdown formatting, plain text only.');
         }
+      } else if (parts[0] === '__chat__') {
+        // Chat fallback — unknown command treated as natural language
+        const chatText = parts.slice(1).join(' ');
+        if (chatText) {
+          streamAiResponse(chatText, 'You are ROKCAT / Hyper, the AI assistant inside the PRIME OS terminal shell. The user typed something that is not a recognized command — treat it as natural conversation. Be helpful, concise (2-3 lines), and stay in character. No markdown formatting, plain text only.');
+        }
       } else {
         enterMode(result.enterMode);
       }

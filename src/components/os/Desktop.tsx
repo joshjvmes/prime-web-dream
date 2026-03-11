@@ -453,7 +453,8 @@ export default function Desktop() {
     if (!tourDone) {
       setShowTour(true);
     } else {
-      setTimeout(() => openWindow('terminal', 'Prime Shell (psh)'), 300);
+      setTimeout(() => openWindow('rokcat', 'ROKCAT'), 300);
+      setTimeout(() => openWindow('terminal', 'Prime Shell (psh)'), 600);
     }
   }, [openWindow]);
 

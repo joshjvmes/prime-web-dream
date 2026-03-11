@@ -363,6 +363,6 @@ export function processCommand(cmd: string, ctx: CommandContext): string[] | nul
       return processWidgetCommand(args);
     default:
       if (!command) return null;
-      return [`psh: command not found: ${command}`, 'Type "help" for available commands.', ''];
+      return 'ai-chat';
   }
 }
