@@ -156,6 +156,7 @@ export default function SecurityConsoleApp() {
     }
     setTimeout(() => setScanning(false), 300);
   }, [scanning]);
+  runScanRef.current = runScan;
 
   const toggleRule = useCallback((id: string) => {
     setRules(prev => prev.map(r => r.id === id ? { ...r, enabled: !r.enabled } : r));
