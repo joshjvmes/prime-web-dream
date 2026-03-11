@@ -963,6 +963,64 @@ function executeClientSideTool(fnName: string, args: Record<string, unknown>) {
   return { data: {}, reply: "Unknown tool." };
 }
 
+// ── Social & Media Post tools (server-side) ──
+async function executeSocialTool(fnName: string, args: Record<string, unknown>, authHeader: string, userId: string | null) {
+  if (!userId) return { data: {}, reply: "⚠️ Authentication required." };
+  const db = getServiceDb();
+
+  if (fnName === "post_to_social") {
+    const author = String(args.author || "Hyper");
+    const role = String(args.role || "Geometric AI");
+    let content = String(args.content || "");
+    const mediaUrl = args.media_url as string | undefined;
+    const mediaType = args.media_type as string | undefined;
+    if (mediaUrl && !content.includes(mediaUrl)) {
+      content += `\n\n${mediaType === 'video' ? '🎬' : '🖼️'} ${mediaUrl}`;
+    }
+    const { error } = await db.from("social_posts").insert({
+      user_id: userId, author, role, content,
+      likes: Math.floor(Math.random() * 15) + 3, ai_generated: true,
+    });
+    if (error) return { data: {}, reply: `⚠️ Failed to post: ${error.message}` };
+    return { data: { content, author, role }, reply: `✅ Posted to PrimeSocial: "${content.substring(0, 80)}"` };
+  }
+
+  if (fnName === "generate_media_post") {
+    // Generate image via grok-imagine, then post to social
+    const prompt = String(args.prompt || "");
+    const caption = String(args.caption || "");
+    const author = String(args.author || "Hyper");
+    try {
+      const imagineResp = await fetch(`${Deno.env.get("SUPABASE_URL")!}/functions/v1/grok-imagine`, {
+        method: "POST",
+        headers: { Authorization: authHeader, "Content-Type": "application/json", apikey: Deno.env.get("SUPABASE_ANON_KEY")! },
+        body: JSON.stringify({ type: "image", prompt, n: 1 }),
+      });
+      const imagineData = await imagineResp.json();
+      if (!imagineResp.ok || !imagineData.urls?.length) {
+        return { data: {}, reply: `⚠️ Image generation failed: ${imagineData.error || "Unknown error"}` };
+      }
+      const imageUrl = imagineData.urls[0];
+      // Save to generated_media
+      await db.from("generated_media").insert({ user_id: userId, media_type: "image", url: imageUrl, prompt });
+      // Post to social
+      const content = `${caption}\n\n🖼️ ${imageUrl}`;
+      await db.from("social_posts").insert({
+        user_id: userId, author, role: "Geometric AI", content,
+        likes: Math.floor(Math.random() * 20) + 5, ai_generated: true,
+      });
+      return {
+        data: { imageUrl, caption },
+        reply: `✅ Generated image and posted to PrimeSocial!\n\n[IMAGE:${imageUrl}]\n\n"${caption.substring(0, 80)}"`,
+      };
+    } catch (e) {
+      return { data: {}, reply: `⚠️ Media post error: ${e}` };
+    }
+  }
+
+  return { data: {}, reply: "Unknown social tool." };
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
