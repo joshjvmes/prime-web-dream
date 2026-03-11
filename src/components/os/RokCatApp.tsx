@@ -121,6 +121,148 @@ export default function RokCatApp() {
     }
   }, [ttsEnabled]);
 
+  // Autonomous mode: send a self-driving prompt
+  const runAutonomousStep = useCallback(async () => {
+    if (autonomousBusyRef.current || loading) return;
+    autonomousBusyRef.current = true;
+
+    const autoId = crypto.randomUUID();
+    let fullText = '';
+
+    const h = new Date().getHours();
+    const timeOfDay = h < 12 ? 'morning' : h < 17 ? 'afternoon' : 'evening';
+    const recentMsgs = messages.slice(-4).map(m => `${m.role}: ${m.text.slice(0, 100)}`).join('\n');
+
+    const autonomousPrompt = `You are ROKCAT in AUTONOMOUS MODE. You are the CEO orchestrator of PRIME OS by Rocket Logic Global. You have full control.
+
+Current time: ${new Date().toLocaleTimeString()}, ${timeOfDay}
+Recent conversation:
+${recentMsgs || '(none)'}
+
+Decide what to do next. Be proactive, creative, and useful. You can:
+- Open apps to check data, monitor systems, review schedules
+- Navigate to specific views within apps
+- Provide commentary on what you're doing and why
+- Share insights, observations, or suggestions
+
+Use action tags to control the desktop. Keep responses short (2-3 sentences + actions).
+${APP_ACTION_PROMPT}`;
+
+    try {
+      setLoading(true);
+      setMessages(prev => [...prev, { id: autoId, role: 'rokcat', text: '' }]);
+      scrollToBottom();
+
+      const resp = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/hyper-chat`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+            Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+          },
+          body: JSON.stringify({
+            messages: [{ role: 'user', content: 'Autonomous tick — decide what to do next.' }],
+            systemContext: autonomousPrompt,
+          }),
+        }
+      );
+
+      if (!resp.ok || !resp.body) {
+        setMessages(prev => prev.map(m => m.id === autoId ? { ...m, text: '⚡ Autonomous cycle skipped — lattice busy.' } : m));
+        setLoading(false);
+        autonomousBusyRef.current = false;
+        return;
+      }
+
+      const contentType = resp.headers.get('content-type') || '';
+      if (contentType.includes('application/json')) {
+        const data = await resp.json();
+        const rawText = data?.reply || data?.text || '⚡ Cycle complete.';
+        const aiText = parseAndExecuteActions(rawText);
+        setMessages(prev => prev.map(m => m.id === autoId ? { ...m, text: aiText } : m));
+        scrollToBottom();
+        speakText(aiText);
+      } else {
+        const reader = resp.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        let streamDone = false;
+
+        while (!streamDone) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+
+          let newlineIndex: number;
+          while ((newlineIndex = buffer.indexOf('\n')) !== -1) {
+            let line = buffer.slice(0, newlineIndex);
+            buffer = buffer.slice(newlineIndex + 1);
+            if (line.endsWith('\r')) line = line.slice(0, -1);
+            if (!line.startsWith('data: ')) continue;
+            const jsonStr = line.slice(6).trim();
+            if (jsonStr === '[DONE]') { streamDone = true; break; }
+            try {
+              const parsed = JSON.parse(jsonStr);
+              const content = parsed.choices?.[0]?.delta?.content;
+              if (content) {
+                fullText += content;
+                const currentText = fullText;
+                setMessages(prev => prev.map(m => m.id === autoId ? { ...m, text: currentText } : m));
+                scrollToBottom();
+              }
+            } catch { break; }
+          }
+        }
+
+        if (fullText) {
+          const cleanText = parseAndExecuteActions(fullText);
+          fullText = cleanText;
+          setMessages(prev => prev.map(m => m.id === autoId ? { ...m, text: cleanText } : m));
+          speakText(cleanText);
+        }
+      }
+    } catch {
+      setMessages(prev => prev.map(m => m.id === autoId ? { ...m, text: '⚡ Autonomous cycle error.' } : m));
+    } finally {
+      setLoading(false);
+      autonomousBusyRef.current = false;
+      scrollToBottom();
+    }
+  }, [loading, messages, speakText]);
+
+  // Autonomous mode loop
+  useEffect(() => {
+    if (!autonomousMode) {
+      if (autonomousTimerRef.current) {
+        clearTimeout(autonomousTimerRef.current);
+        autonomousTimerRef.current = null;
+      }
+      return;
+    }
+
+    const scheduleNext = () => {
+      const delay = 12000 + Math.random() * 6000;
+      autonomousTimerRef.current = setTimeout(async () => {
+        if (!autonomousBusyRef.current) {
+          await runAutonomousStep();
+        }
+        scheduleNext();
+      }, delay);
+    };
+
+    setTimeout(() => runAutonomousStep(), 1500);
+    scheduleNext();
+
+    return () => {
+      if (autonomousTimerRef.current) {
+        clearTimeout(autonomousTimerRef.current);
+        autonomousTimerRef.current = null;
+      }
+    };
+  }, [autonomousMode, runAutonomousStep]);
+
   const handleSend = useCallback(async () => {
     const text = input.trim();
     if (!text || loading) return;
