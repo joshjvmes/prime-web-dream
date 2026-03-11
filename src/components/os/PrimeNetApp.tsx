@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { eventBus } from '@/hooks/useEventBus';
 import { NetworkNode } from '@/types/os';
 
 const INITIAL_NODES: NetworkNode[] = [
