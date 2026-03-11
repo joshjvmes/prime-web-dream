@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Terminal, FolderTree, Activity, Cpu, Brain, Network, Code, HardDrive, Database, Zap, Settings, Globe, Server, LayoutList, Image, Link2, Orbit, CalendarDays, BookOpen, Table, Workflow, Paintbrush, Smartphone, Map, Package, Music, Dices, TrendingUp, Radio, Vault, Video, Bot, Cog, CalendarCheck, Wifi, Monitor, FileText, MessageSquare, Shield, Mail, Users, Gamepad2, ShieldCheck, PenLine, Wallet, Blocks, Store, Bell, Search, ChevronDown } from 'lucide-react';
+import { Terminal, FolderTree, Activity, Cpu, Brain, Network, Code, HardDrive, Database, Zap, Settings, Globe, Server, LayoutList, Image, Link2, Orbit, CalendarDays, BookOpen, Table, Workflow, Paintbrush, Smartphone, Map, Package, Music, Dices, TrendingUp, Radio, Vault, Video, Bot, Cog, CalendarCheck, Wifi, Monitor, FileText, MessageSquare, Shield, Mail, Users, Gamepad2, ShieldCheck, PenLine, Wallet, Blocks, Store, Bell, Search, ChevronDown, GitBranch } from 'lucide-react';
 import { AppType, WindowState } from '@/types/os';
 import { AnimatePresence, motion } from 'framer-motion';
 import MobileAppView from './MobileAppView';
@@ -23,6 +23,8 @@ const categories: { name: string; apps: AppEntry[] }[] = [
     apps: [
       { app: 'terminal', title: 'Prime Shell (psh)', icon: <Terminal size={24} />, label: 'Terminal' },
       { app: 'files', title: 'Prime File System', icon: <FolderTree size={24} />, label: 'Files' },
+      { app: 'processes', title: 'Qutrit Processes', icon: <Activity size={24} />, label: 'Processes' },
+      { app: 'sysinfo', title: 'System Info', icon: <Cpu size={24} />, label: 'SysInfo' },
       { app: 'monitor', title: 'System Monitor', icon: <Monitor size={24} />, label: 'Monitor' },
       { app: 'settings', title: 'Settings', icon: <Settings size={24} />, label: 'Settings' },
     ],
@@ -36,6 +38,19 @@ const categories: { name: string; apps: AppEntry[] }[] = [
       { app: 'geomc', title: 'GeomC Compiler', icon: <Code size={24} />, label: 'GeomC' },
       { app: 'miniapps', title: 'Mini Apps', icon: <Blocks size={24} />, label: 'Mini Apps' },
       { app: 'forge', title: 'App Forge', icon: <Store size={24} />, label: 'App Forge' },
+      { app: 'botlab', title: 'BotLab', icon: <Bot size={24} />, label: 'BotLab' },
+      { app: 'rokcat', title: 'ROKCAT', icon: <Bot size={24} />, label: 'ROKCAT' },
+    ],
+  },
+  {
+    name: 'Network',
+    apps: [
+      { app: 'primenet', title: 'PrimeNet Monitor', icon: <Network size={24} />, label: 'PrimeNet' },
+      { app: 'browser', title: 'PrimeBrowser', icon: <Globe size={24} />, label: 'Browser' },
+      { app: 'datacenter', title: 'LatticeCore', icon: <Server size={24} />, label: 'Data Center' },
+      { app: 'cloudhooks', title: 'Cloud Hooks', icon: <Link2 size={24} />, label: 'Cloud Hooks' },
+      { app: 'signals', title: 'PrimeSignals', icon: <TrendingUp size={24} />, label: 'Signals' },
+      { app: 'github', title: 'PrimeGit', icon: <GitBranch size={24} />, label: 'PrimeGit' },
     ],
   },
   {
@@ -47,8 +62,10 @@ const categories: { name: string; apps: AppEntry[] }[] = [
       { app: 'board', title: 'PrimeBoard', icon: <LayoutList size={24} />, label: 'Board' },
       { app: 'canvas', title: 'PrimeCanvas', icon: <Paintbrush size={24} />, label: 'Canvas' },
       { app: 'calendar', title: 'Prime Calendar', icon: <CalendarDays size={24} />, label: 'Calendar' },
+      { app: 'booking', title: 'PrimeBooking', icon: <CalendarCheck size={24} />, label: 'Booking' },
       { app: 'journal', title: 'PrimeJournal', icon: <PenLine size={24} />, label: 'Journal' },
       { app: 'wallet', title: 'PrimeWallet', icon: <Wallet size={24} />, label: 'Wallet' },
+      { app: 'schemaforge', title: 'SchemaForge', icon: <Workflow size={24} />, label: 'SchemaForge' },
     ],
   },
   {
@@ -62,16 +79,20 @@ const categories: { name: string; apps: AppEntry[] }[] = [
     ],
   },
   {
-    name: 'Network & Security',
+    name: 'Control',
     apps: [
-      { app: 'browser', title: 'PrimeBrowser', icon: <Globe size={24} />, label: 'Browser' },
       { app: 'security', title: 'Lattice Shield', icon: <Shield size={24} />, label: 'Security' },
+      { app: 'energy', title: 'Energy Monitor', icon: <Zap size={24} />, label: 'Energy' },
+      { app: 'foldmem', title: 'FoldMem Visualizer', icon: <HardDrive size={24} />, label: 'FoldMem' },
+      { app: 'storage', title: 'Prime Storage', icon: <Database size={24} />, label: 'Storage' },
       { app: 'vault', title: 'PrimeVault', icon: <Vault size={24} />, label: 'Vault' },
-      { app: 'signals', title: 'PrimeSignals', icon: <TrendingUp size={24} />, label: 'Signals' },
+      { app: 'robotics', title: 'PrimeRobotics', icon: <Cog size={24} />, label: 'Robotics' },
+      { app: 'iot', title: 'PrimeIoT', icon: <Wifi size={24} />, label: 'IoT' },
+      { app: 'admin', title: 'Admin Console', icon: <ShieldCheck size={24} />, label: 'Admin' },
     ],
   },
   {
-    name: 'Media & Fun',
+    name: 'Media',
     apps: [
       { app: 'gallery', title: 'PrimeGallery', icon: <Image size={24} />, label: 'Gallery' },
       { app: 'audio', title: 'PrimeAudio', icon: <Music size={24} />, label: 'Audio' },
@@ -79,7 +100,7 @@ const categories: { name: string; apps: AppEntry[] }[] = [
       { app: 'maps', title: 'PrimeMaps', icon: <Map size={24} />, label: 'Maps' },
       { app: 'bets', title: 'PrimeBets', icon: <Dices size={24} />, label: 'Bets' },
       { app: 'arcade', title: 'PrimeArcade', icon: <Gamepad2 size={24} />, label: 'Arcade' },
-      { app: 'booking', title: 'PrimeBooking', icon: <CalendarCheck size={24} />, label: 'Booking' },
+      { app: 'pkg', title: 'PrimePkg', icon: <Package size={24} />, label: 'Packages' },
     ],
   },
 ];
@@ -87,6 +108,7 @@ const categories: { name: string; apps: AppEntry[] }[] = [
 // Dock pinned apps
 const dockApps: AppEntry[] = [
   { app: 'terminal', title: 'Prime Shell (psh)', icon: <Terminal size={22} />, label: 'Terminal' },
+  { app: 'rokcat', title: 'ROKCAT', icon: <Bot size={22} />, label: 'ROKCAT' },
   { app: 'hypersphere', title: 'Hyper AI', icon: <Orbit size={22} />, label: 'AI' },
   { app: 'chat', title: 'PrimeChat', icon: <MessageSquare size={22} />, label: 'Chat' },
   { app: 'browser', title: 'PrimeBrowser', icon: <Globe size={22} />, label: 'Browser' },
