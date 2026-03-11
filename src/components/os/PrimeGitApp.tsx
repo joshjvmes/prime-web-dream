@@ -69,6 +69,20 @@ export default function PrimeGitApp() {
   const [commits, setCommits] = useState<Commit[]>([]);
   const [selectedRepo, setSelectedRepo] = useState<Repo | null>(null);
 
+  // ROKCAT navigation listener
+  useEffect(() => {
+    const handler = (payload: any) => {
+      if (payload?.app === 'github' && payload?.context) {
+        const ctx = payload.context.toLowerCase();
+        if (['repos', 'issues', 'prs', 'commits'].includes(ctx)) {
+          setView(ctx as View);
+        }
+      }
+    };
+    eventBus.on('app.navigate', handler);
+    return () => eventBus.off('app.navigate', handler);
+  }, []);
+
   // New issue form
   const [showNewIssue, setShowNewIssue] = useState(false);
   const [newIssueTitle, setNewIssueTitle] = useState('');

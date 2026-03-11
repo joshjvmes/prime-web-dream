@@ -77,6 +77,9 @@ Navigation contexts (use with navigate):
 - board: "backlog", "in-progress", "done"
 - security: "overview", "scan", "firewall", "audit"
 - audio: "play", "pause", "next", "prev"
+- docs: "edit", "new"
+- github: "repos", "issues", "prs", "commits"
+- iot: "alerts", "lab-a", "server-room", "energy-wing", "perimeter"
 
 Examples:
 - "open my terminal" → include [ACTION:open-app:terminal]

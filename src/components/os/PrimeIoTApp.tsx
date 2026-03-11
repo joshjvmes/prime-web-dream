@@ -66,6 +66,20 @@ export default function PrimeIoTApp() {
   const [zoneFilter, setZoneFilter] = useState<Zone | 'all'>('all');
   const [view, setView] = useState<'list' | 'alerts'>('list');
 
+  // ROKCAT navigation listener
+  const ZONE_MAP: Record<string, Zone> = { 'lab-a': 'Lab A', 'server-room': 'Server Room', 'energy-wing': 'Energy Wing', 'perimeter': 'Perimeter' };
+  useEffect(() => {
+    const handler = (payload: any) => {
+      if (payload?.app === 'iot' && payload?.context) {
+        const ctx = payload.context.toLowerCase();
+        if (ctx === 'alerts') setView('alerts');
+        else if (ZONE_MAP[ctx]) { setView('list'); setZoneFilter(ZONE_MAP[ctx]); }
+      }
+    };
+    eventBus.on('app.navigate', handler);
+    return () => eventBus.off('app.navigate', handler);
+  }, []);
+
   // Simulated live updates
   useEffect(() => {
     const iv = setInterval(() => {

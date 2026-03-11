@@ -81,6 +81,19 @@ export default function PrimeDocsApp() {
   const [editMode, setEditMode] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [showPublish, setShowPublish] = useState(false);
+
+  // ROKCAT navigation listener
+  useEffect(() => {
+    const handler = (payload: any) => {
+      if (payload?.app === 'docs' && payload?.context) {
+        const ctx = payload.context.toLowerCase();
+        if (ctx === 'edit') setEditMode(true);
+        else if (ctx === 'new') createDoc();
+      }
+    };
+    eventBus.on('app.navigate', handler);
+    return () => eventBus.off('app.navigate', handler);
+  }, []);
   const [publishSlug, setPublishSlug] = useState('');
   const saveTimer = useRef<ReturnType<typeof setTimeout>>();
   const editorRef = useRef<HTMLTextAreaElement>(null);
