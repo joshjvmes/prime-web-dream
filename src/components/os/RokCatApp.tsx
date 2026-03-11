@@ -11,6 +11,7 @@ import { eventBus } from '@/hooks/useEventBus';
 import RokCatFace, { type RokCatFaceHandle } from './RokCatFace';
 import RokCatThinkingPanel from './rokcat/ThinkingPanel';
 import RokCatMediaRenderer from './rokcat/MediaRenderer';
+import MediaGallery from './rokcat/MediaGallery';
 
 interface Message {
   id: string;
