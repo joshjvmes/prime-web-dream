@@ -787,9 +787,14 @@ async function executeExtendedTool(fnName: string, args: Record<string, unknown>
         headers: { Authorization: authHeader, apikey: Deno.env.get("SUPABASE_ANON_KEY")! },
       });
       const data = await resp.json();
-      if (data.tickers) {
-        const lines = data.tickers.map((t: any) => `${t.symbol}: $${Number(t.price).toFixed(2)} (${t.change >= 0 ? '+' : ''}${Number(t.change).toFixed(2)}%)`);
-        return { data: { tickers: data.tickers }, reply: `📊 **Market Data**\n${lines.join('\n')}` };
+      const tickers = data.tickers || data.data;
+      if (tickers && Array.isArray(tickers)) {
+        const lines = tickers.filter((t: any) => !t.error).map((t: any) => {
+          const price = t.price ?? t.c ?? 0;
+          const change = t.change ?? (t.c && t.o ? ((t.c - t.o) / t.o * 100) : 0);
+          return `${t.symbol}: $${Number(price).toFixed(2)} (${change >= 0 ? '+' : ''}${Number(change).toFixed(2)}%)`;
+        });
+        return { data: { tickers }, reply: `📊 **Market Data**\n${lines.join('\n')}` };
       }
       return { data: {}, reply: "⚠️ Could not fetch market data." };
     } catch (e) { return { data: {}, reply: `⚠️ Market data error: ${e}` }; }
