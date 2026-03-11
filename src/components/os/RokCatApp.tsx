@@ -70,8 +70,11 @@ export default function RokCatApp() {
     setTimeout(() => scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' }), 50);
   };
 
+  // Keep ref in sync
+  useEffect(() => { ttsEnabledRef.current = ttsEnabled; }, [ttsEnabled]);
+
   const speakText = useCallback(async (text: string) => {
-    if (!ttsEnabled || !faceRef.current) return;
+    if (!ttsEnabledRef.current || !faceRef.current) return;
     try {
       const cleanText = text
         .replace(/```[\s\S]*?```/g, ' code block ')
@@ -99,7 +102,7 @@ export default function RokCatApp() {
       }
 
       for (const chunk of chunks) {
-        if (!chunk) continue;
+        if (!chunk || !ttsEnabledRef.current) continue;
         const response = await fetch(
           `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/elevenlabs-tts`,
           {
@@ -113,6 +116,7 @@ export default function RokCatApp() {
           }
         );
         if (!response.ok) continue;
+        if (!ttsEnabledRef.current) break; // Check again after fetch
         const blob = await response.blob();
         const audioUrl = URL.createObjectURL(blob);
         await faceRef.current!.speak(audioUrl);
@@ -120,7 +124,7 @@ export default function RokCatApp() {
     } catch (e) {
       console.error('TTS error:', e);
     }
-  }, [ttsEnabled]);
+  }, []);
 
   // Autonomous mode: send a self-driving prompt
   const runAutonomousStep = useCallback(async () => {
