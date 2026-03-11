@@ -100,6 +100,11 @@ export default function MediaGallery({ onClose, onAnimateImage, onShareToSocial 
                       <Video size={10} />
                     </Button>
                   )}
+                  {onShareToSocial && (
+                    <Button size="icon" variant="ghost" className="h-5 w-5 bg-[#02040a]/80 text-[#00e5ff]/70 hover:text-[#00e5ff]" onClick={() => onShareToSocial(item.url, item.media_type as 'image' | 'video')}>
+                      <Share2 size={10} />
+                    </Button>
+                  )}
                   <a href={item.url} download target="_blank" rel="noopener noreferrer">
                     <Button size="icon" variant="ghost" className="h-5 w-5 bg-[#02040a]/80 text-[#00e5ff]/70 hover:text-[#00e5ff]">
                       <Download size={10} />
