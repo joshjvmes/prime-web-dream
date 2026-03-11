@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import { StorageRegion } from '@/types/os';
 import { supabase } from '@/integrations/supabase/client';
 import { Loader2, Database } from 'lucide-react';
+import { eventBus } from '@/hooks/useEventBus';
 
 const REGIONS: StorageRegion[] = [
   { id: 'r1', name: 'System Manifold', coord: '⟨2,3,5,7,11,...⟩', compressed: true, sizeOriginal: '4.2 TB', sizeCompressed: '1.05 TB', adinkraEncoded: true },

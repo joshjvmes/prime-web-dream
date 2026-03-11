@@ -38,6 +38,20 @@ type Tab = 'calls' | 'messages' | 'contacts';
 
 export default function PrimeCommApp() {
   const [tab, setTab] = useState<Tab>('messages');
+
+  // ROKCAT navigation listener
+  useEffect(() => {
+    const handler = (payload: any) => {
+      if (payload?.app === 'comm' && payload?.context) {
+        const ctx = payload.context.toLowerCase();
+        if (['calls', 'messages', 'contacts'].includes(ctx)) {
+          setTab(ctx as Tab);
+        }
+      }
+    };
+    eventBus.on('app.navigate', handler);
+    return () => eventBus.off('app.navigate', handler);
+  }, []);
   const [selectedContact, setSelectedContact] = useState<string | null>(null);
   const [contacts, setContacts] = useState<Contact[]>(DEMO_CONTACTS);
   const [messages, setMessages] = useState<Message[]>([]);

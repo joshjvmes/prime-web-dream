@@ -41,6 +41,20 @@ export default function PrimePkgApp() {
   const [log, setLog] = useState<string[]>(['[init] Package manager ready.', `[sync] ${SYSTEM_PKGS.length} system packages indexed.`]);
   const [loadingForge, setLoadingForge] = useState(true);
 
+  // ROKCAT navigation listener
+  useEffect(() => {
+    const handler = (payload: any) => {
+      if (payload?.app === 'pkg' && payload?.context) {
+        const ctx = payload.context.toLowerCase();
+        const match = CATEGORIES.find(c => c.toLowerCase() === ctx);
+        if (match) setCategory(match);
+        else if (ctx === 'search') { /* focus search — no-op, just show all */ setCategory('All'); }
+      }
+    };
+    eventBus.on('app.navigate', handler);
+    return () => eventBus.off('app.navigate', handler);
+  }, []);
+
   const addLog = useCallback((msg: string) => {
     setLog(prev => [...prev, `[${new Date().toLocaleTimeString('en-US', { hour12: false })}] ${msg}`].slice(-20));
   }, []);
