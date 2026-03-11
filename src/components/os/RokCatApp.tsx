@@ -308,7 +308,11 @@ export default function RokCatApp() {
             {messages.map(m => (
               <div key={m.id} className={`text-xs font-mono ${m.role === 'user' ? 'text-muted-foreground' : 'text-[#00e5ff]'}`}>
                 <span className="opacity-50">{m.role === 'user' ? '> ' : 'ROKCAT: '}</span>
-                {m.text}
+                {m.role === 'user' ? m.text : (
+                  <div className="inline rokcat-md [&_p]:mb-1 [&_p]:leading-relaxed [&_pre]:bg-[#0a1929] [&_pre]:border-[#00e5ff]/20 [&_code]:text-[#00e5ff]/80 [&_h1]:text-[#00e5ff] [&_h2]:text-[#00e5ff] [&_h3]:text-[#00e5ff] [&_strong]:text-[#e2e8f0] [&_table]:text-[10px]">
+                    {renderMarkdown(m.text)}
+                  </div>
+                )}
               </div>
             ))}
             {loading && !messages.some(m => m.role === 'rokcat' && m.text === '') && (
