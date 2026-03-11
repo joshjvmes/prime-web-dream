@@ -116,7 +116,8 @@ serve(async (req) => {
     }
 
     // Cleanup old activity (run once per invocation)
-    await db.rpc("cleanup_old_activity").catch(() => {});
+    const { error: cleanupErr } = await db.rpc("cleanup_old_activity");
+    if (cleanupErr) console.error("Cleanup error:", cleanupErr);
 
     return new Response(JSON.stringify({ dispatched, checked: bots.length, time: now.toISOString() }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },

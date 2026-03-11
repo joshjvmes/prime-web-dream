@@ -163,14 +163,15 @@ async function handleWebhook(req: Request): Promise<Response> {
 
   // Store the event in github_events table
   const db = serviceClient();
-  await db.from("github_events").insert({
+  const { error: insertErr } = await db.from("github_events").insert({
     installation_id: installationId || 0,
     event_type: event,
     action: payload.action || null,
     repository: payload.repository?.full_name || null,
     sender: payload.sender?.login || null,
     payload,
-  }).catch((e: Error) => console.error("Failed to store github event:", e));
+  });
+  if (insertErr) console.error("Failed to store github event:", insertErr);
 
   // Find the user who owns this installation (for scoped hook dispatch)
   let userId: string | undefined;

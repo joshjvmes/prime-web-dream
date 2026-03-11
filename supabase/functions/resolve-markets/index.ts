@@ -78,7 +78,7 @@ async function fetchSportsResult(market: BetMarket): Promise<"yes" | "no" | null
  * Replicates the payout logic from prime-bank bet-resolve.
  */
 async function distributePayouts(
-  db: ReturnType<typeof createClient>,
+  db: any,
   market: BetMarket,
   outcome: "yes" | "no"
 ): Promise<number> {
@@ -115,31 +115,31 @@ async function distributePayouts(
       .from("wallets")
       .select("*")
       .eq("user_id", bet.user_id)
-      .maybeSingle();
+      .maybeSingle() as { data: any };
 
     if (bw) {
       await db.from("wallets")
-        .update({ os_balance: Number(bw.os_balance) + payout })
+        .update({ os_balance: Number(bw.os_balance) + payout } as any)
         .eq("id", bw.id);
 
       await db.from("wallets")
-        .update({ os_balance: Number(sysW.os_balance) - payout })
-        .eq("id", sysW.id);
+        .update({ os_balance: Number((sysW as any).os_balance) - payout } as any)
+        .eq("id", (sysW as any).id);
 
       // Re-read system wallet to keep running balance accurate
-      const { data: refreshed } = await db.from("wallets").select("os_balance").eq("id", sysW.id).single();
-      if (refreshed) sysW.os_balance = refreshed.os_balance;
+      const { data: refreshed } = await db.from("wallets").select("os_balance").eq("id", (sysW as any).id).single() as { data: any };
+      if (refreshed) (sysW as any).os_balance = refreshed.os_balance;
 
       await db.from("transactions").insert({
-        from_wallet_id: sysW.id,
+        from_wallet_id: (sysW as any).id,
         to_wallet_id: bw.id,
         token_type: "OS",
         amount: payout,
         tx_type: "reward",
         description: `Auto-resolved payout: ${market.question.substring(0, 40)}`,
-      });
+      } as any);
 
-      await db.from("bets").update({ claimed: true }).eq("id", bet.id);
+      await db.from("bets").update({ claimed: true } as any).eq("id", bet.id);
       totalPaid += payout;
     }
   }
