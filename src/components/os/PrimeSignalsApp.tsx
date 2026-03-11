@@ -3,6 +3,7 @@ import { TrendingUp, TrendingDown, ArrowUpRight, ArrowDownRight, Radio } from 'l
 import { LineChart, Line, XAxis, YAxis, ResponsiveContainer, ReferenceLine, Tooltip } from 'recharts';
 import { Skeleton } from '@/components/ui/skeleton';
 import { supabase } from '@/integrations/supabase/client';
+import { eventBus } from '@/hooks/useEventBus';
 
 interface Signal {
   id: string;
