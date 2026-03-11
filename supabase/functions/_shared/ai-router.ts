@@ -511,17 +511,17 @@ async function callXAIResponses(config: UserAIConfig, opts: AIRouterOptions): Pr
     input: toXAIResponsesInput(opts.messages),
   };
 
+  if (opts.stream) body.stream = true;
+
   // Built-in server-side tools (web_search, x_search)
   const builtInTools: any[] = [];
   const clientTools: any[] = [];
 
   if (opts.tools?.length) {
     for (const tool of opts.tools) {
-      // Check if it's a built-in xAI tool
       if (tool.type === "web_search" || tool.type === "x_search" || tool.type === "code_execution") {
         builtInTools.push(tool);
-      } else {
-        // Convert OpenAI function tools to Responses API format
+      } else if (tool.function) {
         clientTools.push({
           type: "function",
           name: tool.function.name,
@@ -536,9 +536,8 @@ async function callXAIResponses(config: UserAIConfig, opts: AIRouterOptions): Pr
     body.tools = [...builtInTools, ...clientTools];
   }
 
-  // Multi-agent model supports reasoning_effort to control agent count
   if (config.model.includes("multi-agent")) {
-    body.reasoning = { effort: "medium" }; // 4 agents default
+    body.reasoning = { effort: "medium" };
   }
 
   const resp = await fetch("https://api.x.ai/v1/responses", {
@@ -550,18 +549,84 @@ async function callXAIResponses(config: UserAIConfig, opts: AIRouterOptions): Pr
     body: JSON.stringify(body),
   });
 
-  // Convert Responses API format back to OpenAI Chat Completions format
-  // so the rest of the system can consume it uniformly
-  if (resp.ok) {
-    const data = await resp.json();
-    const openAIFormat = convertXAIResponsesToOpenAI(data);
-    return new Response(JSON.stringify(openAIFormat), {
-      status: 200,
-      headers: { "Content-Type": "application/json" },
-    });
+  if (!resp.ok) return resp;
+
+  // Streaming: convert xAI Responses SSE to OpenAI-compatible SSE
+  if (opts.stream) {
+    return convertXAIResponsesStreamToOpenAI(resp);
   }
 
-  return resp;
+  // Non-streaming: convert to OpenAI format
+  const data = await resp.json();
+  const openAIFormat = convertXAIResponsesToOpenAI(data);
+  return new Response(JSON.stringify(openAIFormat), {
+    status: 200,
+    headers: { "Content-Type": "application/json" },
+  });
+}
+
+// Convert xAI Responses API streaming to OpenAI-compatible SSE
+function convertXAIResponsesStreamToOpenAI(resp: Response): Response {
+  const reader = resp.body!.getReader();
+  const encoder = new TextEncoder();
+  const decoder = new TextDecoder();
+
+  const stream = new ReadableStream({
+    async pull(controller) {
+      let buffer = "";
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) {
+          controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+          controller.close();
+          return;
+        }
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
+
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue;
+          const jsonStr = line.slice(6).trim();
+          if (!jsonStr || jsonStr === "[DONE]") {
+            if (jsonStr === "[DONE]") {
+              controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+              controller.close();
+              return;
+            }
+            continue;
+          }
+          try {
+            const evt = JSON.parse(jsonStr);
+            // xAI Responses API streams output_text.delta events
+            if (evt.type === "output_text.delta" && evt.delta) {
+              const chunk = {
+                choices: [{ delta: { content: evt.delta }, index: 0 }],
+              };
+              controller.enqueue(encoder.encode(`data: ${JSON.stringify(chunk)}\n\n`));
+            }
+            // Also handle content_text.delta (alternate format)
+            if (evt.type === "content_text.delta" && evt.delta) {
+              const chunk = {
+                choices: [{ delta: { content: evt.delta }, index: 0 }],
+              };
+              controller.enqueue(encoder.encode(`data: ${JSON.stringify(chunk)}\n\n`));
+            }
+            // Handle response.completed to signal done
+            if (evt.type === "response.completed") {
+              controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+              controller.close();
+              return;
+            }
+          } catch {}
+        }
+      }
+    },
+  });
+
+  return new Response(stream, {
+    headers: { "Content-Type": "text/event-stream" },
+  });
 }
 
 // Legacy Chat Completions caller for older Grok models

@@ -915,10 +915,25 @@ serve(async (req) => {
     ];
 
     // Phase 1: Non-streaming call with tools
+    // For Grok 4.20 models, inject xAI built-in tools (web_search, x_search)
+    const phase1Tools = [...TOOLS];
+    if (userId) {
+      try {
+        const { data: prefData } = await db.from("user_data").select("value").eq("user_id", userId).eq("key", "ai-provider").maybeSingle();
+        if (prefData?.value) {
+          const pref = typeof prefData.value === "string" ? JSON.parse(prefData.value) : prefData.value;
+          if (pref.provider === "xai" && pref.model?.startsWith("grok-4.20")) {
+            phase1Tools.push({ type: "web_search" } as any);
+            phase1Tools.push({ type: "x_search" } as any);
+          }
+        }
+      } catch { /* ignore */ }
+    }
+
     const phase1Resp = await routeAICall({
       userId,
       messages: fullMessages,
-      tools: TOOLS,
+      tools: phase1Tools,
       stream: false,
     });
 
