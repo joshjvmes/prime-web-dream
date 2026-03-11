@@ -568,7 +568,7 @@ ${APP_ACTION_PROMPT}`;
       // Clear agent thoughts after a short delay
       setTimeout(() => setAgentThoughts([]), 2000);
     }
-  }, [input, loading, speakText, processClientAction, isGrok420, webSearchEnabled, xSearchEnabled]);
+  }, [input, loading, speakText, processClientAction, isGrok420, webSearchEnabled, xSearchEnabled, imagineMode, handleImagine]);
 
   return (
     <div className={`flex flex-col h-full bg-[#02040a] overflow-hidden ${autonomousMode ? 'ring-1 ring-[#00e5ff]/40 ring-inset' : ''}`}>
