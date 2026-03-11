@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
+import { supabase } from '@/integrations/supabase/client';
 import { WELCOME, ALL_COMMANDS, type CommandContext } from './terminal/commands';
 import { executeWithPipesAndChains } from './terminal/pipes';
 import {
@@ -66,6 +67,8 @@ export default function TerminalApp({ onOpenApp, onCloseApp, isFirstOpen }: Term
     try {
       const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID;
       const apiKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+      const { data: { session } } = await supabase.auth.getSession();
+      const authToken = session?.access_token || apiKey;
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 10000);
 
@@ -77,7 +80,7 @@ export default function TerminalApp({ onOpenApp, onCloseApp, isFirstOpen }: Term
         `https://${projectId}.supabase.co/functions/v1/hyper-chat`,
         {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'apikey': apiKey },
+          headers: { 'Content-Type': 'application/json', 'apikey': apiKey, 'Authorization': `Bearer ${authToken}` },
           body: JSON.stringify({ messages: [{ role: 'user', content: userMessage }] }),
           signal: controller.signal,
         }

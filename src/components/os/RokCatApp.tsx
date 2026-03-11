@@ -153,6 +153,10 @@ ${APP_ACTION_PROMPT}`;
       setMessages(prev => [...prev, { id: autoId, role: 'rokcat', text: '' }]);
       scrollToBottom();
 
+      // Get user's session token for authenticated API calls
+      const { data: { session } } = await supabase.auth.getSession();
+      const authToken = session?.access_token || import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+
       const resp = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/hyper-chat`,
         {
@@ -160,7 +164,7 @@ ${APP_ACTION_PROMPT}`;
           headers: {
             'Content-Type': 'application/json',
             apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-            Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+            Authorization: `Bearer ${authToken}`,
           },
           body: JSON.stringify({
             messages: [{ role: 'user', content: 'Autonomous tick — decide what to do next.' }],
@@ -278,6 +282,10 @@ ${APP_ACTION_PROMPT}`;
     let fullText = '';
 
     try {
+      // Get user's session token for authenticated API calls
+      const { data: { session } } = await supabase.auth.getSession();
+      const authToken = session?.access_token || import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+
       const resp = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/hyper-chat`,
         {
@@ -285,7 +293,7 @@ ${APP_ACTION_PROMPT}`;
           headers: {
             'Content-Type': 'application/json',
             apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-            Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+            Authorization: `Bearer ${authToken}`,
           },
           body: JSON.stringify({
             messages: [{ role: 'user', content: text }],
