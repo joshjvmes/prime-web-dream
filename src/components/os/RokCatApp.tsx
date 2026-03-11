@@ -306,6 +306,31 @@ ${APP_ACTION_PROMPT}`;
     } catch {}
   }, []);
 
+  // Share media to PrimeSocial
+  const shareToSocial = useCallback(async (mediaUrl: string, mediaType: 'image' | 'video') => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user?.id) {
+        setMessages(prev => [...prev, { id: crypto.randomUUID(), role: 'rokcat', text: '⚠️ Sign in to share to PrimeSocial.' }]);
+        return;
+      }
+      const { data: profile } = await supabase.from('profiles').select('display_name').eq('user_id', session.user.id).single();
+      const author = profile?.display_name || 'Operator';
+      const content = mediaType === 'image'
+        ? `🖼️ Check out this AI-generated image!\n\n${mediaUrl}`
+        : `🎬 Check out this AI-generated video!\n\n${mediaUrl}`;
+      await (supabase.from('social_posts') as any).insert({
+        user_id: session.user.id, author, role: 'Creator',
+        content, likes: 0, ai_generated: false,
+      });
+      eventBus.emit('social.post.created', { content, author, role: 'Creator', ai_generated: false });
+      setMessages(prev => [...prev, { id: crypto.randomUUID(), role: 'rokcat', text: `✅ Shared to PrimeSocial!` }]);
+      scrollToBottom();
+    } catch {
+      setMessages(prev => [...prev, { id: crypto.randomUUID(), role: 'rokcat', text: '❌ Failed to share to PrimeSocial.' }]);
+    }
+  }, [scrollToBottom]);
+
   // Handle Grok Imagine (image/video generation)
   const handleImagine = useCallback(async (prompt: string, type: 'image' | 'video', imageUrl?: string) => {
     if (!prompt || loading) return;
