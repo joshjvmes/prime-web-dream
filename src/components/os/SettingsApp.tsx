@@ -125,6 +125,9 @@ const PROVIDER_MODELS: Record<string, { label: string; models: { value: string; 
   default: { label: 'Default (Built-in)', models: [] },
   xai: { label: 'xAI (Grok)', models: [
     { value: 'grok-4-latest', label: 'Grok 4' },
+    { value: 'grok-4.20-experimental-beta-0304-reasoning', label: 'Grok 4.20 Reasoning (Beta)' },
+    { value: 'grok-4.20-experimental-beta-0304-non-reasoning', label: 'Grok 4.20 Non-Reasoning (Beta)' },
+    { value: 'grok-4.20-multi-agent-experimental-beta-0304', label: 'Grok 4.20 Multi-Agent (Beta)' },
     { value: 'grok-3', label: 'Grok 3' },
     { value: 'grok-3-mini', label: 'Grok 3 Mini' },
     { value: 'grok-3-fast', label: 'Grok 3 Fast' },
