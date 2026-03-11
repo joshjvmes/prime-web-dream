@@ -272,6 +272,28 @@ ${APP_ACTION_PROMPT}`;
     };
   }, [autonomousMode, runAutonomousStep]);
 
+  // Process client-side tool actions from the AI tool loop
+  const processClientAction = useCallback((action: { tool: string; data: any; reply: string }) => {
+    const { tool, data } = action;
+    if (tool === 'post_to_social') {
+      eventBus.emit('social.post.created', { content: data.content, author: data.author, role: data.role, ai_generated: true });
+    } else if (tool === 'send_email') {
+      eventBus.emit('mail.received', { to: data.to, subject: data.subject, body: data.body, from: data.from, ai_generated: true });
+    } else if (tool === 'draw_on_canvas') {
+      eventBus.emit('canvas.draw', { commands: data.commands, clear_first: data.clear_first });
+    } else if (tool === 'generate_canvas_art') {
+      eventBus.emit('canvas.draw', { generative: true, style: data.style, palette: data.palette });
+    } else if (tool === 'create_spreadsheet') {
+      eventBus.emit('spreadsheet.create', { name: data.name, headers: data.headers, rows: data.rows });
+    } else if (tool === 'update_cells') {
+      eventBus.emit('spreadsheet.update', { sheet: data.sheet, cells: data.cells });
+    } else if (tool === 'add_chart') {
+      eventBus.emit('spreadsheet.chart', data);
+    } else if (tool === 'control_audio') {
+      eventBus.emit('audio.control', data);
+    }
+  }, []);
+
   const handleSend = useCallback(async () => {
     const text = input.trim();
     if (!text || loading) return;
