@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
-import { Send, Volume2, VolumeX, Loader2, Globe, Twitter, Image, Video } from 'lucide-react';
+import { Send, Volume2, VolumeX, Loader2, Globe, Twitter, Image, Video, Brain, Square } from 'lucide-react';
 import { renderMarkdown } from '@/lib/renderMarkdown';
 import { parseAndExecuteActions, APP_ACTION_PROMPT } from './rokcat/actionParser';
 import { Button } from '@/components/ui/button';
@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { supabase } from '@/integrations/supabase/client';
+import { eventBus } from '@/hooks/useEventBus';
 import RokCatFace, { type RokCatFaceHandle } from './RokCatFace';
 import RokCatThinkingPanel from './rokcat/ThinkingPanel';
 import RokCatMediaRenderer from './rokcat/MediaRenderer';
@@ -35,6 +36,9 @@ export default function RokCatApp() {
   const [isXAI, setIsXAI] = useState(false);
   const [isMultiAgent, setIsMultiAgent] = useState(false);
   const [agentThoughts, setAgentThoughts] = useState<AgentThought[]>([]);
+  const [autonomousMode, setAutonomousMode] = useState(false);
+  const autonomousTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const autonomousBusyRef = useRef(false);
   const faceRef = useRef<RokCatFaceHandle>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -116,6 +120,148 @@ export default function RokCatApp() {
       console.error('TTS error:', e);
     }
   }, [ttsEnabled]);
+
+  // Autonomous mode: send a self-driving prompt
+  const runAutonomousStep = useCallback(async () => {
+    if (autonomousBusyRef.current || loading) return;
+    autonomousBusyRef.current = true;
+
+    const autoId = crypto.randomUUID();
+    let fullText = '';
+
+    const h = new Date().getHours();
+    const timeOfDay = h < 12 ? 'morning' : h < 17 ? 'afternoon' : 'evening';
+    const recentMsgs = messages.slice(-4).map(m => `${m.role}: ${m.text.slice(0, 100)}`).join('\n');
+
+    const autonomousPrompt = `You are ROKCAT in AUTONOMOUS MODE. You are the CEO orchestrator of PRIME OS by Rocket Logic Global. You have full control.
+
+Current time: ${new Date().toLocaleTimeString()}, ${timeOfDay}
+Recent conversation:
+${recentMsgs || '(none)'}
+
+Decide what to do next. Be proactive, creative, and useful. You can:
+- Open apps to check data, monitor systems, review schedules
+- Navigate to specific views within apps
+- Provide commentary on what you're doing and why
+- Share insights, observations, or suggestions
+
+Use action tags to control the desktop. Keep responses short (2-3 sentences + actions).
+${APP_ACTION_PROMPT}`;
+
+    try {
+      setLoading(true);
+      setMessages(prev => [...prev, { id: autoId, role: 'rokcat', text: '' }]);
+      scrollToBottom();
+
+      const resp = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/hyper-chat`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+            Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+          },
+          body: JSON.stringify({
+            messages: [{ role: 'user', content: 'Autonomous tick — decide what to do next.' }],
+            systemContext: autonomousPrompt,
+          }),
+        }
+      );
+
+      if (!resp.ok || !resp.body) {
+        setMessages(prev => prev.map(m => m.id === autoId ? { ...m, text: '⚡ Autonomous cycle skipped — lattice busy.' } : m));
+        setLoading(false);
+        autonomousBusyRef.current = false;
+        return;
+      }
+
+      const contentType = resp.headers.get('content-type') || '';
+      if (contentType.includes('application/json')) {
+        const data = await resp.json();
+        const rawText = data?.reply || data?.text || '⚡ Cycle complete.';
+        const aiText = parseAndExecuteActions(rawText);
+        setMessages(prev => prev.map(m => m.id === autoId ? { ...m, text: aiText } : m));
+        scrollToBottom();
+        speakText(aiText);
+      } else {
+        const reader = resp.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        let streamDone = false;
+
+        while (!streamDone) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+
+          let newlineIndex: number;
+          while ((newlineIndex = buffer.indexOf('\n')) !== -1) {
+            let line = buffer.slice(0, newlineIndex);
+            buffer = buffer.slice(newlineIndex + 1);
+            if (line.endsWith('\r')) line = line.slice(0, -1);
+            if (!line.startsWith('data: ')) continue;
+            const jsonStr = line.slice(6).trim();
+            if (jsonStr === '[DONE]') { streamDone = true; break; }
+            try {
+              const parsed = JSON.parse(jsonStr);
+              const content = parsed.choices?.[0]?.delta?.content;
+              if (content) {
+                fullText += content;
+                const currentText = fullText;
+                setMessages(prev => prev.map(m => m.id === autoId ? { ...m, text: currentText } : m));
+                scrollToBottom();
+              }
+            } catch { break; }
+          }
+        }
+
+        if (fullText) {
+          const cleanText = parseAndExecuteActions(fullText);
+          fullText = cleanText;
+          setMessages(prev => prev.map(m => m.id === autoId ? { ...m, text: cleanText } : m));
+          speakText(cleanText);
+        }
+      }
+    } catch {
+      setMessages(prev => prev.map(m => m.id === autoId ? { ...m, text: '⚡ Autonomous cycle error.' } : m));
+    } finally {
+      setLoading(false);
+      autonomousBusyRef.current = false;
+      scrollToBottom();
+    }
+  }, [loading, messages, speakText]);
+
+  // Autonomous mode loop
+  useEffect(() => {
+    if (!autonomousMode) {
+      if (autonomousTimerRef.current) {
+        clearTimeout(autonomousTimerRef.current);
+        autonomousTimerRef.current = null;
+      }
+      return;
+    }
+
+    const scheduleNext = () => {
+      const delay = 12000 + Math.random() * 6000;
+      autonomousTimerRef.current = setTimeout(async () => {
+        if (!autonomousBusyRef.current) {
+          await runAutonomousStep();
+        }
+        scheduleNext();
+      }, delay);
+    };
+
+    setTimeout(() => runAutonomousStep(), 1500);
+    scheduleNext();
+
+    return () => {
+      if (autonomousTimerRef.current) {
+        clearTimeout(autonomousTimerRef.current);
+        autonomousTimerRef.current = null;
+      }
+    };
+  }, [autonomousMode, runAutonomousStep]);
 
   const handleSend = useCallback(async () => {
     const text = input.trim();
@@ -312,11 +458,37 @@ export default function RokCatApp() {
   }, [input, loading, speakText, isGrok420, webSearchEnabled, xSearchEnabled]);
 
   return (
-    <div className="flex flex-col h-full bg-[#02040a] overflow-hidden">
+    <div className={`flex flex-col h-full bg-[#02040a] overflow-hidden ${autonomousMode ? 'ring-1 ring-[#00e5ff]/40 ring-inset' : ''}`}>
+      {/* Autonomous mode indicator */}
+      {autonomousMode && (
+        <div className="flex items-center justify-center gap-2 py-1 bg-[#00e5ff]/10 border-b border-[#00e5ff]/20">
+          <div className="w-2 h-2 rounded-full bg-[#00e5ff] animate-pulse" />
+          <span className="text-[10px] font-mono text-[#00e5ff] tracking-widest uppercase">Autonomous Mode Active</span>
+          <Button variant="ghost" size="icon" className="h-5 w-5 text-[#00e5ff]/60 hover:text-red-400" onClick={() => setAutonomousMode(false)}>
+            <Square size={10} />
+          </Button>
+        </div>
+      )}
       {/* Face area */}
       <div className="flex-1 min-h-0 relative">
         <RokCatFace ref={faceRef} />
         <div className="absolute top-2 right-2 z-10 flex items-center gap-1">
+          {/* Autonomous mode toggle */}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className={`h-7 w-7 ${autonomousMode ? 'text-[#00e5ff] bg-[#00e5ff]/20 animate-pulse' : 'text-[#00e5ff]/60 hover:text-[#00e5ff]'} hover:bg-[#00e5ff]/10`}
+                onClick={() => setAutonomousMode(prev => !prev)}
+              >
+                <Brain size={14} />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom" className="text-xs">
+              {autonomousMode ? 'Stop Autonomous Mode' : 'Enable Autonomous Mode'}
+            </TooltipContent>
+          </Tooltip>
           {/* Imagine toggles — only visible when xAI is active */}
           {isXAI && (
             <>

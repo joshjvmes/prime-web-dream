@@ -46,6 +46,11 @@ export function executeWithPipesAndChains(
         return { output: allOutput, enterMode: segment };
       }
 
+      if (result === 'ai-chat') {
+        allOutput.push(...(pipedLines ?? []));
+        return { output: allOutput, enterMode: `__chat__ ${segment}` };
+      }
+
       if (result === null) {
         shouldClear = true;
         pipedLines = [];

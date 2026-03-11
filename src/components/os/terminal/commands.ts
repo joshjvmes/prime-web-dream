@@ -144,7 +144,7 @@ const APP_MAP: Record<string, { app: string; title: string }> = {
 const BOOT_TIME = Date.now();
 
 /** Process a single command (no pipes/chains). Returns lines or null (for clear). */
-export function processCommand(cmd: string, ctx: CommandContext): string[] | null | 'mode' | 'ai-ask' {
+export function processCommand(cmd: string, ctx: CommandContext): string[] | null | 'mode' | 'ai-ask' | 'ai-chat' {
   const parts = cmd.trim().split(/\s+/);
   const command = parts[0]?.toLowerCase();
   const args = parts.slice(1).join(' ');
@@ -363,6 +363,6 @@ export function processCommand(cmd: string, ctx: CommandContext): string[] | nul
       return processWidgetCommand(args);
     default:
       if (!command) return null;
-      return [`psh: command not found: ${command}`, 'Type "help" for available commands.', ''];
+      return 'ai-chat';
   }
 }
