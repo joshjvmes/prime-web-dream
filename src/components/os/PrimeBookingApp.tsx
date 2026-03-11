@@ -3,6 +3,7 @@ import { CalendarCheck, Plus, X, ChevronLeft, ChevronRight, AlertTriangle } from
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { format, addDays, startOfWeek, isSameDay } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
+import { eventBus } from '@/hooks/useEventBus';
 
 interface Booking {
   id: string;
