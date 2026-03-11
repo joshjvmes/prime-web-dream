@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Wifi, WifiOff, AlertTriangle, Thermometer, Droplets, Gauge, Radio, Power, Eye } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { eventBus } from '@/hooks/useEventBus';
 
 type DeviceType = 'temp' | 'humidity' | 'pressure' | 'radiation' | 'valve' | 'switch' | 'motor' | 'camera';
 type DeviceStatus = 'online' | 'offline' | 'warning';
