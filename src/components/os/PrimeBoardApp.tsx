@@ -243,7 +243,7 @@ export default function PrimeBoardApp() {
           return (
             <div
               key={col.key}
-              className="flex-1 flex flex-col border-r border-border last:border-r-0 min-w-0"
+              className={`flex-1 flex flex-col border-r border-border last:border-r-0 min-w-0 transition-all duration-500 ${highlightCol === col.key ? 'ring-1 ring-primary/50 bg-primary/5' : ''}`}
               onDragOver={e => e.preventDefault()}
               onDrop={() => onDrop(col.key)}
             >

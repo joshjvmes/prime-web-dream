@@ -252,6 +252,19 @@ export default function PrimeBrowserApp() {
     }
   }, [activeTabId, fetchExternal, addHistoryEntry]);
 
+  // Keep ref updated for EventBus
+  navigateRef.current = navigate;
+
+  // ROKCAT navigate listener
+  useEffect(() => {
+    const handler = (payload: any) => {
+      if (payload?.app !== 'browser' || !payload?.context) return;
+      navigateRef.current?.(payload.context);
+    };
+    eventBus.on('app.navigate', handler);
+    return () => eventBus.off('app.navigate', handler);
+  }, []);
+
   const historyNav = useCallback((dir: -1 | 1) => {
     const newIdx = activeTab.historyIndex + dir;
     if (newIdx < 0 || newIdx >= activeTab.history.length) return;
