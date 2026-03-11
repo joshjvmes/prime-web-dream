@@ -458,11 +458,37 @@ ${APP_ACTION_PROMPT}`;
   }, [input, loading, speakText, isGrok420, webSearchEnabled, xSearchEnabled]);
 
   return (
-    <div className="flex flex-col h-full bg-[#02040a] overflow-hidden">
+    <div className={`flex flex-col h-full bg-[#02040a] overflow-hidden ${autonomousMode ? 'ring-1 ring-[#00e5ff]/40 ring-inset' : ''}`}>
+      {/* Autonomous mode indicator */}
+      {autonomousMode && (
+        <div className="flex items-center justify-center gap-2 py-1 bg-[#00e5ff]/10 border-b border-[#00e5ff]/20">
+          <div className="w-2 h-2 rounded-full bg-[#00e5ff] animate-pulse" />
+          <span className="text-[10px] font-mono text-[#00e5ff] tracking-widest uppercase">Autonomous Mode Active</span>
+          <Button variant="ghost" size="icon" className="h-5 w-5 text-[#00e5ff]/60 hover:text-red-400" onClick={() => setAutonomousMode(false)}>
+            <Square size={10} />
+          </Button>
+        </div>
+      )}
       {/* Face area */}
       <div className="flex-1 min-h-0 relative">
         <RokCatFace ref={faceRef} />
         <div className="absolute top-2 right-2 z-10 flex items-center gap-1">
+          {/* Autonomous mode toggle */}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className={`h-7 w-7 ${autonomousMode ? 'text-[#00e5ff] bg-[#00e5ff]/20 animate-pulse' : 'text-[#00e5ff]/60 hover:text-[#00e5ff]'} hover:bg-[#00e5ff]/10`}
+                onClick={() => setAutonomousMode(prev => !prev)}
+              >
+                <Brain size={14} />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom" className="text-xs">
+              {autonomousMode ? 'Stop Autonomous Mode' : 'Enable Autonomous Mode'}
+            </TooltipContent>
+          </Tooltip>
           {/* Imagine toggles — only visible when xAI is active */}
           {isXAI && (
             <>
