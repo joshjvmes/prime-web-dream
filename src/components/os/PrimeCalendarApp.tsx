@@ -4,6 +4,7 @@ import {
   getDay, isSameDay, isToday, getMonth, addDays, addWeeks, isSameMonth
 } from 'date-fns';
 import { ChevronLeft, ChevronRight, Diamond, Sun, Moon, Plus } from 'lucide-react';
+import { eventBus } from '@/hooks/useEventBus';
 import { supabase } from '@/integrations/supabase/client';
 import EventModal from './calendar/EventModal';
 import {
