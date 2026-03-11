@@ -883,7 +883,7 @@ serve(async (req) => {
 
   try {
     const authHeader = req.headers.get("Authorization") || `Bearer ${Deno.env.get("SUPABASE_ANON_KEY")}`;
-    const { messages, context } = await req.json();
+    const { messages, context, searchToggles } = await req.json();
     // LOVABLE_API_KEY is still needed as fallback (handled by ai-router)
 
     // Extract user ID for memory/context features
