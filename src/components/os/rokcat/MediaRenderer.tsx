@@ -1,7 +1,7 @@
 import { renderMarkdown } from '@/lib/renderMarkdown';
 
-const IMAGE_TAG_RE = /\[IMAGE:(https?:\/\/[^\]]+)\]/g;
-const VIDEO_TAG_RE = /\[VIDEO:(https?:\/\/[^\]]+)\]/g;
+const IMAGE_TAG_RE = /\[IMAGE:((?:https?:\/\/|data:)[^\]]+)\]/g;
+const VIDEO_TAG_RE = /\[VIDEO:((?:https?:\/\/|data:)[^\]]+)\]/g;
 
 /**
  * Renders ROKCAT message text with inline images and videos.
