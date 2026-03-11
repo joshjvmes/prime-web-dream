@@ -25,6 +25,18 @@ export default function PrimeSocialApp() {
   const [userId, setUserId] = useState<string | null>(null);
   const [newComment, setNewComment] = useState<Record<string, string>>({});
   const hasFetched = useRef(false);
+  const [activeTab, setActiveTab] = useState<'feed' | 'profile'>('feed');
+
+  // ROKCAT navigate listener
+  useEffect(() => {
+    const handler = (payload: any) => {
+      if (payload?.app !== 'social' || !payload?.context) return;
+      const ctx = payload.context.toLowerCase();
+      if (ctx === 'feed' || ctx === 'profile') setActiveTab(ctx);
+    };
+    eventBus.on('app.navigate', handler);
+    return () => eventBus.off('app.navigate', handler);
+  }, []);
 
   // Get current user
   useEffect(() => {

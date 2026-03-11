@@ -55,6 +55,23 @@ export default function PrimeBoardApp() {
   const [userId, setUserId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const dragItem = useRef<string | null>(null);
+  const [highlightCol, setHighlightCol] = useState<Column | null>(null);
+
+  // ROKCAT navigate listener
+  useEffect(() => {
+    const handler = (payload: any) => {
+      if (payload?.app !== 'board' || !payload?.context) return;
+      const ctx = payload.context.toLowerCase();
+      const colMap: Record<string, Column> = { backlog: 'queued', queued: 'queued', 'in-progress': 'computing', computing: 'computing', done: 'complete', complete: 'complete' };
+      const col = colMap[ctx];
+      if (col) {
+        setHighlightCol(col);
+        setTimeout(() => setHighlightCol(null), 3000);
+      }
+    };
+    eventBus.on('app.navigate', handler);
+    return () => eventBus.off('app.navigate', handler);
+  }, []);
 
   // Auth
   useEffect(() => {

@@ -49,6 +49,21 @@ export default function SecurityConsoleApp() {
   const [events, setEvents] = useState<ThreatEvent[]>([]);
   const [threatLevel, setThreatLevel] = useState(15);
   const [scanning, setScanning] = useState(false);
+  const [activeSection, setActiveSection] = useState<'overview' | 'scan' | 'firewall' | 'audit'>('overview');
+
+  // ROKCAT navigate listener
+  useEffect(() => {
+    const handler = (payload: any) => {
+      if (payload?.app !== 'security' || !payload?.context) return;
+      const ctx = payload.context.toLowerCase();
+      if (['overview', 'scan', 'firewall', 'audit'].includes(ctx)) {
+        setActiveSection(ctx as any);
+      }
+      if (ctx === 'scan') runScan();
+    };
+    eventBus.on('app.navigate', handler);
+    return () => eventBus.off('app.navigate', handler);
+  }, []);
   const [scanProgress, setScanProgress] = useState(0);
   const [scanResults, setScanResults] = useState<RlsTableStatus[] | null>(null);
   const [rules, setRules] = useState<FirewallRule[]>([

@@ -67,14 +67,16 @@ Available app IDs: ${AVAILABLE_APPS.join(', ')}.
 
 Navigation contexts (use with navigate):
 - monitor: "cpu", "memory", "network", "processes"
-- settings: "display", "security", "ai", "audio", "about"
+- settings: "profile", "display", "ai", "audio", "lock", "widgets", "voice", "ambience", "about"
 - mail: "inbox", "sent", "drafts"
-- browser: any URL like "https://example.com"
+- browser: any URL like "https://example.com" or internal like "prime://docs"
 - vault: "holdings", "trade"
-- wallet: "overview", "send", "escrow"
-- calendar: "month", "week"
+- wallet: "overview", "send", "exchange", "escrow", "history", "leaderboard", "shop"
+- calendar: "month", "week", "today"
 - social: "feed", "profile"
 - board: "backlog", "in-progress", "done"
+- security: "overview", "scan", "firewall", "audit"
+- audio: "play", "pause", "next", "prev"
 
 Examples:
 - "open my terminal" → include [ACTION:open-app:terminal]

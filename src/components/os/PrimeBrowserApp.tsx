@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { ArrowLeft, ArrowRight, RotateCw, Star, Code2, Plus, X, Globe, Shield, Loader2, Clock, Trash2 } from 'lucide-react';
+import { eventBus } from '@/hooks/useEventBus';
 import { Progress } from '@/components/ui/progress';
 import { supabase } from '@/integrations/supabase/client';
 import { useCloudStorage } from '@/hooks/useCloudStorage';
