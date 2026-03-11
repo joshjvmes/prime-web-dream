@@ -1,91 +1,54 @@
 
 
-# Internal Documentation for PRIME OS
+# Three Issues — ROKCAT First Boot, Terminal Chat Fallback, Autonomous Mode
 
-Create a set of `.md` documentation files in a `docs/` directory covering the full system architecture, app catalog, backend integrations, hooks, edge functions, and developer guide.
+## Issue 1: App windows not opening from ROKCAT
 
-## Files to Create
+The `APP_NAME_MAP` and EventBus wiring look correct in the code. The likely issue is that the `handleEventBusClose` listener captures `windows` in its closure (line 286), but the `useEffect` dependency array includes `windows` — meaning the listeners are re-registered on every window change, which is fine. Let me check if there's a timing issue: `parseAndExecuteActions` fires events with a 300ms `setTimeout`, and the Desktop listener should be active. This needs live debugging — but one code-level issue I see is that `handleEventBusClose` uses a stale `windows` reference because the effect re-runs, but `handleEventBusOpen` should work fine since it just calls `openWindow`. I'll verify this works during implementation by also adding a console log temporarily if needed.
 
-### 1. `docs/README.md` — Documentation Index
-- Table of contents linking to all other docs
-- Quick-start for developers (clone, install, run)
-- Project overview: browser-based OS with 50+ apps, Lovable Cloud backend
+## Issue 2: Terminal should fall back to AI chat
 
-### 2. `docs/ARCHITECTURE.md` — System Architecture
-- Route structure: `/` (LandingPage) -> `/os` (Desktop)
-- Core flow: `App.tsx` -> `LandingPage` / `Index` -> `Desktop.tsx`
-- Desktop composition: LockScreen -> BootSequence -> Desktop (Taskbar + OSWindow + DesktopWidgets)
-- Window manager (`useWindowManager`): how windows open, focus, minimize, maximize, workspace switching
-- EventBus singleton: pub/sub for cross-app communication, list all event types
-- Authentication flow: Lovable Cloud auth, `LockScreen` sign-in/sign-up, session persistence
-- Mobile vs desktop rendering (`useDeviceClass`, `MobileLauncher`, `MobileAppView`)
+Currently, unknown commands return `"psh: command not found"` (line 365-366 of commands.ts). The user wants: if input doesn't match any known command, treat it as a natural language message to ROKCAT/Hyper.
 
-### 3. `docs/APPS.md` — Application Catalog
-For each of the 50+ apps, document:
-- **Name**, **AppType key**, **Category** (Productivity, Finance, Infrastructure, Lore, etc.)
-- **Backend integration**: which tables/edge functions it uses, or "Client-only"
-- **Status**: Fully Live, Partially Live, Simulated, or Cloud-Persisted (via `useCloudStorage`)
+**Change**: In `commands.ts`, replace the `default` case to return a new sentinel value `'ai-chat'`. In `TerminalApp.tsx`, handle `'ai-chat'` similar to `'ai-ask'` but without requiring the `ask` prefix. The system prompt should note this is conversational chat from the terminal.
 
-Organized into sections:
-- **Fully Live** (14 apps): HypersphereApp, PrimeChatApp, PrimeCalendarApp, PrimeVaultApp, PrimeWalletApp, PrimeBetsApp, PrimeSignalsApp, FilesApp, PrimeBookingApp, BotLabApp, AdminConsoleApp, AppForgeApp/MiniAppsApp, SettingsApp, PrimeSocialApp, PrimeMailApp, PrimeBoardApp
-- **Cloud-Persisted** (via useCloudStorage): PrimeCanvasApp, TextEditorApp, PrimeGridApp, PrimeJournalApp
-- **Simulated/Lore** (18 apps): PrimeNetApp, EnergyMonitorApp, DataCenterApp, Q3InferenceApp, FoldMemApp, etc.
+## Issue 3: ROKCAT opens first + Autonomous Mode
 
-### 4. `docs/BACKEND.md` — Backend & Database Reference
-- **Database tables**: All 30+ tables with columns, RLS policy summary, and which app uses them
-- **Edge functions**: All 16 functions with purpose, auth requirements, request/response format
-  - `hyper-chat`: AI chat with streaming, memory persistence
-  - `ai-social`: AI post generation for PrimeSocial
-  - `prime-bank`: Token economy (mint, transfer, debit)
-  - `market-data`: Stock/crypto price lookup via Polygon API
-  - `sports-odds`: Sports betting odds via The Odds API
-  - `bot-api` / `bot-runner` / `agent-runtime`: Bot lifecycle and autonomous agent execution
-  - `admin-actions`: Role management and admin operations
-  - `mini-app-gen`: AI-powered mini-app code generation
-  - `ai-key-manager`: User API key CRUD
-  - `elevenlabs-tts`: Text-to-speech via ElevenLabs
-  - `system-analytics`: Real-time table counts and activity aggregation
-  - `web-proxy`: CORS proxy for PrimeBrowser
-  - `cron-dispatcher`: Scheduled task execution
-- **Secrets**: Which secrets are configured and what they power
-- **Storage buckets**: `user-files` bucket for FilesApp
+**Boot change**: After boot, open ROKCAT instead of terminal (or open both — ROKCAT as primary).
 
-### 5. `docs/HOOKS.md` — Custom Hooks Reference
-Document each hook in `src/hooks/`:
-- `useWindowManager` — Window CRUD, focus, workspace management
-- `useEventBus` — Cross-app event pub/sub (list all event types)
-- `useCloudStorage` — localStorage + database sync for app state persistence
-- `useActivityTracker` — Logs user actions to `user_activity` table
-- `useNotifications` — Toast notification system
-- `useCalendarReminders` — Polls upcoming events, fires alerts
-- `useGlobalShortcuts` — Keyboard shortcuts (Ctrl+K search, etc.)
-- `useIdleTimeout` — Auto-lock after inactivity
-- `useVoiceControl` — Voice command recognition
-- `useSystemPulse` — Simulated system metrics
-- `useDeviceClass` — Mobile/tablet/desktop detection
-- `useIntranetPages` — PrimeBrowser intranet content
+**Autonomous mode**: Add a toggle button in ROKCAT's UI that enables a self-driving loop:
+1. When enabled, ROKCAT sends itself a prompt every 10-15 seconds asking "What should I do next?"
+2. The AI responds with actions (open apps, navigate, analyze) + commentary
+3. Actions execute via the existing action tag system
+4. The loop continues until the user disables it
+5. The AI is given full OS context (open windows, current workspace, recent activity) so it can make meaningful decisions
 
-### 6. `docs/TERMINAL.md` — Terminal & Command Reference
-- Available commands from `terminal/commands.ts`
-- Pipe system from `terminal/pipes.ts`
-- Terminal modes from `terminal/modes.ts`
-- Widget commands from `terminal/widgetCommands.ts`
+## Plan
 
-### 7. `docs/SECURITY.md` — Security & RLS Overview
-- All tables have RLS enabled with `auth.uid() = user_id`
-- Public-read tables: `profiles`, `bet_markets`, `forge_listings`
-- Edge function auth pattern: Authorization header -> `getUser()` -> scoped queries
-- API key storage note (plaintext in `encrypted_key` column)
-- Service role key usage: only in edge functions, never client-side
+### 1. Terminal chat fallback (`commands.ts` + `TerminalApp.tsx`)
+- In `processCommand` default case: return `'ai-chat'` instead of the "command not found" error
+- In `pipes.ts`: handle `'ai-chat'` like `'ai-ask'` — return it as `enterMode`
+- In `TerminalApp.tsx` `handleSubmit`: when `enterMode` starts with neither `ask` nor a known mode command, treat the entire input as an AI chat message with a conversational system prompt
 
-## Update Existing File
+### 2. ROKCAT as default boot app (`Desktop.tsx`)
+- Change `handleBootComplete` to open ROKCAT instead of (or alongside) terminal
+- `setTimeout(() => openWindow('rokcat', 'ROKCAT'), 300)`
 
-### `README.md` (root)
-- Add a "Documentation" section linking to `docs/README.md`
-- Keep existing content but add links to the new docs
+### 3. Autonomous mode (`RokCatApp.tsx`)
+- Add state: `autonomousMode: boolean`, `autonomousInterval: ref`
+- Add a toggle button (e.g., a "brain" or "play" icon) in the top-right control bar
+- When enabled, start an interval (12-15s) that:
+  - Builds a context prompt with: open windows, current workspace, recent messages, system state
+  - Sends it to the AI with a system prompt like: "You are in autonomous mode. Decide what to do next on the user's desktop. Open apps, check data, navigate, analyze. Be proactive and creative. Use action tags."
+  - The response streams in like a normal message, action tags execute
+  - After response completes, schedule the next iteration
+- Visual indicator: pulsing border or badge showing "AUTONOMOUS" when active
+- User can type at any time to interrupt/guide ROKCAT — autonomous loop pauses during user interaction, resumes after response
 
-## Technical Notes
-- All docs are pure Markdown, no code changes needed
-- Total: 7 new files + 1 updated file
-- Estimated ~3,000 lines of documentation covering the full system
+### Files changed
+1. `src/components/os/terminal/commands.ts` — default case returns `'ai-chat'`
+2. `src/components/os/terminal/pipes.ts` — handle `'ai-chat'` return
+3. `src/components/os/TerminalApp.tsx` — handle chat fallback in `handleSubmit`
+4. `src/components/os/Desktop.tsx` — boot opens ROKCAT
+5. `src/components/os/RokCatApp.tsx` — autonomous mode toggle + loop
 
