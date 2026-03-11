@@ -1,7 +1,7 @@
 import { renderMarkdown } from '@/lib/renderMarkdown';
 import { Progress } from '@/components/ui/progress';
 import { Button } from '@/components/ui/button';
-import { Video } from 'lucide-react';
+import { Video, Share2 } from 'lucide-react';
 
 const IMAGE_TAG_RE = /\[IMAGE:((?:https?:\/\/|data:)[^\]]+)\]/g;
 const VIDEO_TAG_RE = /\[VIDEO:((?:https?:\/\/|data:)[^\]]+)\]/g;
@@ -10,13 +10,14 @@ const PROGRESS_TAG_RE = /\[PROGRESS:(\d+)\]/g;
 interface Props {
   text: string;
   onAnimateImage?: (imageUrl: string) => void;
+  onShareToSocial?: (mediaUrl: string, mediaType: 'image' | 'video') => void;
 }
 
 /**
  * Renders ROKCAT message text with inline images, videos, and progress bars.
  * Detects [IMAGE:url], [VIDEO:url], and [PROGRESS:XX] tags.
  */
-export default function RokCatMediaRenderer({ text, onAnimateImage }: Props) {
+export default function RokCatMediaRenderer({ text, onAnimateImage, onShareToSocial }: Props) {
   const hasMedia = IMAGE_TAG_RE.test(text) || VIDEO_TAG_RE.test(text) || PROGRESS_TAG_RE.test(text);
   IMAGE_TAG_RE.lastIndex = 0;
   VIDEO_TAG_RE.lastIndex = 0;
@@ -71,17 +72,30 @@ export default function RokCatMediaRenderer({ text, onAnimateImage }: Props) {
                   loading="lazy"
                 />
               </a>
-              {onAnimateImage && (
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="mt-1 h-7 text-xs text-[#00e5ff]/70 hover:text-[#00e5ff] hover:bg-[#00e5ff]/10"
-                  onClick={() => onAnimateImage(seg.content)}
-                >
-                  <Video className="h-3 w-3 mr-1" />
-                  Animate
-                </Button>
-              )}
+              <div className="flex items-center gap-1 mt-1">
+                {onAnimateImage && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-7 text-xs text-[#00e5ff]/70 hover:text-[#00e5ff] hover:bg-[#00e5ff]/10"
+                    onClick={() => onAnimateImage(seg.content)}
+                  >
+                    <Video className="h-3 w-3 mr-1" />
+                    Animate
+                  </Button>
+                )}
+                {onShareToSocial && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-7 text-xs text-[#00e5ff]/70 hover:text-[#00e5ff] hover:bg-[#00e5ff]/10"
+                    onClick={() => onShareToSocial(seg.content, 'image')}
+                  >
+                    <Share2 className="h-3 w-3 mr-1" />
+                    Share
+                  </Button>
+                )}
+              </div>
             </div>
           );
         }
@@ -94,6 +108,17 @@ export default function RokCatMediaRenderer({ text, onAnimateImage }: Props) {
                 className="max-w-full max-h-48 rounded border border-[#00e5ff]/20"
                 preload="metadata"
               />
+              {onShareToSocial && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="mt-1 h-7 text-xs text-[#00e5ff]/70 hover:text-[#00e5ff] hover:bg-[#00e5ff]/10"
+                  onClick={() => onShareToSocial(seg.content, 'video')}
+                >
+                  <Share2 className="h-3 w-3 mr-1" />
+                  Share
+                </Button>
+              )}
             </div>
           );
         }

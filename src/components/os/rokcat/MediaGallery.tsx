@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Button } from '@/components/ui/button';
-import { Trash2, Video, Image, Download, X } from 'lucide-react';
+import { Trash2, Video, Image, Download, X, Share2 } from 'lucide-react';
 
 interface MediaItem {
   id: string;
