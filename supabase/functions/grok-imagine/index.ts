@@ -56,7 +56,7 @@ async function getUserId(authHeader: string): Promise<string | null> {
   }
 }
 
-// ── Image Generation via xAI Grok ──
+// ── Image Generation ──
 async function generateImage(apiKey: string, prompt: string, n: number = 1): Promise<Response> {
   const model = "grok-imagine-image";
   console.log(`[grok-imagine] IMAGE request — model: ${model}, n: ${n}, prompt length: ${prompt.length}`);
@@ -67,12 +67,7 @@ async function generateImage(apiKey: string, prompt: string, n: number = 1): Pro
       Authorization: `Bearer ${apiKey}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({
-      model,
-      prompt,
-      n: Math.min(n, 4),
-      response_format: "url",
-    }),
+    body: JSON.stringify({ model, prompt, n: Math.min(n, 4), response_format: "url" }),
   });
 
   if (!resp.ok) {
@@ -93,14 +88,14 @@ async function generateImage(apiKey: string, prompt: string, n: number = 1): Pro
   });
 }
 
-// ── Video Generation via xAI Grok (async with polling) ──
-async function generateVideo(apiKey: string, prompt: string, duration?: number, imageUrl?: string): Promise<Response> {
+// ── Video Submit (returns requestId immediately) ──
+async function submitVideo(apiKey: string, prompt: string, duration?: number, imageUrl?: string): Promise<Response> {
   const model = "grok-imagine-video";
   const body: any = { model, prompt };
   if (duration) body.duration = duration;
   if (imageUrl) body.image_url = imageUrl;
 
-  console.log(`[grok-imagine] VIDEO request — model: ${model}, prompt length: ${prompt.length}, duration: ${duration || "default"}`);
+  console.log(`[grok-imagine] VIDEO SUBMIT — model: ${model}, prompt length: ${prompt.length}, duration: ${duration || "default"}`);
 
   const submitResp = await fetch("https://api.x.ai/v1/videos/generations", {
     method: "POST",
@@ -111,18 +106,29 @@ async function generateVideo(apiKey: string, prompt: string, duration?: number, 
     body: JSON.stringify(body),
   });
 
+  const rawBody = await submitResp.text();
+  console.log(`[grok-imagine] VIDEO SUBMIT response — status: ${submitResp.status}, body: ${rawBody}`);
+
   if (!submitResp.ok) {
-    const errText = await submitResp.text();
-    console.error("xAI video submit error:", submitResp.status, errText);
-    return new Response(JSON.stringify({ error: `xAI video generation failed (${submitResp.status})` }), {
+    return new Response(JSON.stringify({ error: `xAI video submit failed (${submitResp.status})`, details: rawBody }), {
       status: submitResp.status,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
 
-  const submitData = await submitResp.json();
+  let submitData: any;
+  try {
+    submitData = JSON.parse(rawBody);
+  } catch {
+    return new Response(JSON.stringify({ error: "Failed to parse xAI video submit response", details: rawBody }), {
+      status: 500,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
 
+  // If xAI returned the video URL immediately
   if (submitData.data?.[0]?.url) {
+    console.log(`[grok-imagine] VIDEO ready immediately`);
     return new Response(JSON.stringify({ type: "video", url: submitData.data[0].url, status: "done" }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
@@ -130,40 +136,66 @@ async function generateVideo(apiKey: string, prompt: string, duration?: number, 
 
   const requestId = submitData.id || submitData.request_id;
   if (!requestId) {
-    return new Response(JSON.stringify({ error: "No request ID returned from video generation" }), {
+    console.error(`[grok-imagine] VIDEO SUBMIT — no requestId in response: ${rawBody}`);
+    return new Response(JSON.stringify({ error: "No request ID returned from video generation", details: rawBody }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
 
-  let delay = 3000;
-  const maxAttempts = 20;
-  for (let i = 0; i < maxAttempts; i++) {
-    await new Promise((r) => setTimeout(r, delay));
-    delay = Math.min(delay * 1.3, 10000);
+  console.log(`[grok-imagine] VIDEO SUBMIT — requestId: ${requestId}, returning to client for polling`);
+  return new Response(JSON.stringify({ type: "video", requestId, status: "pending" }), {
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+}
 
-    const pollResp = await fetch(`https://api.x.ai/v1/videos/${requestId}`, {
-      headers: { Authorization: `Bearer ${apiKey}` },
+// ── Video Poll (single status check) ──
+async function pollVideo(apiKey: string, requestId: string): Promise<Response> {
+  console.log(`[grok-imagine] VIDEO POLL — requestId: ${requestId}`);
+
+  const pollResp = await fetch(`https://api.x.ai/v1/videos/${requestId}`, {
+    headers: { Authorization: `Bearer ${apiKey}` },
+  });
+
+  const rawBody = await pollResp.text();
+  console.log(`[grok-imagine] VIDEO POLL response — status: ${pollResp.status}, body: ${rawBody}`);
+
+  if (!pollResp.ok) {
+    return new Response(JSON.stringify({ status: "error", error: `Poll failed (${pollResp.status})`, details: rawBody }), {
+      status: pollResp.status,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
-    if (!pollResp.ok) continue;
-
-    const pollData = await pollResp.json();
-    if (pollData.status === "completed" || pollData.status === "done") {
-      const videoUrl = pollData.data?.[0]?.url || pollData.url || pollData.video_url;
-      return new Response(JSON.stringify({ type: "video", url: videoUrl, status: "done" }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-    if (pollData.status === "failed" || pollData.status === "error") {
-      return new Response(JSON.stringify({ error: "Video generation failed", details: pollData }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
   }
 
-  return new Response(JSON.stringify({ error: "Video generation timed out after ~2 minutes" }), {
-    status: 504,
+  let pollData: any;
+  try {
+    pollData = JSON.parse(rawBody);
+  } catch {
+    return new Response(JSON.stringify({ status: "error", error: "Failed to parse poll response", details: rawBody }), {
+      status: 500,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+
+  if (pollData.status === "completed" || pollData.status === "done") {
+    const videoUrl = pollData.data?.[0]?.url || pollData.url || pollData.video_url;
+    console.log(`[grok-imagine] VIDEO POLL — completed, url: ${videoUrl}`);
+    return new Response(JSON.stringify({ status: "done", url: videoUrl }), {
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+
+  if (pollData.status === "failed" || pollData.status === "error") {
+    console.error(`[grok-imagine] VIDEO POLL — failed: ${rawBody}`);
+    return new Response(JSON.stringify({ status: "failed", error: "Video generation failed", details: pollData }), {
+      status: 500,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+
+  // Still processing
+  console.log(`[grok-imagine] VIDEO POLL — still pending (status: ${pollData.status})`);
+  return new Response(JSON.stringify({ status: "pending" }), {
     headers: { ...corsHeaders, "Content-Type": "application/json" },
   });
 }
@@ -190,7 +222,18 @@ serve(async (req) => {
       });
     }
 
-    const { type, prompt, n, duration, image_url } = await req.json();
+    const { type, prompt, n, duration, image_url, requestId } = await req.json();
+
+    // Video poll route
+    if (type === "video-poll") {
+      if (!requestId) {
+        return new Response(JSON.stringify({ error: "requestId is required for video-poll" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      return pollVideo(apiKey, requestId);
+    }
 
     if (!prompt) {
       return new Response(JSON.stringify({ error: "Prompt is required" }), {
@@ -200,7 +243,7 @@ serve(async (req) => {
     }
 
     if (type === "video") {
-      return generateVideo(apiKey, prompt, duration, image_url);
+      return submitVideo(apiKey, prompt, duration, image_url);
     }
 
     return generateImage(apiKey, prompt, n || 1);
