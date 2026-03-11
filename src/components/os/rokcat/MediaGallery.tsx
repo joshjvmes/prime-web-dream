@@ -18,7 +18,7 @@ interface Props {
   onShareToSocial?: (mediaUrl: string, mediaType: 'image' | 'video') => void;
 }
 
-export default function MediaGallery({ onClose, onAnimateImage }: Props) {
+export default function MediaGallery({ onClose, onAnimateImage, onShareToSocial }: Props) {
   const [items, setItems] = useState<MediaItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<'all' | 'image' | 'video'>('all');
