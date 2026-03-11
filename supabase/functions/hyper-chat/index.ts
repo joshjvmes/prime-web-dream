@@ -712,12 +712,11 @@ async function executeFinancialTool(fnName: string, args: Record<string, unknown
   }
 
   if (fnName === "sell_shares") {
+    if (!userId) return { data: {}, reply: "⚠️ Authentication required." };
     const listing = await findListing(String(args.app_name || ""));
     if (!listing) return { data: {}, reply: `⚠️ Could not find app "${args.app_name}" on the Forge marketplace.` };
     const db = getServiceDb();
-    const { data: { user } } = await db.auth.getUser(authHeader.replace("Bearer ", ""));
-    if (!user) return { data: {}, reply: "⚠️ Auth error." };
-    const { data: holding } = await db.from("app_shares").select("*").eq("user_id", user.id).eq("listing_id", listing.id).maybeSingle();
+    const { data: holding } = await db.from("app_shares").select("*").eq("user_id", userId).eq("listing_id", listing.id).maybeSingle();
     if (!holding || holding.shares < Number(args.shares)) return { data: {}, reply: `⚠️ You don't have enough shares. You hold ${holding?.shares || 0}.` };
     const proceeds = Number(args.shares) * Number(listing.share_price);
     const newShares = holding.shares - Number(args.shares);
