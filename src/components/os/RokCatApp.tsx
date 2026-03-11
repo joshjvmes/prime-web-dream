@@ -297,6 +297,15 @@ ${APP_ACTION_PROMPT}`;
     }
   }, []);
 
+  // Save generated media to gallery
+  const saveMedia = useCallback(async (mediaType: 'image' | 'video', url: string, prompt: string) => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user?.id) return;
+      await supabase.from('generated_media').insert({ user_id: session.user.id, media_type: mediaType, url, prompt });
+    } catch {}
+  }, []);
+
   // Handle Grok Imagine (image/video generation)
   const handleImagine = useCallback(async (prompt: string, type: 'image' | 'video', imageUrl?: string) => {
     if (!prompt || loading) return;
