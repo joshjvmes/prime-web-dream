@@ -915,7 +915,7 @@ serve(async (req) => {
     ];
 
     // Phase 1: Non-streaming call with tools
-    // For Grok 4.20 models, inject xAI built-in tools (web_search, x_search)
+    // For Grok 4.20 models, inject xAI built-in tools based on client toggles
     const phase1Tools = [...TOOLS];
     if (userId) {
       try {
@@ -923,8 +923,11 @@ serve(async (req) => {
         if (prefData?.value) {
           const pref = typeof prefData.value === "string" ? JSON.parse(prefData.value) : prefData.value;
           if (pref.provider === "xai" && pref.model?.startsWith("grok-4.20")) {
-            phase1Tools.push({ type: "web_search" } as any);
-            phase1Tools.push({ type: "x_search" } as any);
+            // Respect client-side toggles (default to enabled)
+            const webOn = searchToggles?.web_search !== false;
+            const xOn = searchToggles?.x_search !== false;
+            if (webOn) phase1Tools.push({ type: "web_search" } as any);
+            if (xOn) phase1Tools.push({ type: "x_search" } as any);
           }
         }
       } catch { /* ignore */ }
