@@ -397,6 +397,13 @@ ${APP_ACTION_PROMPT}`;
 
           try {
             const parsed = JSON.parse(jsonStr);
+            // Client-side tool actions from tool loop
+            if (parsed.clientActions) {
+              for (const action of parsed.clientActions) {
+                processClientAction(action);
+              }
+              continue;
+            }
             // Check for search status events
             if (parsed.searchStatus) {
               setSearchStatus(parsed.searchStatus as 'web' | 'x');
