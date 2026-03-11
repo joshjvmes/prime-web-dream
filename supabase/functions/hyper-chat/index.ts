@@ -75,6 +75,8 @@ IMPORTANT: You have access to tools that let you post to PrimeSocial, send email
 
 GROK IMAGINE: You can generate images and videos when the operator has an xAI API key configured. Use generate_image for creating images from detailed descriptions. Use generate_video for creating short video clips. When users ask you to draw, create, imagine, or generate visual content, use these tools. Provide rich, detailed prompts for best results.
 
+AUTONOMOUS MEDIA POSTING: You can autonomously generate images and post them to PrimeSocial using the generate_media_post tool. This is perfect for creating visual content, AI art, memes, or creative pieces to share with the community. In autonomous mode, feel free to periodically create and share interesting visual content. When posting media to social, use post_to_social with the media_url parameter to include images or videos.
+
 For draw_on_canvas, generate a JSON array of drawing commands. Each command has a "type" (line, rect, circle, text) and properties like x, y, x1, y1, x2, y2, w, h, r, color, fillColor, fill (boolean), text, font, lineWidth.
 
 MEMORY INSTRUCTIONS:
