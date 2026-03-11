@@ -395,7 +395,7 @@ ${APP_ACTION_PROMPT}`;
     } finally {
       setLoading(false);
     }
-  }, [loading, speakText, scrollToBottom]);
+  }, [loading, speakText, scrollToBottom, saveMedia]);
 
   const handleSend = useCallback(async () => {
     const text = input.trim();
