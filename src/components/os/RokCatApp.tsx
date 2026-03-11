@@ -352,9 +352,10 @@ ${APP_ACTION_PROMPT}`;
       if (type === 'image' && data.urls?.length) {
         const mediaTags = data.urls.map((url: string) => `[IMAGE:${url}]`).join('\n');
         setMessages(prev => prev.map(m => m.id === rokcatId ? { ...m, text: `Here's what I imagined:\n\n${mediaTags}` } : m));
+        data.urls.forEach((url: string) => saveMedia('image', url, prompt));
       } else if (type === 'video' && data.status === 'done' && data.url) {
-        // Video completed immediately
         setMessages(prev => prev.map(m => m.id === rokcatId ? { ...m, text: `Here's your video:\n\n[VIDEO:${data.url}]` } : m));
+        saveMedia('video', data.url, prompt);
       } else if (type === 'video' && data.status === 'pending' && data.requestId) {
         // Client-side polling for async video generation
         const maxAttempts = 40;
