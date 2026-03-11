@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { ArrowLeft, ArrowRight, RotateCw, Star, Code2, Plus, X, Globe, Shield, Loader2, Clock, Trash2 } from 'lucide-react';
+import { eventBus } from '@/hooks/useEventBus';
 import { Progress } from '@/components/ui/progress';
 import { supabase } from '@/integrations/supabase/client';
 import { useCloudStorage } from '@/hooks/useCloudStorage';
@@ -112,6 +113,7 @@ export default function PrimeBrowserApp() {
   const [showSource, setShowSource] = useState(false);
   const [urlInput, setUrlInput] = useState('prime://home');
   const [showHistory, setShowHistory] = useState(false);
+  const navigateRef = useRef<((url: string) => void) | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
   // Cloud-persisted bookmarks & history
@@ -249,6 +251,19 @@ export default function PrimeBrowserApp() {
       }, 700);
     }
   }, [activeTabId, fetchExternal, addHistoryEntry]);
+
+  // Keep ref updated for EventBus
+  navigateRef.current = navigate;
+
+  // ROKCAT navigate listener
+  useEffect(() => {
+    const handler = (payload: any) => {
+      if (payload?.app !== 'browser' || !payload?.context) return;
+      navigateRef.current?.(payload.context);
+    };
+    eventBus.on('app.navigate', handler);
+    return () => eventBus.off('app.navigate', handler);
+  }, []);
 
   const historyNav = useCallback((dir: -1 | 1) => {
     const newIdx = activeTab.historyIndex + dir;

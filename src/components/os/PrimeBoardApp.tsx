@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Plus, Clock, Cpu, Loader2 } from 'lucide-react';
+import { eventBus } from '@/hooks/useEventBus';
 import { supabase } from '@/integrations/supabase/client';
 
 type Priority = 'P0' | 'P1' | 'P2';
@@ -54,6 +55,23 @@ export default function PrimeBoardApp() {
   const [userId, setUserId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const dragItem = useRef<string | null>(null);
+  const [highlightCol, setHighlightCol] = useState<Column | null>(null);
+
+  // ROKCAT navigate listener
+  useEffect(() => {
+    const handler = (payload: any) => {
+      if (payload?.app !== 'board' || !payload?.context) return;
+      const ctx = payload.context.toLowerCase();
+      const colMap: Record<string, Column> = { backlog: 'queued', queued: 'queued', 'in-progress': 'computing', computing: 'computing', done: 'complete', complete: 'complete' };
+      const col = colMap[ctx];
+      if (col) {
+        setHighlightCol(col);
+        setTimeout(() => setHighlightCol(null), 3000);
+      }
+    };
+    eventBus.on('app.navigate', handler);
+    return () => eventBus.off('app.navigate', handler);
+  }, []);
 
   // Auth
   useEffect(() => {
@@ -225,7 +243,7 @@ export default function PrimeBoardApp() {
           return (
             <div
               key={col.key}
-              className="flex-1 flex flex-col border-r border-border last:border-r-0 min-w-0"
+              className={`flex-1 flex flex-col border-r border-border last:border-r-0 min-w-0 transition-all duration-500 ${highlightCol === col.key ? 'ring-1 ring-primary/50 bg-primary/5' : ''}`}
               onDragOver={e => e.preventDefault()}
               onDrop={() => onDrop(col.key)}
             >

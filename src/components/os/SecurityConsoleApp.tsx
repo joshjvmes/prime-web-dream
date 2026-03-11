@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Shield, AlertTriangle, CheckCircle, XCircle, Scan, Wifi, Lock, Loader2, Database } from 'lucide-react';
+import { eventBus } from '@/hooks/useEventBus';
 import { supabase } from '@/integrations/supabase/client';
 
 interface ThreatEvent {
@@ -48,6 +49,22 @@ export default function SecurityConsoleApp() {
   const [events, setEvents] = useState<ThreatEvent[]>([]);
   const [threatLevel, setThreatLevel] = useState(15);
   const [scanning, setScanning] = useState(false);
+  const [activeSection, setActiveSection] = useState<'overview' | 'scan' | 'firewall' | 'audit'>('overview');
+
+  // ROKCAT navigate listener
+  const runScanRef = useRef<(() => void) | null>(null);
+  useEffect(() => {
+    const handler = (payload: any) => {
+      if (payload?.app !== 'security' || !payload?.context) return;
+      const ctx = payload.context.toLowerCase();
+      if (['overview', 'scan', 'firewall', 'audit'].includes(ctx)) {
+        setActiveSection(ctx as any);
+      }
+      if (ctx === 'scan') runScanRef.current?.();
+    };
+    eventBus.on('app.navigate', handler);
+    return () => eventBus.off('app.navigate', handler);
+  }, []);
   const [scanProgress, setScanProgress] = useState(0);
   const [scanResults, setScanResults] = useState<RlsTableStatus[] | null>(null);
   const [rules, setRules] = useState<FirewallRule[]>([
@@ -139,6 +156,7 @@ export default function SecurityConsoleApp() {
     }
     setTimeout(() => setScanning(false), 300);
   }, [scanning]);
+  runScanRef.current = runScan;
 
   const toggleRule = useCallback((id: string) => {
     setRules(prev => prev.map(r => r.id === id ? { ...r, enabled: !r.enabled } : r));

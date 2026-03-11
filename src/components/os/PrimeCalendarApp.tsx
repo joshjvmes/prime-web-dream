@@ -4,6 +4,7 @@ import {
   getDay, isSameDay, isToday, getMonth, addDays, addWeeks, isSameMonth
 } from 'date-fns';
 import { ChevronLeft, ChevronRight, Diamond, Sun, Moon, Plus } from 'lucide-react';
+import { eventBus } from '@/hooks/useEventBus';
 import { supabase } from '@/integrations/supabase/client';
 import EventModal from './calendar/EventModal';
 import {
@@ -36,6 +37,19 @@ export default function PrimeCalendarApp() {
   const [userId, setUserId] = useState<string | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [editingEvent, setEditingEvent] = useState<CalendarEvent | null>(null);
+  const [viewMode, setViewMode] = useState<'month' | 'week'>('month');
+
+  // ROKCAT navigate listener
+  useEffect(() => {
+    const handler = (payload: any) => {
+      if (payload?.app !== 'calendar' || !payload?.context) return;
+      const ctx = payload.context.toLowerCase();
+      if (ctx === 'month' || ctx === 'week') setViewMode(ctx);
+      if (ctx === 'today') { setCurrentMonth(new Date()); setSelectedDay(new Date()); }
+    };
+    eventBus.on('app.navigate', handler);
+    return () => eventBus.off('app.navigate', handler);
+  }, []);
 
   // Auth check
   useEffect(() => {

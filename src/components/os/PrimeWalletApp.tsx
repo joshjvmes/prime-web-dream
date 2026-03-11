@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Wallet, Send, ArrowLeftRight, Shield, History, Trophy, RefreshCw, Search, ShoppingBag } from 'lucide-react';
+import { eventBus } from '@/hooks/useEventBus';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { supabase } from '@/integrations/supabase/client';
 import { useCloudStorage } from '@/hooks/useCloudStorage';
@@ -42,6 +43,19 @@ const SHOP_ITEMS = [
 
 export default function PrimeWalletApp() {
   const [tab, setTab] = useState<Tab>('overview');
+
+  // ROKCAT navigate listener
+  useEffect(() => {
+    const handler = (payload: any) => {
+      if (payload?.app !== 'wallet' || !payload?.context) return;
+      const ctx = payload.context.toLowerCase() as Tab;
+      if (['overview', 'send', 'exchange', 'escrow', 'history', 'leaderboard', 'shop'].includes(ctx)) {
+        setTab(ctx);
+      }
+    };
+    eventBus.on('app.navigate', handler);
+    return () => eventBus.off('app.navigate', handler);
+  }, []);
   const [wallet, setWallet] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');

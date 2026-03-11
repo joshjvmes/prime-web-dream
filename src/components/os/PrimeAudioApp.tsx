@@ -493,6 +493,20 @@ export default function PrimeAudioApp() {
     return () => { eventBus.off('audio.control', handleAudioControl); };
   }, [playing, currentTrack, progress, startSound, stopSound, nextTrack]);
 
+  // ROKCAT navigate listener
+  useEffect(() => {
+    const handler = (payload: any) => {
+      if (payload?.app !== 'audio' || !payload?.context) return;
+      const ctx = payload.context.toLowerCase();
+      if (ctx === 'play' && !playing) { startSound(currentTrack, progress); setPlaying(true); }
+      else if (ctx === 'pause' && playing) { stopSound(); setPlaying(false); }
+      else if (ctx === 'next') nextTrack();
+      else if (ctx === 'prev') prevTrack();
+    };
+    eventBus.on('app.navigate', handler);
+    return () => eventBus.off('app.navigate', handler);
+  }, [playing, currentTrack, progress, startSound, stopSound, nextTrack, prevTrack]);
+
 
   return (
     <div className="flex h-full bg-background font-mono text-xs">
