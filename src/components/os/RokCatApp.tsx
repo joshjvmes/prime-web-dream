@@ -328,6 +328,12 @@ ${APP_ACTION_PROMPT}`;
         if (data?.searchActive) {
           setSearchStatus(data.searchActive as 'web' | 'x');
         }
+        // Process client-side actions from tool loop
+        if (data?.clientActions) {
+          for (const action of data.clientActions) {
+            processClientAction(action);
+          }
+        }
         const rawText = data?.reply || data?.text || data?.message || 'Neural link disrupted.';
         const aiText = parseAndExecuteActions(rawText);
         setMessages(prev => [...prev, { id: rokcatId, role: 'rokcat', text: aiText }]);
