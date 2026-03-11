@@ -160,7 +160,8 @@ export default function RokCatApp() {
         if (data?.searchActive) {
           setSearchStatus(data.searchActive as 'web' | 'x');
         }
-        const aiText = data?.reply || data?.text || data?.message || 'Neural link disrupted.';
+        const rawText = data?.reply || data?.text || data?.message || 'Neural link disrupted.';
+        const aiText = parseAndExecuteActions(rawText);
         setMessages(prev => [...prev, { id: rokcatId, role: 'rokcat', text: aiText }]);
         scrollToBottom();
         speakText(aiText);
