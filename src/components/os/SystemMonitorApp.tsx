@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Cpu, HardDrive, Network, Zap, Activity, Database } from 'lucide-react';
+import { eventBus } from '@/hooks/useEventBus';
 
 function ArcGauge({ value, max, label, color, icon: Icon }: { value: number; max: number; label: string; color: string; icon: React.ElementType }) {
   const pct = Math.min(value / max, 1);
