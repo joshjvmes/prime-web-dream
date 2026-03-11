@@ -38,6 +38,7 @@ export default function RokCatApp() {
   const [isMultiAgent, setIsMultiAgent] = useState(false);
   const [agentThoughts, setAgentThoughts] = useState<AgentThought[]>([]);
   const [autonomousMode, setAutonomousMode] = useState(false);
+  const [imagineMode, setImagineMode] = useState<'image' | 'video' | null>(null);
   const autonomousTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const autonomousBusyRef = useRef(false);
   const faceRef = useRef<RokCatFaceHandle>(null);
