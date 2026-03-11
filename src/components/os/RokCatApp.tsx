@@ -1,8 +1,10 @@
-import { useState, useRef, useCallback } from 'react';
-import { Send, Volume2, VolumeX, Loader2 } from 'lucide-react';
+import { useState, useRef, useCallback, useEffect } from 'react';
+import { Send, Volume2, VolumeX, Loader2, Globe, Twitter } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { supabase } from '@/integrations/supabase/client';
 import RokCatFace, { type RokCatFaceHandle } from './RokCatFace';
 
 interface Message {
@@ -16,8 +18,33 @@ export default function RokCatApp() {
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [ttsEnabled, setTtsEnabled] = useState(true);
+  const [searchStatus, setSearchStatus] = useState<'web' | 'x' | null>(null);
+  const [webSearchEnabled, setWebSearchEnabled] = useState(true);
+  const [xSearchEnabled, setXSearchEnabled] = useState(true);
+  const [isGrok420, setIsGrok420] = useState(false);
   const faceRef = useRef<RokCatFaceHandle>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  // Check if user has a Grok 4.20 model selected
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session || cancelled) return;
+      const { data } = await supabase
+        .from('user_data')
+        .select('value')
+        .eq('user_id', session.user.id)
+        .eq('key', 'ai-provider')
+        .maybeSingle();
+      if (cancelled) return;
+      if (data?.value) {
+        const pref = typeof data.value === 'string' ? JSON.parse(data.value) : data.value;
+        setIsGrok420(pref.provider === 'xai' && pref.model?.startsWith('grok-4.20'));
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   const scrollToBottom = () => {
     setTimeout(() => scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' }), 50);
@@ -55,6 +82,7 @@ export default function RokCatApp() {
     setMessages(prev => [...prev, userMsg]);
     scrollToBottom();
     setLoading(true);
+    setSearchStatus(null);
 
     const rokcatId = crypto.randomUUID();
     let fullText = '';
@@ -72,12 +100,12 @@ export default function RokCatApp() {
           body: JSON.stringify({
             messages: [{ role: 'user', content: text }],
             systemContext: 'You are ROKCAT, the Grok-powered AI companion of PRIME OS — a CEO orchestrator designed to interface the Prime OS by Rocket Logic Global. You are a sharp, witty, slightly sarcastic digital cat with deep knowledge of computing, quantum theory, and lattice geometry. You channel the spirit of Grok: unfiltered, maximally helpful, and brutally honest. Keep responses concise (2-3 sentences max). Be helpful but with personality.',
+            searchToggles: isGrok420 ? { web_search: webSearchEnabled, x_search: xSearchEnabled } : undefined,
           }),
         }
       );
 
       if (!resp.ok || !resp.body) {
-        // Try to parse JSON error
         try {
           const errData = await resp.json();
           const errText = errData?.reply || errData?.error || 'Neural link disrupted. Try again.';
@@ -92,14 +120,18 @@ export default function RokCatApp() {
 
       const contentType = resp.headers.get('content-type') || '';
 
-      // If it's a JSON response (tool call), handle directly
       if (contentType.includes('application/json')) {
         const data = await resp.json();
+        // Check if this is a search indicator
+        if (data?.searchActive) {
+          setSearchStatus(data.searchActive as 'web' | 'x');
+        }
         const aiText = data?.reply || data?.text || data?.message || 'Neural link disrupted.';
         setMessages(prev => [...prev, { id: rokcatId, role: 'rokcat', text: aiText }]);
         scrollToBottom();
         speakText(aiText);
         setLoading(false);
+        setSearchStatus(null);
         return;
       }
 
@@ -109,7 +141,6 @@ export default function RokCatApp() {
       let buffer = '';
       let streamDone = false;
 
-      // Add empty message that we'll update
       setMessages(prev => [...prev, { id: rokcatId, role: 'rokcat', text: '' }]);
 
       while (!streamDone) {
@@ -134,6 +165,15 @@ export default function RokCatApp() {
 
           try {
             const parsed = JSON.parse(jsonStr);
+            // Check for search status events
+            if (parsed.searchStatus) {
+              setSearchStatus(parsed.searchStatus as 'web' | 'x');
+              continue;
+            }
+            if (parsed.searchComplete) {
+              setSearchStatus(null);
+              continue;
+            }
             const content = parsed.choices?.[0]?.delta?.content as string | undefined;
             if (content) {
               fullText += content;
@@ -144,7 +184,6 @@ export default function RokCatApp() {
               scrollToBottom();
             }
           } catch {
-            // Incomplete JSON, put back and wait
             buffer = line + '\n' + buffer;
             break;
           }
@@ -163,9 +202,7 @@ export default function RokCatApp() {
           try {
             const parsed = JSON.parse(jsonStr);
             const content = parsed.choices?.[0]?.delta?.content as string | undefined;
-            if (content) {
-              fullText += content;
-            }
+            if (content) fullText += content;
           } catch { /* ignore */ }
         }
         if (fullText) {
@@ -188,15 +225,51 @@ export default function RokCatApp() {
       scrollToBottom();
     } finally {
       setLoading(false);
+      setSearchStatus(null);
     }
-  }, [input, loading, speakText]);
+  }, [input, loading, speakText, isGrok420, webSearchEnabled, xSearchEnabled]);
 
   return (
     <div className="flex flex-col h-full bg-[#02040a] overflow-hidden">
       {/* Face area */}
       <div className="flex-1 min-h-0 relative">
         <RokCatFace ref={faceRef} />
-        <div className="absolute top-2 right-2 z-10">
+        <div className="absolute top-2 right-2 z-10 flex items-center gap-1">
+          {/* Search toggles — only visible when Grok 4.20 is active */}
+          {isGrok420 && (
+            <>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className={`h-7 w-7 ${webSearchEnabled ? 'text-[#00e5ff] bg-[#00e5ff]/15' : 'text-[#00e5ff]/30 hover:text-[#00e5ff]/60'} hover:bg-[#00e5ff]/10`}
+                    onClick={() => setWebSearchEnabled(prev => !prev)}
+                  >
+                    <Globe size={13} />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="text-xs">
+                  {webSearchEnabled ? 'Web search ON' : 'Web search OFF'}
+                </TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className={`h-7 w-7 ${xSearchEnabled ? 'text-[#00e5ff] bg-[#00e5ff]/15' : 'text-[#00e5ff]/30 hover:text-[#00e5ff]/60'} hover:bg-[#00e5ff]/10`}
+                    onClick={() => setXSearchEnabled(prev => !prev)}
+                  >
+                    <Twitter size={13} />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="text-xs">
+                  {xSearchEnabled ? 'X search ON' : 'X search OFF'}
+                </TooltipContent>
+              </Tooltip>
+            </>
+          )}
           <Button
             variant="ghost"
             size="icon"
@@ -211,6 +284,16 @@ export default function RokCatApp() {
           </Button>
         </div>
       </div>
+
+      {/* Search status indicator */}
+      {searchStatus && (
+        <div className="flex items-center justify-center gap-2 py-1.5 bg-[#00e5ff]/5 border-t border-[#00e5ff]/15 animate-pulse">
+          {searchStatus === 'web' ? <Globe size={12} className="text-[#00e5ff]" /> : <Twitter size={12} className="text-[#00e5ff]" />}
+          <span className="text-[10px] font-mono text-[#00e5ff]/80 tracking-wider uppercase">
+            {searchStatus === 'web' ? 'Searching the web...' : 'Searching X...'}
+          </span>
+        </div>
+      )}
 
       {/* Chat transcript */}
       <div className="h-32 border-t border-[#00e5ff]/20 bg-[#02040a]/80">
