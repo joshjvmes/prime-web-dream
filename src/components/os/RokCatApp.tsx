@@ -817,7 +817,7 @@ ${APP_ACTION_PROMPT}`;
                 <span className="opacity-50">{m.role === 'user' ? '> ' : 'ROKCAT: '}</span>
                 {m.role === 'user' ? m.text : (
                   <div className="inline rokcat-md [&_p]:mb-1 [&_p]:leading-relaxed [&_pre]:bg-[#0a1929] [&_pre]:border-[#00e5ff]/20 [&_code]:text-[#00e5ff]/80 [&_h1]:text-[#00e5ff] [&_h2]:text-[#00e5ff] [&_h3]:text-[#00e5ff] [&_strong]:text-[#e2e8f0] [&_table]:text-[10px]">
-                    <RokCatMediaRenderer text={m.text} onAnimateImage={(imageUrl) => handleImagine('Animate this image into a short video', 'video', imageUrl)} />
+                    <RokCatMediaRenderer text={m.text} onAnimateImage={(imageUrl) => handleImagine('Animate this image into a short video', 'video', imageUrl)} onShareToSocial={shareToSocial} />
                   </div>
                 )}
               </div>
