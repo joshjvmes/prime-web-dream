@@ -78,7 +78,7 @@ async function fetchSportsResult(market: BetMarket): Promise<"yes" | "no" | null
  * Replicates the payout logic from prime-bank bet-resolve.
  */
 async function distributePayouts(
-  db: ReturnType<typeof createClient>,
+  db: any,
   market: BetMarket,
   outcome: "yes" | "no"
 ): Promise<number> {
