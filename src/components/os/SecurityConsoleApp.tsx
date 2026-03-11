@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Shield, AlertTriangle, CheckCircle, XCircle, Scan, Wifi, Lock, Loader2, Database } from 'lucide-react';
+import { eventBus } from '@/hooks/useEventBus';
 import { supabase } from '@/integrations/supabase/client';
 
 interface ThreatEvent {
