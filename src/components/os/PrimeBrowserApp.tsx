@@ -113,6 +113,7 @@ export default function PrimeBrowserApp() {
   const [showSource, setShowSource] = useState(false);
   const [urlInput, setUrlInput] = useState('prime://home');
   const [showHistory, setShowHistory] = useState(false);
+  const navigateRef = useRef<((url: string) => void) | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
   // Cloud-persisted bookmarks & history
