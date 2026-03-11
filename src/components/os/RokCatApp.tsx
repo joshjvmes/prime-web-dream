@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
-import { Send, Volume2, VolumeX, Loader2, Globe, Twitter, Image, Video, Brain, Square } from 'lucide-react';
+import { Send, Volume2, VolumeX, Loader2, Globe, Twitter, Image, Video, Brain, Square, GalleryHorizontalEnd } from 'lucide-react';
 import { renderMarkdown } from '@/lib/renderMarkdown';
 import { parseAndExecuteActions, APP_ACTION_PROMPT } from './rokcat/actionParser';
 import { Button } from '@/components/ui/button';
@@ -11,6 +11,7 @@ import { eventBus } from '@/hooks/useEventBus';
 import RokCatFace, { type RokCatFaceHandle } from './RokCatFace';
 import RokCatThinkingPanel from './rokcat/ThinkingPanel';
 import RokCatMediaRenderer from './rokcat/MediaRenderer';
+import MediaGallery from './rokcat/MediaGallery';
 
 interface Message {
   id: string;
@@ -39,6 +40,7 @@ export default function RokCatApp() {
   const [agentThoughts, setAgentThoughts] = useState<AgentThought[]>([]);
   const [autonomousMode, setAutonomousMode] = useState(false);
   const [imagineMode, setImagineMode] = useState<'image' | 'video' | null>(null);
+  const [showGallery, setShowGallery] = useState(false);
   const autonomousTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const autonomousBusyRef = useRef(false);
   const faceRef = useRef<RokCatFaceHandle>(null);
@@ -295,6 +297,15 @@ ${APP_ACTION_PROMPT}`;
     }
   }, []);
 
+  // Save generated media to gallery
+  const saveMedia = useCallback(async (mediaType: 'image' | 'video', url: string, prompt: string) => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user?.id) return;
+      await supabase.from('generated_media').insert({ user_id: session.user.id, media_type: mediaType, url, prompt });
+    } catch {}
+  }, []);
+
   // Handle Grok Imagine (image/video generation)
   const handleImagine = useCallback(async (prompt: string, type: 'image' | 'video', imageUrl?: string) => {
     if (!prompt || loading) return;
@@ -341,9 +352,10 @@ ${APP_ACTION_PROMPT}`;
       if (type === 'image' && data.urls?.length) {
         const mediaTags = data.urls.map((url: string) => `[IMAGE:${url}]`).join('\n');
         setMessages(prev => prev.map(m => m.id === rokcatId ? { ...m, text: `Here's what I imagined:\n\n${mediaTags}` } : m));
+        data.urls.forEach((url: string) => saveMedia('image', url, prompt));
       } else if (type === 'video' && data.status === 'done' && data.url) {
-        // Video completed immediately
         setMessages(prev => prev.map(m => m.id === rokcatId ? { ...m, text: `Here's your video:\n\n[VIDEO:${data.url}]` } : m));
+        saveMedia('video', data.url, prompt);
       } else if (type === 'video' && data.status === 'pending' && data.requestId) {
         // Client-side polling for async video generation
         const maxAttempts = 40;
@@ -358,6 +370,7 @@ ${APP_ACTION_PROMPT}`;
 
             if (pollData.status === 'done' && pollData.url) {
               setMessages(prev => prev.map(m => m.id === rokcatId ? { ...m, text: `Here's your video:\n\n[VIDEO:${pollData.url}]` } : m));
+              saveMedia('video', pollData.url, prompt);
               scrollToBottom();
               return;
             }
@@ -382,7 +395,7 @@ ${APP_ACTION_PROMPT}`;
     } finally {
       setLoading(false);
     }
-  }, [loading, speakText, scrollToBottom]);
+  }, [loading, speakText, scrollToBottom, saveMedia]);
 
   const handleSend = useCallback(async () => {
     const text = input.trim();
@@ -667,6 +680,21 @@ ${APP_ACTION_PROMPT}`;
                   {imagineMode === 'video' ? 'Cancel Video Mode' : 'Grok Imagine (Video)'}
                 </TooltipContent>
               </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className={`h-7 w-7 ${showGallery ? 'text-[#00e5ff] bg-[#00e5ff]/20' : 'text-[#00e5ff]/60 hover:text-[#00e5ff]'} hover:bg-[#00e5ff]/10`}
+                    onClick={() => setShowGallery(prev => !prev)}
+                  >
+                    <GalleryHorizontalEnd size={13} />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="text-xs">
+                  {showGallery ? 'Close Gallery' : 'Media Gallery'}
+                </TooltipContent>
+              </Tooltip>
             </>
           )}
           {/* Search toggles — only visible when Grok 4.20 is active */}
@@ -745,7 +773,12 @@ ${APP_ACTION_PROMPT}`;
         </div>
       )}
 
-      {/* Chat transcript */}
+      {/* Gallery or Chat transcript */}
+      {showGallery ? (
+        <div className="h-48 border-t border-[#00e5ff]/20">
+          <MediaGallery onClose={() => setShowGallery(false)} onAnimateImage={(imageUrl) => { setShowGallery(false); handleImagine('Animate this image into a short video', 'video', imageUrl); }} />
+        </div>
+      ) : (
       <div className="h-32 border-t border-[#00e5ff]/20 bg-[#02040a]/80">
         <ScrollArea className="h-full" ref={scrollRef as any}>
           <div className="p-2 space-y-1.5">
@@ -773,6 +806,7 @@ ${APP_ACTION_PROMPT}`;
           </div>
         </ScrollArea>
       </div>
+      )}
 
       {/* Input */}
       <div className="flex items-center gap-2 p-2 border-t border-[#00e5ff]/20 bg-[#040f1e]/60">

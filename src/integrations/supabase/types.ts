@@ -849,6 +849,33 @@ export type Database = {
         }
         Relationships: []
       }
+      generated_media: {
+        Row: {
+          created_at: string
+          id: string
+          media_type: string
+          prompt: string
+          url: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          media_type?: string
+          prompt?: string
+          url: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          media_type?: string
+          prompt?: string
+          url?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       github_events: {
         Row: {
           action: string | null
