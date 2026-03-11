@@ -787,9 +787,14 @@ async function executeExtendedTool(fnName: string, args: Record<string, unknown>
         headers: { Authorization: authHeader, apikey: Deno.env.get("SUPABASE_ANON_KEY")! },
       });
       const data = await resp.json();
-      if (data.tickers) {
-        const lines = data.tickers.map((t: any) => `${t.symbol}: $${Number(t.price).toFixed(2)} (${t.change >= 0 ? '+' : ''}${Number(t.change).toFixed(2)}%)`);
-        return { data: { tickers: data.tickers }, reply: `📊 **Market Data**\n${lines.join('\n')}` };
+      const tickers = data.tickers || data.data;
+      if (tickers && Array.isArray(tickers)) {
+        const lines = tickers.filter((t: any) => !t.error).map((t: any) => {
+          const price = t.price ?? t.c ?? 0;
+          const change = t.change ?? (t.c && t.o ? ((t.c - t.o) / t.o * 100) : 0);
+          return `${t.symbol}: $${Number(price).toFixed(2)} (${change >= 0 ? '+' : ''}${Number(change).toFixed(2)}%)`;
+        });
+        return { data: { tickers }, reply: `📊 **Market Data**\n${lines.join('\n')}` };
       }
       return { data: {}, reply: "⚠️ Could not fetch market data." };
     } catch (e) { return { data: {}, reply: `⚠️ Market data error: ${e}` }; }
@@ -802,11 +807,13 @@ async function executeExtendedTool(fnName: string, args: Record<string, unknown>
       const resp = await fetch(`${Deno.env.get("SUPABASE_URL")!}/functions/v1/market-data?action=get-chart&ticker=${ticker}&from=${from}&to=${to}`, {
         headers: { Authorization: authHeader, apikey: Deno.env.get("SUPABASE_ANON_KEY")! },
       });
-      const data = await resp.json();
-      if (data.results?.length > 0) {
-        const prices = data.results.map((r: any) => r.c);
+      const rawData = await resp.json();
+      const chartData = rawData.data || rawData;
+      const results = chartData.results || [];
+      if (results.length > 0) {
+        const prices = results.map((r: any) => r.c);
         const trend = prices[prices.length - 1] >= prices[0] ? '📈 Uptrend' : '📉 Downtrend';
-        return { data: { chart: data.results }, reply: `📊 **${ticker}** (${days}d)\nHigh: $${Math.max(...prices).toFixed(2)} | Low: $${Math.min(...prices).toFixed(2)} | ${trend}` };
+        return { data: { chart: results }, reply: `📊 **${ticker}** (${days}d)\nHigh: $${Math.max(...prices).toFixed(2)} | Low: $${Math.min(...prices).toFixed(2)} | ${trend}` };
       }
       return { data: {}, reply: `No chart data for ${ticker}.` };
     } catch (e) { return { data: {}, reply: `⚠️ Chart error: ${e}` }; }
