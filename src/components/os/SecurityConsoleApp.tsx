@@ -52,6 +52,7 @@ export default function SecurityConsoleApp() {
   const [activeSection, setActiveSection] = useState<'overview' | 'scan' | 'firewall' | 'audit'>('overview');
 
   // ROKCAT navigate listener
+  const runScanRef = useRef<(() => void) | null>(null);
   useEffect(() => {
     const handler = (payload: any) => {
       if (payload?.app !== 'security' || !payload?.context) return;
@@ -59,7 +60,7 @@ export default function SecurityConsoleApp() {
       if (['overview', 'scan', 'firewall', 'audit'].includes(ctx)) {
         setActiveSection(ctx as any);
       }
-      if (ctx === 'scan') runScan();
+      if (ctx === 'scan') runScanRef.current?.();
     };
     eventBus.on('app.navigate', handler);
     return () => eventBus.off('app.navigate', handler);
