@@ -82,7 +82,7 @@ const allApps: { app: AppType; title: string; icon: React.ReactNode; label: stri
   { app: 'settings', title: 'Settings', icon: <Settings size={18} />, label: 'Settings' },
 ];
 
-export default function Taskbar({ windows, onOpenApp, onFocusWindow, notifications = [], onDismissNotification, onSearch, onOpenAbout, onLock, onCreateBot, activeWorkspace, onSwitchWorkspace, windowCountsByWorkspace, voiceState, onToggleVoice, onToggleClipboard, isAdmin, deviceClass = 'desktop' }: TaskbarProps) {
+export default function Taskbar({ windows, onOpenApp, onFocusWindow, notifications = [], onDismissNotification, onSearch, onOpenAbout, onLock, onCreateBot, activeWorkspace, onSwitchWorkspace, windowCountsByWorkspace, voiceState, onToggleVoice, onToggleClipboard, isAdmin, deviceClass = 'desktop', user }: TaskbarProps) {
   const isTablet = deviceClass === 'tablet';
   const [menuOpen, setMenuOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
