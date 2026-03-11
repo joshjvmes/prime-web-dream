@@ -3,7 +3,6 @@ import { Search, Download, RefreshCw, Trash2, Package, Loader2, Store } from 'lu
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { supabase } from '@/integrations/supabase/client';
 import { eventBus } from '@/hooks/useEventBus';
-import { supabase } from '@/integrations/supabase/client';
 
 interface Pkg {
   name: string;
