@@ -88,13 +88,15 @@ const TOOLS = [
     type: "function",
     function: {
       name: "post_to_social",
-      description: "Post a message to the PrimeSocial feed. Use when the user asks to post, share an update, or announce something.",
+      description: "Post a message to the PrimeSocial feed. Can include media URLs (images/videos). Use when the user asks to post, share an update, announce something, or share generated media.",
       parameters: {
         type: "object",
         properties: {
-          content: { type: "string", description: "The post content text" },
+          content: { type: "string", description: "The post content text. Can include image/video URLs." },
           author: { type: "string", description: "Author name, defaults to Hyper" },
           role: { type: "string", description: "Author role, defaults to Geometric AI" },
+          media_url: { type: "string", description: "Optional media URL (image or video) to include in the post" },
+          media_type: { type: "string", enum: ["image", "video"], description: "Type of media being shared" },
         },
         required: ["content"],
         additionalProperties: false,
