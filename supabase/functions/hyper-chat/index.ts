@@ -813,7 +813,7 @@ async function executeExtendedTool(fnName: string, args: Record<string, unknown>
       if (results.length > 0) {
         const prices = results.map((r: any) => r.c);
         const trend = prices[prices.length - 1] >= prices[0] ? '📈 Uptrend' : '📉 Downtrend';
-        return { data: { chart: data.results }, reply: `📊 **${ticker}** (${days}d)\nHigh: $${Math.max(...prices).toFixed(2)} | Low: $${Math.min(...prices).toFixed(2)} | ${trend}` };
+        return { data: { chart: results }, reply: `📊 **${ticker}** (${days}d)\nHigh: $${Math.max(...prices).toFixed(2)} | Low: $${Math.min(...prices).toFixed(2)} | ${trend}` };
       }
       return { data: {}, reply: `No chart data for ${ticker}.` };
     } catch (e) { return { data: {}, reply: `⚠️ Chart error: ${e}` }; }
