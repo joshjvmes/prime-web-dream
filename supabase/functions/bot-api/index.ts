@@ -11,7 +11,7 @@ const corsHeaders = {
 async function checkRateLimit(
   botId: string,
   limit: number,
-  supabaseAdmin: ReturnType<typeof createClient>
+  supabaseAdmin: any
 ): Promise<{ allowed: boolean; used: number }> {
   const windowStart = new Date(Date.now() - 3600000).toISOString(); // 1 hour ago
 
