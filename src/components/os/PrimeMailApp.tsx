@@ -19,10 +19,26 @@ interface Email {
 export default function PrimeMailApp() {
   const [emails, setEmails] = useState<Email[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [activeFolder, setActiveFolder] = useState('inbox');
   const [loading, setLoading] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
   const [userId, setUserId] = useState<string | null>(null);
   const hasFetched = useRef(false);
+
+  // Listen for app.navigate events
+  useEffect(() => {
+    const handler = (payload: any) => {
+      if (payload?.app === 'mail' && payload?.context) {
+        const folder = payload.context.toLowerCase();
+        if (['inbox', 'sent', 'drafts'].includes(folder)) {
+          setActiveFolder(folder);
+          setSelectedId(null);
+        }
+      }
+    };
+    eventBus.on('app.navigate', handler);
+    return () => eventBus.off('app.navigate', handler);
+  }, []);
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => setUserId(data.user?.id ?? null));

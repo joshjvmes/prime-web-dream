@@ -43,6 +43,21 @@ export default function PrimeVaultApp() {
   const [showBenchmark, setShowBenchmark] = useState(false);
   const [perfData, setPerfData] = useState<{ day: number; portfolio: number; benchmark: number }[]>([]);
 
+  // Listen for app.navigate events
+  useEffect(() => {
+    const handler = (payload: any) => {
+      if (payload?.app === 'vault' && payload?.context) {
+        const ctx = payload.context.toLowerCase();
+        const tabMap: Record<string, 'overview' | 'holdings' | 'history'> = {
+          overview: 'overview', holdings: 'holdings', history: 'history', trade: 'holdings',
+        };
+        if (tabMap[ctx]) setTab(tabMap[ctx]);
+      }
+    };
+    eventBus.on('app.navigate', handler);
+    return () => eventBus.off('app.navigate', handler);
+  }, []);
+
   // Auth check
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => setUserId(data.session?.user?.id ?? null));
