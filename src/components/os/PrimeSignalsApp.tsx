@@ -52,6 +52,18 @@ export default function PrimeSignalsApp() {
   const [chartLoading, setChartLoading] = useState(false);
   const [view, setView] = useState<'signals' | 'analytics'>('signals');
 
+  // ROKCAT navigation listener
+  useEffect(() => {
+    const handler = (payload: any) => {
+      if (payload?.app === 'signals' && payload?.context) {
+        const ctx = payload.context.toLowerCase();
+        if (ctx === 'signals' || ctx === 'analytics') setView(ctx as 'signals' | 'analytics');
+      }
+    };
+    eventBus.on('app.navigate', handler);
+    return () => eventBus.off('app.navigate', handler);
+  }, []);
+
   const fetchTickers = useCallback(async () => {
     try {
       const { data, error } = await supabase.functions.invoke('market-data', {

@@ -970,9 +970,25 @@ function TopologyTetris() {
 
 // ─── Main Arcade App ───
 export default function PrimeArcadeApp() {
+  const [activeGame, setActiveGame] = useState('minesweeper');
+
+  // ROKCAT navigation listener
+  useEffect(() => {
+    const handler = (payload: any) => {
+      if (payload?.app === 'arcade' && payload?.context) {
+        const ctx = payload.context.toLowerCase();
+        if (['minesweeper', 'snake', 'pong', 'cascade', 'tetris'].includes(ctx)) {
+          setActiveGame(ctx);
+        }
+      }
+    };
+    eventBus.on('app.navigate', handler);
+    return () => eventBus.off('app.navigate', handler);
+  }, []);
+
   return (
     <div className="h-full flex flex-col bg-background/50">
-      <Tabs defaultValue="minesweeper" className="flex-1 flex flex-col">
+      <Tabs value={activeGame} onValueChange={setActiveGame} className="flex-1 flex flex-col">
         <div className="px-3 py-2 border-b border-border">
           <TabsList className="h-7 bg-muted/30">
             <TabsTrigger value="minesweeper" className="text-[10px] font-display tracking-wider uppercase h-5 px-3">

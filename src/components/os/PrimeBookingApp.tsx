@@ -51,6 +51,19 @@ export default function PrimeBookingApp() {
   const [userId, setUserId] = useState<string | null>(null);
   const [form, setForm] = useState({ resource: RESOURCES[0].name, date: format(today, 'yyyy-MM-dd'), startHour: '9', endHour: '10', purpose: '', priority: 'medium' as 'low' | 'medium' | 'high' });
 
+  // ROKCAT navigation listener
+  useEffect(() => {
+    const handler = (payload: any) => {
+      if (payload?.app === 'booking' && payload?.context) {
+        const ctx = payload.context.toLowerCase();
+        if (ctx === 'new') setShowForm(true);
+        else if (ctx === 'today') setWeekStart(startOfWeek(today, { weekStartsOn: 1 }));
+      }
+    };
+    eventBus.on('app.navigate', handler);
+    return () => eventBus.off('app.navigate', handler);
+  }, []);
+
   // Auth
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => setUserId(data.session?.user?.id ?? null));

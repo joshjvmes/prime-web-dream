@@ -80,6 +80,10 @@ Navigation contexts (use with navigate):
 - docs: "edit", "new"
 - github: "repos", "issues", "prs", "commits"
 - iot: "alerts", "lab-a", "server-room", "energy-wing", "perimeter"
+- journal: "new", "edit", "preview"
+- booking: "new", "today"
+- arcade: "minesweeper", "snake", "pong", "cascade", "tetris"
+- signals: "signals", "analytics"
 
 Examples:
 - "open my terminal" → include [ACTION:open-app:terminal]
