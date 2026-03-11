@@ -703,7 +703,7 @@ async function executeFinancialTool(fnName: string, args: Record<string, unknown
       const newAvg = ((existing.avg_cost * existing.shares) + cost) / newShares;
       await db.from("app_shares").update({ shares: newShares, avg_cost: newAvg }).eq("id", existing.id);
     } else {
-      await db.from("app_shares").insert({ user_id: user.id, listing_id: listing.id, shares: sharesToBuy, avg_cost: Number(listing.share_price) });
+      await db.from("app_shares").insert({ user_id: userId, listing_id: listing.id, shares: sharesToBuy, avg_cost: Number(listing.share_price) });
     }
     return {
       data: { app: listing.name, shares: sharesToBuy, cost, share_price: listing.share_price },
