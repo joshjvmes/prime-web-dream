@@ -1005,6 +1005,8 @@ serve(async (req) => {
     let loopMessages = [...fullMessages];
     let clientSideActions: Array<{ tool: string; data: any; reply: string }> = [];
     let toolResultSummaries: string[] = [];
+    let finalTextContent: string | null = null;
+    let usedTools = false;
 
     for (let iteration = 0; iteration < MAX_TOOL_ITERATIONS; iteration++) {
       const phaseResp = await routeAICall({
@@ -1029,6 +1031,14 @@ serve(async (req) => {
         }
         const t = await phaseResp.text();
         console.error(`AI gateway error (iteration ${iteration}):`, phaseResp.status, t);
+        // If we have tool results already, return those as fallback
+        if (toolResultSummaries.length > 0) {
+          const fallbackReply = toolResultSummaries.join('\n\n');
+          return new Response(
+            JSON.stringify({ reply: fallbackReply, clientActions: clientSideActions.length > 0 ? clientSideActions : undefined }),
+            { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
         return new Response(
           JSON.stringify({ error: "AI gateway error" }),
           { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -1038,12 +1048,14 @@ serve(async (req) => {
       const phaseData = await phaseResp.json();
       const choice = phaseData.choices?.[0];
       const toolCalls = choice?.message?.tool_calls;
-      const finishReason = choice?.finish_reason;
 
-      // No tool calls — AI wants to respond with text. Break out to streaming phase.
+      // No tool calls — AI wants to respond with text
       if (!toolCalls || toolCalls.length === 0) {
+        finalTextContent = choice?.message?.content || null;
         break;
       }
+
+      usedTools = true;
 
       // Process all tool calls in this iteration
       const assistantMsg: any = { role: "assistant", content: choice.message.content || null, tool_calls: toolCalls };
