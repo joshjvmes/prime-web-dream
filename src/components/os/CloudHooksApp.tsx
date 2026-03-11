@@ -1,10 +1,11 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Plus, Trash2, Zap, RefreshCw, Pause, BookTemplate } from 'lucide-react';
+import { Plus, Trash2, Zap, RefreshCw, Pause, BookTemplate, ChevronDown, ChevronRight, Bot, Send, Shield, TrendingUp, Briefcase, Palette, Rocket } from 'lucide-react';
 import { eventBus, EVENT_TYPES } from '@/hooks/useEventBus';
 import { supabase } from '@/integrations/supabase/client';
+import { parseAndExecuteActions } from '@/components/os/rokcat/actionParser';
 
 interface WorkflowAction {
-  type: 'open_app' | 'close_app' | 'notification' | 'copy_text' | 'lock_screen' | 'webhook';
+  type: 'open_app' | 'close_app' | 'notification' | 'copy_text' | 'lock_screen' | 'webhook' | 'ai_command' | 'emit_event';
   config: Record<string, string>;
 }
 
@@ -34,28 +35,180 @@ const ACTION_TYPES = [
   { value: 'copy_text', label: 'Copy Text' },
   { value: 'lock_screen', label: 'Lock Screen' },
   { value: 'webhook', label: 'Send Webhook' },
+  { value: 'ai_command', label: '🤖 AI Command (ROKCAT)' },
+  { value: 'emit_event', label: '⚡ Emit Event' },
 ];
 
-const TEMPLATES: Omit<WorkflowHook, 'id'>[] = [
+interface TemplateCategory {
+  name: string;
+  icon: React.ReactNode;
+  templates: (Omit<WorkflowHook, 'id'> & { description: string })[];
+}
+
+const TEMPLATE_CATEGORIES: TemplateCategory[] = [
   {
-    name: 'File Upload Notifier', trigger: 'file.uploaded',
-    condition: '', actions: [{ type: 'notification', config: { title: 'Files', message: 'New file uploaded successfully' } }], enabled: true,
+    name: 'System & Security',
+    icon: <Shield size={10} />,
+    templates: [
+      {
+        name: 'Morning System Check',
+        description: 'ROKCAT checks system health and opens the monitor on sign-in',
+        trigger: 'user.signed-in', condition: '',
+        actions: [{ type: 'ai_command', config: { command: 'Check system health, open the monitor, and give me a status report' } }],
+        enabled: true,
+      },
+      {
+        name: 'Security Alert Handler',
+        description: 'Notifies and opens Security Console on threat detection',
+        trigger: 'security.threat', condition: '',
+        actions: [
+          { type: 'notification', config: { title: '🛡️ Security Alert', message: 'Threat detected — opening Security Console' } },
+          { type: 'open_app', config: { app: 'security' } },
+        ],
+        enabled: true,
+      },
+      {
+        name: 'Lock on Idle',
+        description: 'Automatically locks the screen when system goes idle',
+        trigger: 'system.idle', condition: '',
+        actions: [{ type: 'lock_screen', config: {} }],
+        enabled: true,
+      },
+    ],
   },
   {
-    name: 'Calendar Reminder Action', trigger: 'calendar.event.starting',
-    condition: '', actions: [{ type: 'notification', config: { title: 'Calendar', message: 'An event is starting soon!' } }], enabled: true,
+    name: 'Financial & Trading',
+    icon: <TrendingUp size={10} />,
+    templates: [
+      {
+        name: 'Market Open Brief',
+        description: 'ROKCAT checks your portfolio and fetches market data when a "market" calendar event starts',
+        trigger: 'calendar.event.starting', condition: 'market',
+        actions: [{ type: 'ai_command', config: { command: 'Check my portfolio and get market data for my top holdings. Give me a brief summary.' } }],
+        enabled: true,
+      },
+      {
+        name: 'Balance Low Alert',
+        description: 'ROKCAT checks your balance after every transaction and warns if low',
+        trigger: 'wallet.transaction', condition: '',
+        actions: [{ type: 'ai_command', config: { command: 'Check my balance and warn me if it\'s below 100 tokens' } }],
+        enabled: true,
+      },
+    ],
   },
   {
-    name: 'Welcome Workflow', trigger: 'user.signed-in',
-    condition: '', actions: [{ type: 'notification', config: { title: 'System', message: 'Welcome back, Operator.' } }], enabled: true,
+    name: 'Productivity',
+    icon: <Briefcase size={10} />,
+    templates: [
+      {
+        name: 'Daily Standup Prep',
+        description: 'ROKCAT opens your board, checks bookings, and summarizes your day on sign-in',
+        trigger: 'user.signed-in', condition: '',
+        actions: [{ type: 'ai_command', config: { command: 'Open my board, check today\'s bookings, and summarize what\'s on my plate today' } }],
+        enabled: true,
+      },
+      {
+        name: 'New Email Reactor',
+        description: 'Notifies you and opens PrimeMail when a new email arrives',
+        trigger: 'mail.received', condition: '',
+        actions: [
+          { type: 'notification', config: { title: '📧 New Email', message: 'You have new mail' } },
+          { type: 'open_app', config: { app: 'mail' } },
+        ],
+        enabled: true,
+      },
+      {
+        name: 'Meeting Conflict Check',
+        description: 'ROKCAT checks for booking conflicts when a new calendar event is created',
+        trigger: 'calendar.event.created', condition: '',
+        actions: [{ type: 'ai_command', config: { command: 'List my bookings and check for any scheduling conflicts today' } }],
+        enabled: true,
+      },
+      {
+        name: 'File Upload Notifier',
+        description: 'Shows a notification when a file is uploaded',
+        trigger: 'file.uploaded', condition: '',
+        actions: [{ type: 'notification', config: { title: 'Files', message: 'New file uploaded successfully' } }],
+        enabled: true,
+      },
+      {
+        name: 'Calendar Reminder Action',
+        description: 'Fires a notification when a calendar event is about to start',
+        trigger: 'calendar.event.starting', condition: '',
+        actions: [{ type: 'notification', config: { title: 'Calendar', message: 'An event is starting soon!' } }],
+        enabled: true,
+      },
+    ],
+  },
+  {
+    name: 'Creative & Social',
+    icon: <Palette size={10} />,
+    templates: [
+      {
+        name: 'Auto Social Post',
+        description: 'ROKCAT posts to PrimeSocial about newly uploaded files',
+        trigger: 'file.uploaded', condition: '',
+        actions: [{ type: 'ai_command', config: { command: 'Post to PrimeSocial announcing a new file was just uploaded. Be creative and enthusiastic.' } }],
+        enabled: true,
+      },
+      {
+        name: 'Canvas Art Generator',
+        description: 'ROKCAT generates random art on PrimeCanvas during idle time',
+        trigger: 'system.idle', condition: '',
+        actions: [{ type: 'ai_command', config: { command: 'Open PrimeCanvas and draw a random piece of generative art using geometric shapes and vibrant colors' } }],
+        enabled: true,
+      },
+    ],
+  },
+  {
+    name: 'Autonomous & Advanced',
+    icon: <Rocket size={10} />,
+    templates: [
+      {
+        name: 'Full System Tour',
+        description: 'ROKCAT opens multiple apps and gives you a guided walkthrough on sign-in',
+        trigger: 'user.signed-in', condition: '',
+        actions: [{ type: 'ai_command', config: { command: 'Open terminal, then monitor, then mail, then social — give me a full tour of the OS and what\'s happening right now' } }],
+        enabled: true,
+      },
+      {
+        name: 'Data Report Builder',
+        description: 'ROKCAT creates a spreadsheet with metrics when a "report" event fires',
+        trigger: 'calendar.event.starting', condition: 'report',
+        actions: [{ type: 'ai_command', config: { command: 'Create a spreadsheet with today\'s system metrics and add a chart summarizing the data' } }],
+        enabled: true,
+      },
+      {
+        name: 'Welcome Workflow',
+        description: 'Greets you on sign-in with a welcome notification',
+        trigger: 'user.signed-in', condition: '',
+        actions: [{ type: 'notification', config: { title: 'System', message: 'Welcome back, Operator.' } }],
+        enabled: true,
+      },
+      {
+        name: 'Trade → Social Announce',
+        description: 'Chains events: emits a social event after a trade executes, then posts',
+        trigger: 'trade.executed', condition: '',
+        actions: [
+          { type: 'notification', config: { title: '📈 Trade', message: 'Trade executed successfully' } },
+          { type: 'ai_command', config: { command: 'Post to PrimeSocial about my latest trade. Be brief and confident.' } },
+        ],
+        enabled: true,
+      },
+    ],
   },
 ];
+
+// Flatten for backward compat
+const TEMPLATES: (Omit<WorkflowHook, 'id'> & { description?: string })[] =
+  TEMPLATE_CATEGORIES.flatMap(c => c.templates);
 
 export default function CloudHooksApp() {
   const [hooks, setHooks] = useState<WorkflowHook[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [executions, setExecutions] = useState<Execution[]>([]);
   const [showTemplates, setShowTemplates] = useState(false);
+  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
   const [userId, setUserId] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
 
@@ -69,7 +222,7 @@ export default function CloudHooksApp() {
       if (uid) {
         (supabase.from('cloud_hooks') as any).select('*').eq('user_id', uid).order('created_at').then(({ data: rows }: any) => {
           if (rows) {
-            const mapped: WorkflowHook[] = rows.map(r => ({
+            const mapped: WorkflowHook[] = rows.map((r: any) => ({
               id: r.id,
               name: r.name,
               trigger: r.trigger_event,
@@ -101,6 +254,36 @@ export default function CloudHooksApp() {
       enabled: hook.enabled,
     }, { onConflict: 'id' });
   }, [userId]);
+
+  // Execute an ai_command action
+  const executeAiCommand = useCallback(async (command: string) => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) {
+        console.warn('[CloudHooks] No session for ai_command');
+        return;
+      }
+      const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID;
+      const res = await fetch(`https://${projectId}.supabase.co/functions/v1/hyper-chat`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({
+          messages: [{ role: 'user', content: command }],
+          stream: false,
+        }),
+      });
+      const text = await res.text();
+      // Parse for action tags and execute them
+      if (text) {
+        parseAndExecuteActions(text);
+      }
+    } catch (e) {
+      console.error('[CloudHooks] ai_command error:', e);
+    }
+  }, []);
 
   // Subscribe to events and execute hooks
   useEffect(() => {
@@ -145,6 +328,21 @@ export default function CloudHooksApp() {
                   }).catch(() => {});
                 }
                 break;
+              case 'ai_command':
+                if (action.config.command) {
+                  executeAiCommand(action.config.command);
+                }
+                break;
+              case 'emit_event':
+                if (action.config.event) {
+                  try {
+                    const evPayload = action.config.payload ? JSON.parse(action.config.payload) : {};
+                    eventBus.emit(action.config.event, evPayload);
+                  } catch {
+                    eventBus.emit(action.config.event, {});
+                  }
+                }
+                break;
             }
           } catch {}
         }
@@ -169,7 +367,15 @@ export default function CloudHooksApp() {
     }
 
     return () => { handlers.forEach((handler, event) => eventBus.off(event, handler)); };
-  }, [hooks, loaded]);
+  }, [hooks, loaded, executeAiCommand]);
+
+  const toggleCategory = (name: string) => {
+    setExpandedCategories(prev => {
+      const next = new Set(prev);
+      if (next.has(name)) next.delete(name); else next.add(name);
+      return next;
+    });
+  };
 
   const updateHook = (id: string, updates: Partial<WorkflowHook>) => {
     setHooks(prev => {
@@ -280,11 +486,11 @@ export default function CloudHooksApp() {
 
       <div className="flex flex-1 min-h-0">
         {/* Hook List */}
-        <div className="w-48 border-r border-border flex flex-col">
+        <div className="w-52 border-r border-border flex flex-col">
           <div className="p-2 border-b border-border flex items-center justify-between">
             <span className="font-display text-[9px] tracking-wider uppercase text-primary">Workflows</span>
             <div className="flex gap-1">
-              <button onClick={() => setShowTemplates(!showTemplates)} className="p-0.5 rounded hover:bg-primary/10 text-muted-foreground hover:text-primary" title="Templates">
+              <button onClick={() => setShowTemplates(!showTemplates)} className="p-0.5 rounded hover:bg-primary/10 text-muted-foreground hover:text-primary" title="Browse Presets">
                 <BookTemplate size={11} />
               </button>
               <button onClick={() => addHook()} className="p-0.5 rounded hover:bg-primary/10 text-primary"><Plus size={12} /></button>
@@ -292,13 +498,30 @@ export default function CloudHooksApp() {
           </div>
 
           {showTemplates && (
-            <div className="border-b border-primary/20 bg-primary/5 p-2 space-y-1">
-              <p className="text-[8px] text-primary font-display tracking-wider uppercase">Templates</p>
-              {TEMPLATES.map((tpl, i) => (
-                <button key={i} onClick={() => addHook(tpl)}
-                  className="w-full text-left px-2 py-1 rounded text-[10px] text-muted-foreground hover:text-foreground hover:bg-muted/30">
-                  {tpl.name}
-                </button>
+            <div className="border-b border-primary/20 bg-primary/5 max-h-64 overflow-y-auto">
+              <p className="text-[8px] text-primary font-display tracking-wider uppercase px-2 pt-2 pb-1">Preset Workflows</p>
+              {TEMPLATE_CATEGORIES.map(cat => (
+                <div key={cat.name}>
+                  <button
+                    onClick={() => toggleCategory(cat.name)}
+                    className="w-full flex items-center gap-1.5 px-2 py-1 text-[9px] text-muted-foreground hover:text-foreground hover:bg-muted/20 font-semibold"
+                  >
+                    {expandedCategories.has(cat.name) ? <ChevronDown size={8} /> : <ChevronRight size={8} />}
+                    {cat.icon}
+                    <span>{cat.name}</span>
+                    <span className="ml-auto text-[8px] text-muted-foreground/50">{cat.templates.length}</span>
+                  </button>
+                  {expandedCategories.has(cat.name) && cat.templates.map((tpl, i) => (
+                    <button key={i} onClick={() => addHook(tpl)}
+                      className="w-full text-left px-4 py-1.5 text-[10px] text-muted-foreground hover:text-foreground hover:bg-muted/30 group">
+                      <div className="flex items-center gap-1">
+                        {tpl.actions.some(a => a.type === 'ai_command') && <Bot size={8} className="text-primary shrink-0" />}
+                        <span className="truncate">{tpl.name}</span>
+                      </div>
+                      <span className="text-[8px] text-muted-foreground/50 block truncate group-hover:text-muted-foreground/70">{tpl.description}</span>
+                    </button>
+                  ))}
+                </div>
               ))}
             </div>
           )}
@@ -311,13 +534,14 @@ export default function CloudHooksApp() {
                 }`}>
                 <div className="flex items-center gap-1.5">
                   {h.enabled ? <span className="w-1.5 h-1.5 rounded-full bg-prime-green" /> : <Pause size={8} className="text-prime-amber" />}
+                  {h.actions.some(a => a.type === 'ai_command') && <Bot size={8} className="text-primary" />}
                   <span className="truncate text-[10px]">{h.name}</span>
                 </div>
                 <span className="text-[8px] text-muted-foreground/60 truncate block">{h.trigger}</span>
               </button>
             ))}
             {hooks.length === 0 && (
-              <div className="p-3 text-center text-muted-foreground text-[10px]">No hooks yet. Create one or use a template.</div>
+              <div className="p-3 text-center text-muted-foreground text-[10px]">No hooks yet. Click <BookTemplate size={9} className="inline" /> to browse presets.</div>
             )}
           </div>
         </div>
@@ -390,6 +614,40 @@ export default function CloudHooksApp() {
                       {action.type === 'webhook' && (
                         <input value={action.config.url || ''} onChange={e => updateAction(selected.id, idx, { config: { ...action.config, url: e.target.value } })}
                           placeholder="https://hooks.zapier.com/..." className="w-full bg-background border border-border rounded px-1.5 py-0.5 text-[10px] text-foreground" />
+                      )}
+                      {action.type === 'ai_command' && (
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-1 text-[8px] text-primary/70">
+                            <Bot size={8} /> ROKCAT will execute this command with your full tool suite
+                          </div>
+                          <textarea
+                            value={action.config.command || ''}
+                            onChange={e => updateAction(selected.id, idx, { config: { ...action.config, command: e.target.value } })}
+                            placeholder="e.g. Check my balance and post a status update to PrimeSocial"
+                            rows={2}
+                            className="w-full bg-background border border-border rounded px-1.5 py-1 text-[10px] text-foreground resize-none"
+                          />
+                        </div>
+                      )}
+                      {action.type === 'emit_event' && (
+                        <div className="grid grid-cols-2 gap-1.5">
+                          <div>
+                            <select
+                              value={action.config.event || ''}
+                              onChange={e => updateAction(selected.id, idx, { config: { ...action.config, event: e.target.value } })}
+                              className="w-full bg-background border border-border rounded px-1.5 py-0.5 text-[10px] text-foreground"
+                            >
+                              <option value="">Select event…</option>
+                              {EVENT_TYPES.map(ev => <option key={ev} value={ev}>{ev}</option>)}
+                            </select>
+                          </div>
+                          <input
+                            value={action.config.payload || ''}
+                            onChange={e => updateAction(selected.id, idx, { config: { ...action.config, payload: e.target.value } })}
+                            placeholder='{"key":"value"}'
+                            className="bg-background border border-border rounded px-1.5 py-0.5 text-[10px] text-foreground"
+                          />
+                        </div>
                       )}
                     </div>
                   ))}

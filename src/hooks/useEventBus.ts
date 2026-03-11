@@ -4,6 +4,7 @@ export const EVENT_TYPES = [
   'app.opened',
   'app.closed',
   'calendar.event.starting',
+  'calendar.event.created',
   'notification.received',
   'user.signed-in',
   'user.signed-out',
@@ -15,6 +16,7 @@ export const EVENT_TYPES = [
   'mail.received',
   'agent.action.logged',
   'wallet.transfer',
+  'wallet.transaction',
   'trade.executed',
   'bet.placed',
   'booking.created',
@@ -34,6 +36,9 @@ export const EVENT_TYPES = [
   'app.request-open',
   'app.request-close',
   'app.navigate',
+  'system.idle',
+  'security.threat',
+  'system.health.check',
 ] as const;
 
 export type EventType = typeof EVENT_TYPES[number];
