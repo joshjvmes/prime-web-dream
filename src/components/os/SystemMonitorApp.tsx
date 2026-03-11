@@ -74,6 +74,21 @@ function DonutChart({ used, total, color }: { used: number; total: number; color
 }
 
 export default function SystemMonitorApp() {
+  const [activePanel, setActivePanel] = useState<string | null>(null);
+
+  // Listen for app.navigate events
+  useEffect(() => {
+    const handler = (payload: any) => {
+      if (payload?.app === 'monitor' && payload?.context) {
+        setActivePanel(payload.context);
+        // Clear highlight after 3s
+        setTimeout(() => setActivePanel(null), 3000);
+      }
+    };
+    eventBus.on('app.navigate', handler);
+    return () => eventBus.off('app.navigate', handler);
+  }, []);
+
   const [cpu, setCpu] = useState(45);
   const [mem, setMem] = useState(62);
   const [netPps, setNetPps] = useState(180);

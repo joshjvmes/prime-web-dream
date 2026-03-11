@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Mail, Inbox, ArrowLeft, Trash2, Bot, Loader2, RefreshCw } from 'lucide-react';
+import { Mail, Inbox, Send, FileText, ArrowLeft, Trash2, Bot, Loader2, RefreshCw } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { Badge } from '@/components/ui/badge';
 import { eventBus } from '@/hooks/useEventBus';
