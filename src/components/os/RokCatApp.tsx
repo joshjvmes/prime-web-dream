@@ -610,26 +610,30 @@ ${APP_ACTION_PROMPT}`;
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="h-7 w-7 text-[#00e5ff]/60 hover:text-[#00e5ff] hover:bg-[#00e5ff]/10"
-                    title="Image generation available"
+                    className={`h-7 w-7 ${imagineMode === 'image' ? 'text-[#00e5ff] bg-[#00e5ff]/20' : 'text-[#00e5ff]/60 hover:text-[#00e5ff]'} hover:bg-[#00e5ff]/10`}
+                    onClick={() => setImagineMode(prev => prev === 'image' ? null : 'image')}
                   >
                     <Image size={13} />
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent side="bottom" className="text-xs">Grok Imagine (Image)</TooltipContent>
+                <TooltipContent side="bottom" className="text-xs">
+                  {imagineMode === 'image' ? 'Cancel Image Mode' : 'Grok Imagine (Image)'}
+                </TooltipContent>
               </Tooltip>
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="h-7 w-7 text-[#00e5ff]/60 hover:text-[#00e5ff] hover:bg-[#00e5ff]/10"
-                    title="Video generation available"
+                    className={`h-7 w-7 ${imagineMode === 'video' ? 'text-[#00e5ff] bg-[#00e5ff]/20' : 'text-[#00e5ff]/60 hover:text-[#00e5ff]'} hover:bg-[#00e5ff]/10`}
+                    onClick={() => setImagineMode(prev => prev === 'video' ? null : 'video')}
                   >
                     <Video size={13} />
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent side="bottom" className="text-xs">Grok Imagine (Video)</TooltipContent>
+                <TooltipContent side="bottom" className="text-xs">
+                  {imagineMode === 'video' ? 'Cancel Video Mode' : 'Grok Imagine (Video)'}
+                </TooltipContent>
               </Tooltip>
             </>
           )}
