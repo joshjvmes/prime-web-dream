@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
-import { Send, Volume2, VolumeX, Loader2, Globe, Twitter, Image, Video, Brain, Square } from 'lucide-react';
+import { Send, Volume2, VolumeX, Loader2, Globe, Twitter, Image, Video, Brain, Square, GalleryHorizontalEnd } from 'lucide-react';
 import { renderMarkdown } from '@/lib/renderMarkdown';
 import { parseAndExecuteActions, APP_ACTION_PROMPT } from './rokcat/actionParser';
 import { Button } from '@/components/ui/button';
