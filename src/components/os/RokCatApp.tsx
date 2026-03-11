@@ -370,6 +370,7 @@ ${APP_ACTION_PROMPT}`;
 
             if (pollData.status === 'done' && pollData.url) {
               setMessages(prev => prev.map(m => m.id === rokcatId ? { ...m, text: `Here's your video:\n\n[VIDEO:${pollData.url}]` } : m));
+              saveMedia('video', pollData.url, prompt);
               scrollToBottom();
               return;
             }
