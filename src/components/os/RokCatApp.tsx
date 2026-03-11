@@ -272,6 +272,28 @@ ${APP_ACTION_PROMPT}`;
     };
   }, [autonomousMode, runAutonomousStep]);
 
+  // Process client-side tool actions from the AI tool loop
+  const processClientAction = useCallback((action: { tool: string; data: any; reply: string }) => {
+    const { tool, data } = action;
+    if (tool === 'post_to_social') {
+      eventBus.emit('social.post.created', { content: data.content, author: data.author, role: data.role, ai_generated: true });
+    } else if (tool === 'send_email') {
+      eventBus.emit('mail.received', { to: data.to, subject: data.subject, body: data.body, from: data.from, ai_generated: true });
+    } else if (tool === 'draw_on_canvas') {
+      eventBus.emit('canvas.draw', { commands: data.commands, clear_first: data.clear_first });
+    } else if (tool === 'generate_canvas_art') {
+      eventBus.emit('canvas.draw', { generative: true, style: data.style, palette: data.palette });
+    } else if (tool === 'create_spreadsheet') {
+      eventBus.emit('spreadsheet.create', { name: data.name, headers: data.headers, rows: data.rows });
+    } else if (tool === 'update_cells') {
+      eventBus.emit('spreadsheet.update', { sheet: data.sheet, cells: data.cells });
+    } else if (tool === 'add_chart') {
+      eventBus.emit('spreadsheet.chart', data);
+    } else if (tool === 'control_audio') {
+      eventBus.emit('audio.control', data);
+    }
+  }, []);
+
   const handleSend = useCallback(async () => {
     const text = input.trim();
     if (!text || loading) return;
@@ -328,6 +350,12 @@ ${APP_ACTION_PROMPT}`;
         if (data?.searchActive) {
           setSearchStatus(data.searchActive as 'web' | 'x');
         }
+        // Process client-side actions from tool loop
+        if (data?.clientActions) {
+          for (const action of data.clientActions) {
+            processClientAction(action);
+          }
+        }
         const rawText = data?.reply || data?.text || data?.message || 'Neural link disrupted.';
         const aiText = parseAndExecuteActions(rawText);
         setMessages(prev => [...prev, { id: rokcatId, role: 'rokcat', text: aiText }]);
@@ -369,6 +397,13 @@ ${APP_ACTION_PROMPT}`;
 
           try {
             const parsed = JSON.parse(jsonStr);
+            // Client-side tool actions from tool loop
+            if (parsed.clientActions) {
+              for (const action of parsed.clientActions) {
+                processClientAction(action);
+              }
+              continue;
+            }
             // Check for search status events
             if (parsed.searchStatus) {
               setSearchStatus(parsed.searchStatus as 'web' | 'x');
@@ -468,7 +503,7 @@ ${APP_ACTION_PROMPT}`;
       // Clear agent thoughts after a short delay
       setTimeout(() => setAgentThoughts([]), 2000);
     }
-  }, [input, loading, speakText, isGrok420, webSearchEnabled, xSearchEnabled]);
+  }, [input, loading, speakText, processClientAction, isGrok420, webSearchEnabled, xSearchEnabled]);
 
   return (
     <div className={`flex flex-col h-full bg-[#02040a] overflow-hidden ${autonomousMode ? 'ring-1 ring-[#00e5ff]/40 ring-inset' : ''}`}>
