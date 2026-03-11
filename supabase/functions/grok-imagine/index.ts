@@ -178,7 +178,7 @@ async function pollVideo(apiKey: string, requestId: string): Promise<Response> {
   }
 
   if (pollData.status === "completed" || pollData.status === "done") {
-    const videoUrl = pollData.data?.[0]?.url || pollData.url || pollData.video_url;
+    const videoUrl = pollData.video?.url || pollData.data?.[0]?.url || pollData.url || pollData.video_url;
     console.log(`[grok-imagine] VIDEO POLL — completed, url: ${videoUrl}`);
     return new Response(JSON.stringify({ status: "done", url: videoUrl }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
