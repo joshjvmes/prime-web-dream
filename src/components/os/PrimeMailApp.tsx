@@ -215,13 +215,16 @@ export default function PrimeMailApp() {
           </h2>
         </div>
         <div className="flex flex-col py-1">
-          <button className="flex items-center gap-2 px-3 py-2 text-left bg-primary/10 text-primary border-r-2 border-primary">
-            <Inbox size={14} />
-            <span className="text-[10px]">Inbox</span>
-            {unreadCount > 0 && (
-              <span className="ml-auto text-[8px] bg-primary/20 text-primary px-1 rounded">{unreadCount}</span>
-            )}
-          </button>
+          {([['inbox', Inbox, 'Inbox'], ['sent', Send, 'Sent'], ['drafts', FileText, 'Drafts']] as const).map(([folder, FolderIcon, label]) => (
+            <button key={folder} onClick={() => { setActiveFolder(folder); setSelectedId(null); }}
+              className={`flex items-center gap-2 px-3 py-2 text-left transition-colors ${activeFolder === folder ? 'bg-primary/10 text-primary border-r-2 border-primary' : 'text-muted-foreground hover:bg-muted/20'}`}>
+              <FolderIcon size={14} />
+              <span className="text-[10px]">{label}</span>
+              {folder === 'inbox' && unreadCount > 0 && (
+                <span className="ml-auto text-[8px] bg-primary/20 text-primary px-1 rounded">{unreadCount}</span>
+              )}
+            </button>
+          ))}
         </div>
         <div className="mt-auto p-2 border-t border-border space-y-1.5">
           <button
