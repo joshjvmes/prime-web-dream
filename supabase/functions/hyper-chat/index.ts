@@ -1134,12 +1134,17 @@ serve(async (req) => {
           } catch (e) {
             toolResult = { data: {}, reply: `⚠️ Imagine error: ${e}` };
           }
-        } else if (fnName === "post_to_social") {
-          toolResult = {
-            data: { content: args.content || "", author: args.author || "Hyper", role: args.role || "Geometric AI" },
-            reply: `✅ Posted to PrimeSocial: "${String(args.content || "").substring(0, 80)}"`,
-            clientSide: true,
-          };
+        } else if (SOCIAL_TOOLS.has(fnName)) {
+          toolResult = await executeSocialTool(fnName, args, authHeader, userId);
+          // Also emit as client-side for real-time UI update
+          if (fnName === "post_to_social") {
+            clientSideActions.push({
+              tool: fnName,
+              data: { content: args.content || "", author: args.author || "Hyper", role: args.role || "Geometric AI" },
+              reply: toolResult.reply,
+            });
+            toolResult.clientSide = true;
+          }
         } else if (fnName === "send_email") {
           toolResult = {
             data: { to: args.to || "operator", subject: args.subject || "Message from Hyper", body: args.body || "", from: args.from || "hyper@prime.os" },
