@@ -1,46 +1,91 @@
 
 
-## Plan: Fix Video Generation + Add Dev Test Bypass
+# Internal Documentation for PRIME OS
 
-### 1. Fix Video Generation
+Create a set of `.md` documentation files in a `docs/` directory covering the full system architecture, app catalog, backend integrations, hooks, edge functions, and developer guide.
 
-**Root cause:** The edge function's server-side polling loop (up to ~2 min) likely exceeds the edge function execution timeout (~60s on Supabase). The function times out silently, or returns before the video is ready. Additionally, the actual xAI response shape isn't being logged, so we can't confirm we're parsing it correctly.
+## Files to Create
 
-**Fix approach — client-side polling:**
+### 1. `docs/README.md` — Documentation Index
+- Table of contents linking to all other docs
+- Quick-start for developers (clone, install, run)
+- Project overview: browser-based OS with 50+ apps, Lovable Cloud backend
 
-Instead of polling inside the edge function (which times out), split into two calls:
+### 2. `docs/ARCHITECTURE.md` — System Architecture
+- Route structure: `/` (LandingPage) -> `/os` (Desktop)
+- Core flow: `App.tsx` -> `LandingPage` / `Index` -> `Desktop.tsx`
+- Desktop composition: LockScreen -> BootSequence -> Desktop (Taskbar + OSWindow + DesktopWidgets)
+- Window manager (`useWindowManager`): how windows open, focus, minimize, maximize, workspace switching
+- EventBus singleton: pub/sub for cross-app communication, list all event types
+- Authentication flow: Lovable Cloud auth, `LockScreen` sign-in/sign-up, session persistence
+- Mobile vs desktop rendering (`useDeviceClass`, `MobileLauncher`, `MobileAppView`)
 
-1. **Submit endpoint** (`type: "video"`): Sends the generation request to xAI, returns the `requestId` immediately to the client.
-2. **Poll endpoint** (`type: "video-poll"`): Client calls this every few seconds with the `requestId`; the edge function checks status once and returns immediately.
+### 3. `docs/APPS.md` — Application Catalog
+For each of the 50+ apps, document:
+- **Name**, **AppType key**, **Category** (Productivity, Finance, Infrastructure, Lore, etc.)
+- **Backend integration**: which tables/edge functions it uses, or "Client-only"
+- **Status**: Fully Live, Partially Live, Simulated, or Cloud-Persisted (via `useCloudStorage`)
 
-**Changes to `supabase/functions/grok-imagine/index.ts`:**
-- `generateVideo` → only submits the job, returns `{ type: "video", requestId, status: "pending" }` immediately
-- Add `pollVideo(apiKey, requestId)` → single status check, returns `{ status: "pending"|"done"|"failed", url? }`
-- Add `type: "video-poll"` route in the main handler
-- Add detailed `console.log` of the raw xAI response bodies at every step
+Organized into sections:
+- **Fully Live** (14 apps): HypersphereApp, PrimeChatApp, PrimeCalendarApp, PrimeVaultApp, PrimeWalletApp, PrimeBetsApp, PrimeSignalsApp, FilesApp, PrimeBookingApp, BotLabApp, AdminConsoleApp, AppForgeApp/MiniAppsApp, SettingsApp, PrimeSocialApp, PrimeMailApp, PrimeBoardApp
+- **Cloud-Persisted** (via useCloudStorage): PrimeCanvasApp, TextEditorApp, PrimeGridApp, PrimeJournalApp
+- **Simulated/Lore** (18 apps): PrimeNetApp, EnergyMonitorApp, DataCenterApp, Q3InferenceApp, FoldMemApp, etc.
 
-**Changes to `src/components/os/RokCatApp.tsx` (`handleImagine`):**
-- When `type === "video"` and response has `requestId` + `status: "pending"`, start a client-side polling interval (~5s, up to 40 attempts = ~3.3 min)
-- Update the placeholder message with progress dots
-- On `status: "done"`, render the `[VIDEO:url]` tag
-- On failure/timeout, show error
+### 4. `docs/BACKEND.md` — Backend & Database Reference
+- **Database tables**: All 30+ tables with columns, RLS policy summary, and which app uses them
+- **Edge functions**: All 16 functions with purpose, auth requirements, request/response format
+  - `hyper-chat`: AI chat with streaming, memory persistence
+  - `ai-social`: AI post generation for PrimeSocial
+  - `prime-bank`: Token economy (mint, transfer, debit)
+  - `market-data`: Stock/crypto price lookup via Polygon API
+  - `sports-odds`: Sports betting odds via The Odds API
+  - `bot-api` / `bot-runner` / `agent-runtime`: Bot lifecycle and autonomous agent execution
+  - `admin-actions`: Role management and admin operations
+  - `mini-app-gen`: AI-powered mini-app code generation
+  - `ai-key-manager`: User API key CRUD
+  - `elevenlabs-tts`: Text-to-speech via ElevenLabs
+  - `system-analytics`: Real-time table counts and activity aggregation
+  - `web-proxy`: CORS proxy for PrimeBrowser
+  - `cron-dispatcher`: Scheduled task execution
+- **Secrets**: Which secrets are configured and what they power
+- **Storage buckets**: `user-files` bucket for FilesApp
 
-### 2. Dev Test Auth Bypass
+### 5. `docs/HOOKS.md` — Custom Hooks Reference
+Document each hook in `src/hooks/`:
+- `useWindowManager` — Window CRUD, focus, workspace management
+- `useEventBus` — Cross-app event pub/sub (list all event types)
+- `useCloudStorage` — localStorage + database sync for app state persistence
+- `useActivityTracker` — Logs user actions to `user_activity` table
+- `useNotifications` — Toast notification system
+- `useCalendarReminders` — Polls upcoming events, fires alerts
+- `useGlobalShortcuts` — Keyboard shortcuts (Ctrl+K search, etc.)
+- `useIdleTimeout` — Auto-lock after inactivity
+- `useVoiceControl` — Voice command recognition
+- `useSystemPulse` — Simulated system metrics
+- `useDeviceClass` — Mobile/tablet/desktop detection
+- `useIntranetPages` — PrimeBrowser intranet content
 
-Add a `/os?dev=1` query param mode that auto-signs in with a test account, so the browser tool can access the OS without manual login.
+### 6. `docs/TERMINAL.md` — Terminal & Command Reference
+- Available commands from `terminal/commands.ts`
+- Pipe system from `terminal/pipes.ts`
+- Terminal modes from `terminal/modes.ts`
+- Widget commands from `terminal/widgetCommands.ts`
 
-**Changes to `src/pages/Index.tsx`:**
-- On mount, check for `?dev=1` in the URL
-- If present and no active session, call `supabase.auth.signInWithPassword()` with a dedicated test account
-- This only works in preview/development URLs (check `window.location.hostname`)
+### 7. `docs/SECURITY.md` — Security & RLS Overview
+- All tables have RLS enabled with `auth.uid() = user_id`
+- Public-read tables: `profiles`, `bet_markets`, `forge_listings`
+- Edge function auth pattern: Authorization header -> `getUser()` -> scoped queries
+- API key storage note (plaintext in `encrypted_key` column)
+- Service role key usage: only in edge functions, never client-side
 
-**Requires:** A test user account in the auth system. We'll create one via a small migration or manual setup, and store the credentials as secrets (or hardcode for dev-only with hostname guard).
+## Update Existing File
 
-**Alternative (simpler):** Skip the dev bypass for now since it requires credential management. Instead, the user can log in once in the preview, and the browser tool session will persist.
+### `README.md` (root)
+- Add a "Documentation" section linking to `docs/README.md`
+- Keep existing content but add links to the new docs
 
----
-
-**Summary of file changes:**
-- `supabase/functions/grok-imagine/index.ts` — split video into submit + poll, add logging
-- `src/components/os/RokCatApp.tsx` — client-side polling loop for video generation
+## Technical Notes
+- All docs are pure Markdown, no code changes needed
+- Total: 7 new files + 1 updated file
+- Estimated ~3,000 lines of documentation covering the full system
 

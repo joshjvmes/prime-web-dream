@@ -313,20 +313,23 @@ ${APP_ACTION_PROMPT}`;
       const { data: { session } } = await supabase.auth.getSession();
       const authToken = session?.access_token || import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
-      const resp = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/grok-imagine`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-            Authorization: `Bearer ${authToken}`,
-          },
-          body: JSON.stringify({ type, prompt, n: type === 'image' ? 2 : 1 }),
-        }
-      );
+      const invokeGrok = async (body: Record<string, unknown>) => {
+        const resp = await fetch(
+          `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/grok-imagine`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+              Authorization: `Bearer ${authToken}`,
+            },
+            body: JSON.stringify(body),
+          }
+        );
+        return { resp, data: await resp.json() };
+      };
 
-      const data = await resp.json();
+      const { resp, data } = await invokeGrok({ type, prompt, n: type === 'image' ? 2 : 1 });
 
       if (!resp.ok) {
         const errMsg = data?.error || `${type} generation failed.`;
@@ -338,8 +341,38 @@ ${APP_ACTION_PROMPT}`;
       if (type === 'image' && data.urls?.length) {
         const mediaTags = data.urls.map((url: string) => `[IMAGE:${url}]`).join('\n');
         setMessages(prev => prev.map(m => m.id === rokcatId ? { ...m, text: `Here's what I imagined:\n\n${mediaTags}` } : m));
-      } else if (type === 'video' && data.url) {
+      } else if (type === 'video' && data.status === 'done' && data.url) {
+        // Video completed immediately
         setMessages(prev => prev.map(m => m.id === rokcatId ? { ...m, text: `Here's your video:\n\n[VIDEO:${data.url}]` } : m));
+      } else if (type === 'video' && data.status === 'pending' && data.requestId) {
+        // Client-side polling for async video generation
+        let dots = 1;
+        const maxAttempts = 40;
+        for (let i = 0; i < maxAttempts; i++) {
+          await new Promise(r => setTimeout(r, 5000));
+          dots = (dots % 4) + 1;
+          setMessages(prev => prev.map(m => m.id === rokcatId ? { ...m, text: `⏳ Generating video${'.'.repeat(dots)} (${i + 1}/${maxAttempts})` } : m));
+          scrollToBottom();
+
+          try {
+            const { resp: pollResp, data: pollData } = await invokeGrok({ type: 'video-poll', requestId: data.requestId });
+
+            if (pollData.status === 'done' && pollData.url) {
+              setMessages(prev => prev.map(m => m.id === rokcatId ? { ...m, text: `Here's your video:\n\n[VIDEO:${pollData.url}]` } : m));
+              scrollToBottom();
+              return;
+            }
+            if (pollData.status === 'failed' || pollData.status === 'error') {
+              setMessages(prev => prev.map(m => m.id === rokcatId ? { ...m, text: `❌ Video generation failed: ${pollData.error || 'Unknown error'}` } : m));
+              scrollToBottom();
+              return;
+            }
+            // status === 'pending' → continue polling
+          } catch {
+            // Network error during poll, keep trying
+          }
+        }
+        setMessages(prev => prev.map(m => m.id === rokcatId ? { ...m, text: '❌ Video generation timed out after ~3 minutes.' } : m));
       } else {
         setMessages(prev => prev.map(m => m.id === rokcatId ? { ...m, text: data.error || 'Generation completed but no media was returned.' } : m));
       }
