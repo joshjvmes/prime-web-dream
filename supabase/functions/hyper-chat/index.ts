@@ -661,7 +661,7 @@ function buildSystemPrompt(context?: Record<string, unknown>, memories?: string[
 }
 
 // ── Handle financial tool calls server-side ──
-async function executeFinancialTool(fnName: string, args: Record<string, unknown>, authHeader: string) {
+async function executeFinancialTool(fnName: string, args: Record<string, unknown>, authHeader: string, userId: string | null) {
   if (fnName === "check_balance") {
     const wallet = await callPrimeBank("balance", authHeader);
     if (wallet.error) return { data: { error: wallet.error }, reply: `⚠️ Could not check balance: ${wallet.error}` };
@@ -688,6 +688,7 @@ async function executeFinancialTool(fnName: string, args: Record<string, unknown
   }
 
   if (fnName === "buy_shares") {
+    if (!userId) return { data: {}, reply: "⚠️ Authentication required." };
     const listing = await findListing(String(args.app_name || ""));
     if (!listing) return { data: {}, reply: `⚠️ Could not find app "${args.app_name}" on the Forge marketplace.` };
     const sharesToBuy = Math.floor(Number(args.amount) / Number(listing.share_price));
@@ -696,15 +697,13 @@ async function executeFinancialTool(fnName: string, args: Record<string, unknown
     const chargeResult = await callPrimeBank("ai-charge", authHeader, { amount: cost, description: `Buy ${sharesToBuy} shares of ${listing.name}` });
     if (!chargeResult.charged) return { data: {}, reply: `⚠️ Insufficient OS to buy shares. Need ${cost} OS.` };
     const db = getServiceDb();
-    const { data: { user } } = await db.auth.getUser(authHeader.replace("Bearer ", ""));
-    if (!user) return { data: {}, reply: "⚠️ Auth error." };
-    const { data: existing } = await db.from("app_shares").select("*").eq("user_id", user.id).eq("listing_id", listing.id).maybeSingle();
+    const { data: existing } = await db.from("app_shares").select("*").eq("user_id", userId).eq("listing_id", listing.id).maybeSingle();
     if (existing) {
       const newShares = existing.shares + sharesToBuy;
       const newAvg = ((existing.avg_cost * existing.shares) + cost) / newShares;
       await db.from("app_shares").update({ shares: newShares, avg_cost: newAvg }).eq("id", existing.id);
     } else {
-      await db.from("app_shares").insert({ user_id: user.id, listing_id: listing.id, shares: sharesToBuy, avg_cost: Number(listing.share_price) });
+      await db.from("app_shares").insert({ user_id: userId, listing_id: listing.id, shares: sharesToBuy, avg_cost: Number(listing.share_price) });
     }
     return {
       data: { app: listing.name, shares: sharesToBuy, cost, share_price: listing.share_price },
@@ -713,12 +712,11 @@ async function executeFinancialTool(fnName: string, args: Record<string, unknown
   }
 
   if (fnName === "sell_shares") {
+    if (!userId) return { data: {}, reply: "⚠️ Authentication required." };
     const listing = await findListing(String(args.app_name || ""));
     if (!listing) return { data: {}, reply: `⚠️ Could not find app "${args.app_name}" on the Forge marketplace.` };
     const db = getServiceDb();
-    const { data: { user } } = await db.auth.getUser(authHeader.replace("Bearer ", ""));
-    if (!user) return { data: {}, reply: "⚠️ Auth error." };
-    const { data: holding } = await db.from("app_shares").select("*").eq("user_id", user.id).eq("listing_id", listing.id).maybeSingle();
+    const { data: holding } = await db.from("app_shares").select("*").eq("user_id", userId).eq("listing_id", listing.id).maybeSingle();
     if (!holding || holding.shares < Number(args.shares)) return { data: {}, reply: `⚠️ You don't have enough shares. You hold ${holding?.shares || 0}.` };
     const proceeds = Number(args.shares) * Number(listing.share_price);
     const newShares = holding.shares - Number(args.shares);
@@ -727,7 +725,7 @@ async function executeFinancialTool(fnName: string, args: Record<string, unknown
     } else {
       await db.from("app_shares").update({ shares: newShares }).eq("id", holding.id);
     }
-    const { data: userW } = await db.from("wallets").select("*").eq("user_id", user.id).maybeSingle();
+    const { data: userW } = await db.from("wallets").select("*").eq("user_id", userId).maybeSingle();
     if (userW) {
       await db.from("wallets").update({ os_balance: Number(userW.os_balance) + proceeds }).eq("id", userW.id);
       await db.from("transactions").insert({
@@ -742,15 +740,14 @@ async function executeFinancialTool(fnName: string, args: Record<string, unknown
   }
 
   if (fnName === "place_bet") {
+    if (!userId) return { data: {}, reply: "⚠️ Authentication required." };
     const market = await findMarket(String(args.market_question || ""));
     if (!market) return { data: {}, reply: `⚠️ Could not find an open market matching "${args.market_question}".` };
     const chargeResult = await callPrimeBank("ai-charge", authHeader, { amount: args.amount, description: `Bet on: ${market.question}` });
     if (!chargeResult.charged) return { data: {}, reply: `⚠️ Insufficient OS to place bet. Need ${args.amount} OS.` };
     const db = getServiceDb();
-    const { data: { user } } = await db.auth.getUser(authHeader.replace("Bearer ", ""));
-    if (!user) return { data: {}, reply: "⚠️ Auth error." };
     const side = String(args.side).toUpperCase();
-    await db.from("bets").insert({ user_id: user.id, market_id: market.id, side, amount: Number(args.amount) });
+    await db.from("bets").insert({ user_id: userId, market_id: market.id, side, amount: Number(args.amount) });
     const poolCol = side === "YES" ? "yes_pool" : "no_pool";
     await db.from("bet_markets").update({ [poolCol]: Number(market[poolCol]) + Number(args.amount) }).eq("id", market.id);
     return {
@@ -1075,7 +1072,7 @@ serve(async (req) => {
 
       // Financial tools — execute server-side
       if (FINANCIAL_TOOLS.has(fnName)) {
-        const result = await executeFinancialTool(fnName, args, authHeader);
+        const result = await executeFinancialTool(fnName, args, authHeader, userId);
         // Save conversation for authenticated users
         if (userId) {
           const lastUserMsg = messages.filter((m: any) => m.role === "user").pop();
