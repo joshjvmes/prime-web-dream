@@ -127,7 +127,7 @@ function getDefaultModel(provider: string): string {
     case "openai": return "gpt-4o";
     case "anthropic": return "claude-sonnet-4-20250514";
     case "google": return "gemini-2.5-flash";
-    case "xai": return "grok-4-latest";
+    case "xai": return "grok-4.20-experimental-beta-0304-reasoning";
     default: return "gpt-4o";
   }
 }
@@ -450,9 +450,122 @@ function convertGeminiStreamToOpenAI(resp: Response): Response {
   });
 }
 
-// ── xAI (Grok) caller — OpenAI-compatible ──
+// ── xAI (Grok) callers ──
 
-async function callXAI(config: UserAIConfig, opts: AIRouterOptions): Promise<Response> {
+// Grok 4.20 models that should use the Responses API
+const GROK_RESPONSES_MODELS = [
+  "grok-4.20-experimental-beta-0304-reasoning",
+  "grok-4.20-experimental-beta-0304-non-reasoning",
+  "grok-4.20-multi-agent-experimental-beta-0304",
+];
+
+function isGrok420Model(model: string): boolean {
+  return GROK_RESPONSES_MODELS.some((m) => model.startsWith(m));
+}
+
+// Convert OpenAI-format messages to xAI Responses API input format
+function toXAIResponsesInput(messages: any[]): any[] {
+  return messages.map((msg) => ({
+    role: msg.role === "system" ? "developer" : msg.role,
+    content: msg.content || "",
+  }));
+}
+
+// Convert xAI Responses API response to OpenAI Chat Completions format
+function convertXAIResponsesToOpenAI(data: any): any {
+  // The Responses API returns { output: [...], output_text: "..." }
+  const outputText = data.output_text || "";
+  const toolCalls: any[] = [];
+
+  // Check for function calls in output items
+  for (const item of data.output || []) {
+    if (item.type === "function_call") {
+      toolCalls.push({
+        id: item.call_id || `call_${Math.random().toString(36).slice(2)}`,
+        type: "function",
+        function: {
+          name: item.name,
+          arguments: typeof item.arguments === "string" ? item.arguments : JSON.stringify(item.arguments || {}),
+        },
+      });
+    }
+  }
+
+  return {
+    choices: [{
+      message: {
+        role: "assistant",
+        content: outputText || null,
+        ...(toolCalls.length ? { tool_calls: toolCalls } : {}),
+      },
+      finish_reason: toolCalls.length ? "tool_calls" : "stop",
+    }],
+    usage: data.usage || undefined,
+  };
+}
+
+// New Responses API caller for Grok 4.20 models
+async function callXAIResponses(config: UserAIConfig, opts: AIRouterOptions): Promise<Response> {
+  const body: any = {
+    model: config.model,
+    input: toXAIResponsesInput(opts.messages),
+  };
+
+  // Built-in server-side tools (web_search, x_search)
+  const builtInTools: any[] = [];
+  const clientTools: any[] = [];
+
+  if (opts.tools?.length) {
+    for (const tool of opts.tools) {
+      // Check if it's a built-in xAI tool
+      if (tool.type === "web_search" || tool.type === "x_search" || tool.type === "code_execution") {
+        builtInTools.push(tool);
+      } else {
+        // Convert OpenAI function tools to Responses API format
+        clientTools.push({
+          type: "function",
+          name: tool.function.name,
+          description: tool.function.description,
+          parameters: tool.function.parameters,
+        });
+      }
+    }
+  }
+
+  if (builtInTools.length || clientTools.length) {
+    body.tools = [...builtInTools, ...clientTools];
+  }
+
+  // Multi-agent model supports reasoning_effort to control agent count
+  if (config.model.includes("multi-agent")) {
+    body.reasoning = { effort: "medium" }; // 4 agents default
+  }
+
+  const resp = await fetch("https://api.x.ai/v1/responses", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${config.apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+
+  // Convert Responses API format back to OpenAI Chat Completions format
+  // so the rest of the system can consume it uniformly
+  if (resp.ok) {
+    const data = await resp.json();
+    const openAIFormat = convertXAIResponsesToOpenAI(data);
+    return new Response(JSON.stringify(openAIFormat), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
+  return resp;
+}
+
+// Legacy Chat Completions caller for older Grok models
+async function callXAIChatCompletions(config: UserAIConfig, opts: AIRouterOptions): Promise<Response> {
   const body: any = {
     model: config.model,
     messages: opts.messages,
@@ -472,6 +585,14 @@ async function callXAI(config: UserAIConfig, opts: AIRouterOptions): Promise<Res
     },
     body: JSON.stringify(body),
   });
+}
+
+// Route to the right xAI API based on model
+async function callXAI(config: UserAIConfig, opts: AIRouterOptions): Promise<Response> {
+  if (isGrok420Model(config.model)) {
+    return callXAIResponses(config, opts);
+  }
+  return callXAIChatCompletions(config, opts);
 }
 
 // ── Default Lovable gateway caller ──

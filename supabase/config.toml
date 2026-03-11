@@ -44,3 +44,6 @@ verify_jwt = false
 
 [functions.resolve-markets]
 verify_jwt = false
+
+[functions.github-app]
+verify_jwt = false

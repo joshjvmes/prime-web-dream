@@ -65,6 +65,11 @@ const ALL_TOOLS: Record<string, { description: string; parameters: Record<string
   send_email: { description: "Send email via PrimeMail", parameters: { to: "string", subject: "string", body: "string" }, category: "social" },
   save_memory: { description: "Store a memory", parameters: { category: "string", content: "string" }, category: "memory" },
   recall_memories: { description: "Search memories", parameters: { query: "string" }, category: "memory" },
+  github_list_repos: { description: "List GitHub repos for connected account", parameters: {}, category: "github" },
+  github_list_issues: { description: "List issues for a GitHub repo", parameters: { repo: "string" }, category: "github" },
+  github_create_issue: { description: "Create a GitHub issue", parameters: { repo: "string", title: "string", body: "string" }, category: "github" },
+  github_list_prs: { description: "List pull requests for a GitHub repo", parameters: { repo: "string" }, category: "github" },
+  github_list_commits: { description: "List recent commits for a GitHub repo", parameters: { repo: "string" }, category: "github" },
 };
 
 // Client-side tools that return payloads for frontend EventBus
@@ -157,6 +162,29 @@ async function executeServerTool(
       case "get_stock_chart":
         // These are handled client-side or require complex logic — return as client-side action
         return { status: "success", result: { _client_action: toolName, args } };
+      case "github_list_repos":
+      case "github_list_issues":
+      case "github_create_issue":
+      case "github_list_prs":
+      case "github_list_commits": {
+        // Proxy to github-app edge function
+        const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+        const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+        const actionMap: Record<string, string> = {
+          github_list_repos: "list-repos",
+          github_list_issues: "list-issues",
+          github_create_issue: "create-issue",
+          github_list_prs: "list-prs",
+          github_list_commits: "list-commits",
+        };
+        const ghResp = await fetch(`${supabaseUrl}/functions/v1/github-app?action=${actionMap[toolName]}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "Authorization": `Bearer ${serviceKey}` },
+          body: JSON.stringify({ ...args, user_id: userId }),
+        });
+        const ghData = await ghResp.json();
+        return { status: ghResp.ok ? "success" : "error", result: ghData };
+      }
       default:
         return { status: "error", result: `Unknown tool: ${toolName}` };
     }
