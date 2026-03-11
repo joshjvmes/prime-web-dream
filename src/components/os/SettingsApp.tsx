@@ -362,6 +362,18 @@ function AIProviderPanel({ user, cloudSave, cloudLoad, isSignedIn, SectionTitle 
 
 export default function SettingsApp({ notifEvents = [], onToggleEvent, onUpdateMessage, onAddEvent, onRemoveEvent, onLock, user }: SettingsAppProps) {
   const [activePanel, setActivePanel] = useState<Panel>('profile');
+
+  // ROKCAT navigate listener
+  useEffect(() => {
+    const handler = (payload: any) => {
+      if (payload?.app !== 'settings' || !payload?.context) return;
+      const ctx = payload.context.toLowerCase();
+      const match = PANELS.find(p => p.id === ctx);
+      if (match) setActivePanel(match.id);
+    };
+    eventBus.on('app.navigate', handler);
+    return () => eventBus.off('app.navigate', handler);
+  }, []);
   const [profileName, setProfileName] = useState(() => {
     try { const p = localStorage.getItem('prime-os-profile'); return p ? JSON.parse(p).name || '' : ''; } catch { return ''; }
   });
