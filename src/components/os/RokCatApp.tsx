@@ -295,9 +295,73 @@ ${APP_ACTION_PROMPT}`;
     }
   }, []);
 
+  // Handle Grok Imagine (image/video generation)
+  const handleImagine = useCallback(async (prompt: string, type: 'image' | 'video') => {
+    if (!prompt || loading) return;
+    setInput('');
+    setImagineMode(null);
+    const userMsg: Message = { id: crypto.randomUUID(), role: 'user', text: `${type === 'image' ? '🎨' : '🎬'} ${prompt}` };
+    setMessages(prev => [...prev, userMsg]);
+    scrollToBottom();
+    setLoading(true);
+
+    const rokcatId = crypto.randomUUID();
+    setMessages(prev => [...prev, { id: rokcatId, role: 'rokcat', text: `⏳ Generating ${type}...` }]);
+    scrollToBottom();
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const authToken = session?.access_token || import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+
+      const resp = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/grok-imagine`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+            Authorization: `Bearer ${authToken}`,
+          },
+          body: JSON.stringify({ type, prompt, n: type === 'image' ? 2 : 1 }),
+        }
+      );
+
+      const data = await resp.json();
+
+      if (!resp.ok) {
+        const errMsg = data?.error || `${type} generation failed.`;
+        setMessages(prev => prev.map(m => m.id === rokcatId ? { ...m, text: `❌ ${errMsg}` } : m));
+        scrollToBottom();
+        return;
+      }
+
+      if (type === 'image' && data.urls?.length) {
+        const mediaTags = data.urls.map((url: string) => `[IMAGE:${url}]`).join('\n');
+        setMessages(prev => prev.map(m => m.id === rokcatId ? { ...m, text: `Here's what I imagined:\n\n${mediaTags}` } : m));
+      } else if (type === 'video' && data.url) {
+        setMessages(prev => prev.map(m => m.id === rokcatId ? { ...m, text: `Here's your video:\n\n[VIDEO:${data.url}]` } : m));
+      } else {
+        setMessages(prev => prev.map(m => m.id === rokcatId ? { ...m, text: data.error || 'Generation completed but no media was returned.' } : m));
+      }
+      scrollToBottom();
+    } catch (e) {
+      setMessages(prev => prev.map(m => m.id === rokcatId ? { ...m, text: '❌ Connection error during generation.' } : m));
+      scrollToBottom();
+    } finally {
+      setLoading(false);
+    }
+  }, [loading, speakText, scrollToBottom]);
+
   const handleSend = useCallback(async () => {
     const text = input.trim();
     if (!text || loading) return;
+
+    // If in imagine mode, route to grok-imagine
+    if (imagineMode) {
+      handleImagine(text, imagineMode);
+      return;
+    }
+
     setInput('');
     const userMsg: Message = { id: crypto.randomUUID(), role: 'user', text };
     setMessages(prev => [...prev, userMsg]);
