@@ -702,6 +702,17 @@ ${APP_ACTION_PROMPT}`;
         </div>
       )}
 
+      {/* Imagine mode indicator */}
+      {imagineMode && (
+        <div className="flex items-center justify-center gap-2 py-1.5 bg-purple-500/10 border-t border-purple-500/20">
+          {imagineMode === 'image' ? <Image size={12} className="text-purple-400" /> : <Video size={12} className="text-purple-400" />}
+          <span className="text-[10px] font-mono text-purple-400 tracking-wider uppercase">
+            {imagineMode === 'image' ? 'Image generation mode — describe what to create' : 'Video generation mode — describe what to create'}
+          </span>
+          <button onClick={() => setImagineMode(null)} className="text-purple-400/60 hover:text-purple-400 text-xs ml-1">✕</button>
+        </div>
+      )}
+
       {/* Chat transcript */}
       <div className="h-32 border-t border-[#00e5ff]/20 bg-[#02040a]/80">
         <ScrollArea className="h-full" ref={scrollRef as any}>
