@@ -806,6 +806,7 @@ ${APP_ACTION_PROMPT}`;
           </div>
         </ScrollArea>
       </div>
+      )}
 
       {/* Input */}
       <div className="flex items-center gap-2 p-2 border-t border-[#00e5ff]/20 bg-[#040f1e]/60">
