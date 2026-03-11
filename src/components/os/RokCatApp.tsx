@@ -296,11 +296,11 @@ ${APP_ACTION_PROMPT}`;
   }, []);
 
   // Handle Grok Imagine (image/video generation)
-  const handleImagine = useCallback(async (prompt: string, type: 'image' | 'video') => {
+  const handleImagine = useCallback(async (prompt: string, type: 'image' | 'video', imageUrl?: string) => {
     if (!prompt || loading) return;
     setInput('');
     setImagineMode(null);
-    const userMsg: Message = { id: crypto.randomUUID(), role: 'user', text: `${type === 'image' ? '🎨' : '🎬'} ${prompt}` };
+    const userMsg: Message = { id: crypto.randomUUID(), role: 'user', text: `${type === 'image' ? '🎨' : '🎬'} ${prompt}${imageUrl ? ' (from image)' : ''}` };
     setMessages(prev => [...prev, userMsg]);
     scrollToBottom();
     setLoading(true);
