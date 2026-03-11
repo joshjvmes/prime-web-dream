@@ -54,22 +54,54 @@ export default function RokCatApp() {
   const speakText = useCallback(async (text: string) => {
     if (!ttsEnabled || !faceRef.current) return;
     try {
-      const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/elevenlabs-tts`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-            Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-          },
-          body: JSON.stringify({ text: text.slice(0, 500) }),
+      // Strip markdown formatting for cleaner speech
+      const cleanText = text
+        .replace(/```[\s\S]*?```/g, ' code block ')
+        .replace(/\*\*(.+?)\*\*/g, '$1')
+        .replace(/\*(.+?)\*/g, '$1')
+        .replace(/`(.+?)`/g, '$1')
+        .replace(/^#{1,3}\s+/gm, '')
+        .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+        .replace(/!\[([^\]]*)\]\([^)]+\)/g, '$1')
+        .replace(/\|[^\n]+\|/g, '')
+        .replace(/\n{2,}/g, '. ')
+        .trim();
+
+      // Chunk into ~900 char segments at sentence boundaries for ElevenLabs limit
+      const chunks: string[] = [];
+      let remaining = cleanText;
+      while (remaining.length > 0) {
+        if (remaining.length <= 900) {
+          chunks.push(remaining);
+          break;
         }
-      );
-      if (!response.ok) return;
-      const blob = await response.blob();
-      const audioUrl = URL.createObjectURL(blob);
-      await faceRef.current.speak(audioUrl);
+        let splitAt = remaining.lastIndexOf('. ', 900);
+        if (splitAt < 200) splitAt = remaining.lastIndexOf(' ', 900);
+        if (splitAt < 200) splitAt = 900;
+        chunks.push(remaining.slice(0, splitAt + 1).trim());
+        remaining = remaining.slice(splitAt + 1).trim();
+      }
+
+      // Play chunks sequentially
+      for (const chunk of chunks) {
+        if (!chunk) continue;
+        const response = await fetch(
+          `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/elevenlabs-tts`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+              Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+            },
+            body: JSON.stringify({ text: chunk }),
+          }
+        );
+        if (!response.ok) continue;
+        const blob = await response.blob();
+        const audioUrl = URL.createObjectURL(blob);
+        await faceRef.current!.speak(audioUrl);
+      }
     } catch (e) {
       console.error('TTS error:', e);
     }
