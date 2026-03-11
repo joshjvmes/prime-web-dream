@@ -1,24 +1,49 @@
 import { eventBus } from '@/hooks/useEventBus';
 
-const ACTION_REGEX = /\[ACTION:open-app:([a-z]+)\]/gi;
+const OPEN_REGEX = /\[ACTION:open-app:([a-z]+)\]/gi;
+const CLOSE_REGEX = /\[ACTION:close-app:([a-z]+)\]/gi;
+const NAV_REGEX = /\[ACTION:navigate:([a-z]+):([^\]]+)\]/gi;
+const ALL_ACTIONS_REGEX = /\[ACTION:(?:open-app|close-app|navigate):[^\]]+\]/gi;
 
 /**
- * Scans text for [ACTION:open-app:XXX] tags, emits EventBus events,
+ * Scans text for action tags, emits EventBus events,
  * and returns cleaned text with tags stripped.
+ *
+ * Supported tags:
+ *   [ACTION:open-app:APPID]
+ *   [ACTION:close-app:APPID]
+ *   [ACTION:navigate:APPID:context]
  */
 export function parseAndExecuteActions(text: string): string {
   let match: RegExpExecArray | null;
-  const regex = new RegExp(ACTION_REGEX.source, ACTION_REGEX.flags);
 
-  while ((match = regex.exec(text)) !== null) {
+  // Open apps
+  const openRe = new RegExp(OPEN_REGEX.source, OPEN_REGEX.flags);
+  while ((match = openRe.exec(text)) !== null) {
     const appId = match[1].toLowerCase();
-    // Small delay so the message renders before the app opens
+    setTimeout(() => eventBus.emit('app.request-open', { app: appId }), 300);
+  }
+
+  // Close apps
+  const closeRe = new RegExp(CLOSE_REGEX.source, CLOSE_REGEX.flags);
+  while ((match = closeRe.exec(text)) !== null) {
+    const appId = match[1].toLowerCase();
+    setTimeout(() => eventBus.emit('app.request-close', { app: appId }), 300);
+  }
+
+  // Navigate (open app + send context/tab hint)
+  const navRe = new RegExp(NAV_REGEX.source, NAV_REGEX.flags);
+  while ((match = navRe.exec(text)) !== null) {
+    const appId = match[1].toLowerCase();
+    const context = match[2].trim();
     setTimeout(() => {
       eventBus.emit('app.request-open', { app: appId });
+      // Give the app a moment to mount, then send navigation context
+      setTimeout(() => eventBus.emit('app.navigate', { app: appId, context }), 400);
     }, 300);
   }
 
-  return text.replace(ACTION_REGEX, '').replace(/\n{3,}/g, '\n\n').trim();
+  return text.replace(ALL_ACTIONS_REGEX, '').replace(/\n{3,}/g, '\n\n').trim();
 }
 
 /** Available app IDs for the system prompt */
@@ -32,11 +57,30 @@ export const AVAILABLE_APPS = [
 ] as const;
 
 export const APP_ACTION_PROMPT = `
-You can open apps on the user's desktop by including action tags in your response. Format: [ACTION:open-app:APPID]
+You can control the user's desktop by including action tags in your response. Tags are hidden from the user — write naturally around them.
+
+OPEN an app: [ACTION:open-app:APPID]
+CLOSE an app: [ACTION:close-app:APPID]
+NAVIGATE to a specific view/tab inside an app: [ACTION:navigate:APPID:context]
+
 Available app IDs: ${AVAILABLE_APPS.join(', ')}.
+
+Navigation contexts (use with navigate):
+- monitor: "cpu", "memory", "network", "processes"
+- settings: "display", "security", "ai", "audio", "about"
+- mail: "inbox", "sent", "drafts"
+- browser: any URL like "https://example.com"
+- vault: "holdings", "trade"
+- wallet: "overview", "send", "escrow"
+- calendar: "month", "week"
+- social: "feed", "profile"
+- board: "backlog", "in-progress", "done"
+
 Examples:
-- User asks "open my terminal" → respond with a brief confirmation and include [ACTION:open-app:terminal]
-- User asks "show me the calendar" → include [ACTION:open-app:calendar]
-- User asks "check my emails" → include [ACTION:open-app:mail]
-You can open multiple apps at once. The action tags will be hidden from the user — just write naturally around them.
+- "open my terminal" → include [ACTION:open-app:terminal]
+- "close the calendar" → include [ACTION:close-app:calendar]
+- "check system health" → include [ACTION:navigate:monitor:cpu]
+- "show me my emails" → include [ACTION:navigate:mail:inbox]
+- "open vault and go to trading" → include [ACTION:navigate:vault:trade]
+You can combine multiple actions in one response.
 `;

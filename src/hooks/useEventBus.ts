@@ -32,6 +32,8 @@ export const EVENT_TYPES = [
   'widget.list',
   'widget.list.response',
   'app.request-open',
+  'app.request-close',
+  'app.navigate',
 ] as const;
 
 export type EventType = typeof EVENT_TYPES[number];
