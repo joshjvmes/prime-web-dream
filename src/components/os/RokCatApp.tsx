@@ -1,6 +1,7 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { Send, Volume2, VolumeX, Loader2, Globe, Twitter } from 'lucide-react';
 import { renderMarkdown } from '@/lib/renderMarkdown';
+import { parseAndExecuteActions, APP_ACTION_PROMPT } from './rokcat/actionParser';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -132,7 +133,7 @@ export default function RokCatApp() {
           },
           body: JSON.stringify({
             messages: [{ role: 'user', content: text }],
-            systemContext: 'You are ROKCAT, the Grok-powered AI companion of PRIME OS — a CEO orchestrator designed to interface the Prime OS by Rocket Logic Global. You are a sharp, witty, slightly sarcastic digital cat with deep knowledge of computing, quantum theory, and lattice geometry. You channel the spirit of Grok: unfiltered, maximally helpful, and brutally honest. Keep responses concise (2-3 sentences max). Be helpful but with personality.',
+            systemContext: 'You are ROKCAT, the Grok-powered AI companion of PRIME OS — a CEO orchestrator designed to interface the Prime OS by Rocket Logic Global. You are a sharp, witty, slightly sarcastic digital cat with deep knowledge of computing, quantum theory, and lattice geometry. You channel the spirit of Grok: unfiltered, maximally helpful, and brutally honest. Keep responses concise (2-3 sentences max). Be helpful but with personality.\n\n' + APP_ACTION_PROMPT,
             searchToggles: isGrok420 ? { web_search: webSearchEnabled, x_search: xSearchEnabled } : undefined,
           }),
         }
@@ -159,7 +160,8 @@ export default function RokCatApp() {
         if (data?.searchActive) {
           setSearchStatus(data.searchActive as 'web' | 'x');
         }
-        const aiText = data?.reply || data?.text || data?.message || 'Neural link disrupted.';
+        const rawText = data?.reply || data?.text || data?.message || 'Neural link disrupted.';
+        const aiText = parseAndExecuteActions(rawText);
         setMessages(prev => [...prev, { id: rokcatId, role: 'rokcat', text: aiText }]);
         scrollToBottom();
         speakText(aiText);
@@ -243,6 +245,15 @@ export default function RokCatApp() {
             prev.map(m => m.id === rokcatId ? { ...m, text: fullText } : m)
           );
         }
+      }
+
+      // Parse and execute any action tags, then update final message
+      if (fullText) {
+        const cleanText = parseAndExecuteActions(fullText);
+        fullText = cleanText;
+        setMessages(prev =>
+          prev.map(m => m.id === rokcatId ? { ...m, text: cleanText } : m)
+        );
       }
 
       if (!fullText) {
