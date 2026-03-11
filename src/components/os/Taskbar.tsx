@@ -28,6 +28,7 @@ interface TaskbarProps {
   onToggleClipboard?: () => void;
   isAdmin?: boolean;
   deviceClass?: DeviceClass;
+  user?: import('@supabase/supabase-js').User | null;
 }
 
 const allApps: { app: AppType; title: string; icon: React.ReactNode; label: string }[] = [
@@ -81,7 +82,7 @@ const allApps: { app: AppType; title: string; icon: React.ReactNode; label: stri
   { app: 'settings', title: 'Settings', icon: <Settings size={18} />, label: 'Settings' },
 ];
 
-export default function Taskbar({ windows, onOpenApp, onFocusWindow, notifications = [], onDismissNotification, onSearch, onOpenAbout, onLock, onCreateBot, activeWorkspace, onSwitchWorkspace, windowCountsByWorkspace, voiceState, onToggleVoice, onToggleClipboard, isAdmin, deviceClass = 'desktop' }: TaskbarProps) {
+export default function Taskbar({ windows, onOpenApp, onFocusWindow, notifications = [], onDismissNotification, onSearch, onOpenAbout, onLock, onCreateBot, activeWorkspace, onSwitchWorkspace, windowCountsByWorkspace, voiceState, onToggleVoice, onToggleClipboard, isAdmin, deviceClass = 'desktop', user }: TaskbarProps) {
   const isTablet = deviceClass === 'tablet';
   const [menuOpen, setMenuOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
@@ -206,8 +207,16 @@ export default function Taskbar({ windows, onOpenApp, onFocusWindow, notificatio
           </button>
         )}
 
-        {/* Lock button */}
-        {onLock && (
+        {/* Sign In button (shown when not authenticated) */}
+        {!user && onLock && (
+          <button onClick={onLock} className="flex items-center gap-1.5 px-2.5 py-1 rounded border border-primary/40 text-primary text-[10px] font-display tracking-wider hover:bg-primary/10 transition-colors animate-pulse" title="Sign in to unlock all features">
+            <Lock size={11} />
+            Sign In
+          </button>
+        )}
+
+        {/* Lock button (shown when authenticated) */}
+        {user && onLock && (
           <button onClick={onLock} aria-label="Lock (Ctrl+L)" className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors" title="Lock (Ctrl+L)">
             <Lock size={13} />
           </button>
