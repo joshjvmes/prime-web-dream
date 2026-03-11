@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
+import { supabase } from '@/integrations/supabase/client';
 import { WELCOME, ALL_COMMANDS, type CommandContext } from './terminal/commands';
 import { executeWithPipesAndChains } from './terminal/pipes';
 import {
