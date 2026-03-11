@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { eventBus } from '@/hooks/useEventBus';
 import { Video, VideoOff, Mic, MicOff, MonitorUp, Phone, PhoneOff, MessageSquare, Users, Copy, X } from 'lucide-react';
 
 interface Participant {
