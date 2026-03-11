@@ -248,10 +248,10 @@ export default function PrimeMailApp() {
             <Loader2 size={12} className="animate-spin" /> Generating mail…
           </div>
         )}
-        {inboxEmails.length === 0 ? (
+        {filteredEmails.length === 0 ? (
           <div className="p-4 text-center text-muted-foreground/50 text-[10px]">No messages</div>
         ) : (
-          inboxEmails.map(e => (
+          filteredEmails.map(e => (
             <button key={e.id} onClick={() => openEmail(e.id)}
               className={`w-full text-left px-3 py-2.5 border-b border-border/30 hover:bg-muted/20 transition-colors ${!e.read ? 'bg-primary/5' : ''}`}>
               <div className="flex items-center justify-between">
