@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Plus, Clock, Cpu, Loader2 } from 'lucide-react';
+import { eventBus } from '@/hooks/useEventBus';
 import { supabase } from '@/integrations/supabase/client';
 
 type Priority = 'P0' | 'P1' | 'P2';
