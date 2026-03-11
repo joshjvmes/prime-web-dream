@@ -15,6 +15,7 @@ interface MediaItem {
 interface Props {
   onClose: () => void;
   onAnimateImage?: (imageUrl: string) => void;
+  onShareToSocial?: (mediaUrl: string, mediaType: 'image' | 'video') => void;
 }
 
 export default function MediaGallery({ onClose, onAnimateImage }: Props) {
