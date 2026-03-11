@@ -1,5 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { Send, Volume2, VolumeX, Loader2, Globe, Twitter } from 'lucide-react';
+import { renderMarkdown } from '@/lib/renderMarkdown';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -53,22 +54,54 @@ export default function RokCatApp() {
   const speakText = useCallback(async (text: string) => {
     if (!ttsEnabled || !faceRef.current) return;
     try {
-      const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/elevenlabs-tts`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-            Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-          },
-          body: JSON.stringify({ text: text.slice(0, 500) }),
+      // Strip markdown formatting for cleaner speech
+      const cleanText = text
+        .replace(/```[\s\S]*?```/g, ' code block ')
+        .replace(/\*\*(.+?)\*\*/g, '$1')
+        .replace(/\*(.+?)\*/g, '$1')
+        .replace(/`(.+?)`/g, '$1')
+        .replace(/^#{1,3}\s+/gm, '')
+        .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+        .replace(/!\[([^\]]*)\]\([^)]+\)/g, '$1')
+        .replace(/\|[^\n]+\|/g, '')
+        .replace(/\n{2,}/g, '. ')
+        .trim();
+
+      // Chunk into ~900 char segments at sentence boundaries for ElevenLabs limit
+      const chunks: string[] = [];
+      let remaining = cleanText;
+      while (remaining.length > 0) {
+        if (remaining.length <= 900) {
+          chunks.push(remaining);
+          break;
         }
-      );
-      if (!response.ok) return;
-      const blob = await response.blob();
-      const audioUrl = URL.createObjectURL(blob);
-      await faceRef.current.speak(audioUrl);
+        let splitAt = remaining.lastIndexOf('. ', 900);
+        if (splitAt < 200) splitAt = remaining.lastIndexOf(' ', 900);
+        if (splitAt < 200) splitAt = 900;
+        chunks.push(remaining.slice(0, splitAt + 1).trim());
+        remaining = remaining.slice(splitAt + 1).trim();
+      }
+
+      // Play chunks sequentially
+      for (const chunk of chunks) {
+        if (!chunk) continue;
+        const response = await fetch(
+          `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/elevenlabs-tts`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+              Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+            },
+            body: JSON.stringify({ text: chunk }),
+          }
+        );
+        if (!response.ok) continue;
+        const blob = await response.blob();
+        const audioUrl = URL.createObjectURL(blob);
+        await faceRef.current!.speak(audioUrl);
+      }
     } catch (e) {
       console.error('TTS error:', e);
     }
@@ -307,7 +340,11 @@ export default function RokCatApp() {
             {messages.map(m => (
               <div key={m.id} className={`text-xs font-mono ${m.role === 'user' ? 'text-muted-foreground' : 'text-[#00e5ff]'}`}>
                 <span className="opacity-50">{m.role === 'user' ? '> ' : 'ROKCAT: '}</span>
-                {m.text}
+                {m.role === 'user' ? m.text : (
+                  <div className="inline rokcat-md [&_p]:mb-1 [&_p]:leading-relaxed [&_pre]:bg-[#0a1929] [&_pre]:border-[#00e5ff]/20 [&_code]:text-[#00e5ff]/80 [&_h1]:text-[#00e5ff] [&_h2]:text-[#00e5ff] [&_h3]:text-[#00e5ff] [&_strong]:text-[#e2e8f0] [&_table]:text-[10px]">
+                    {renderMarkdown(m.text)}
+                  </div>
+                )}
               </div>
             ))}
             {loading && !messages.some(m => m.role === 'rokcat' && m.text === '') && (
