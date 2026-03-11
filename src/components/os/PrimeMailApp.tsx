@@ -152,9 +152,9 @@ export default function PrimeMailApp() {
     return () => eventBus.off('mail.received', handler);
   }, [userId, loadEmails]);
 
-  const inboxEmails = emails.filter(e => e.folder === 'inbox');
+  const filteredEmails = emails.filter(e => e.folder === activeFolder);
   const selected = selectedId ? emails.find(e => e.id === selectedId) : null;
-  const unreadCount = inboxEmails.filter(e => !e.read).length;
+  const unreadCount = emails.filter(e => e.folder === 'inbox' && !e.read).length;
 
   const openEmail = async (id: string) => {
     setSelectedId(id);
