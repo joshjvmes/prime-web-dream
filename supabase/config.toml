@@ -47,3 +47,6 @@ verify_jwt = false
 
 [functions.github-app]
 verify_jwt = false
+
+[functions.grok-imagine]
+verify_jwt = false

@@ -774,6 +774,7 @@ const FINANCIAL_TOOLS = new Set(["check_balance", "transfer_tokens", "buy_shares
 const MEMORY_TOOLS = new Set(["save_memory", "recall_memories"]);
 const EXTENDED_TOOLS = new Set(["get_market_data", "get_stock_chart", "check_portfolio", "trade_stock", "create_booking", "list_bookings", "cancel_booking", "send_message", "list_conversations", "control_audio"]);
 const CLIENT_SIDE_TOOLS = new Set(["draw_on_canvas", "generate_canvas_art", "create_spreadsheet", "update_cells", "add_chart"]);
+const IMAGINE_TOOLS = new Set(["generate_image", "generate_video"]);
 
 async function executeExtendedTool(fnName: string, args: Record<string, unknown>, authHeader: string, userId: string | null) {
   const db = getServiceDb();
