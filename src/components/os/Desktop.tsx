@@ -254,6 +254,44 @@ export default function Desktop() {
     };
   }, [pushNotification, openWindow]);
 
+  // Handle GitHub OAuth redirect — claim installation and open PrimeGit
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const installationId = params.get('installation_id');
+    if (!params.has('github_connected') || !installationId) return;
+
+    // Clean URL immediately
+    params.delete('github_connected');
+    params.delete('installation_id');
+    params.delete('github_login');
+    const clean = `${window.location.pathname}${params.toString() ? '?' + params.toString() : ''}`;
+    window.history.replaceState({}, '', clean);
+
+    // Claim the installation once we have a session
+    const claimInstallation = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+      try {
+        const qp = new URLSearchParams({ action: 'link-installation', installation_id: installationId });
+        await fetch(
+          `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/github-app?${qp.toString()}`,
+          {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${session.access_token}`,
+              'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+            },
+          }
+        );
+      } catch (e) {
+        console.error('Failed to link GitHub installation:', e);
+      }
+      // Open PrimeGit after claiming
+      openWindow('github', 'PrimeGit');
+    };
+    claimInstallation();
+  }, [openWindow]);
+
   // Auth state
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
