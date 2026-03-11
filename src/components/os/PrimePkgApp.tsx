@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect } from 'react';
 import { Search, Download, RefreshCw, Trash2, Package, Loader2, Store } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { supabase } from '@/integrations/supabase/client';
+import { eventBus } from '@/hooks/useEventBus';
 
 interface Pkg {
   name: string;
@@ -38,6 +39,20 @@ export default function PrimePkgApp() {
   const [category, setCategory] = useState('All');
   const [log, setLog] = useState<string[]>(['[init] Package manager ready.', `[sync] ${SYSTEM_PKGS.length} system packages indexed.`]);
   const [loadingForge, setLoadingForge] = useState(true);
+
+  // ROKCAT navigation listener
+  useEffect(() => {
+    const handler = (payload: any) => {
+      if (payload?.app === 'pkg' && payload?.context) {
+        const ctx = payload.context.toLowerCase();
+        const match = CATEGORIES.find(c => c.toLowerCase() === ctx);
+        if (match) setCategory(match);
+        else if (ctx === 'search') { /* focus search — no-op, just show all */ setCategory('All'); }
+      }
+    };
+    eventBus.on('app.navigate', handler);
+    return () => eventBus.off('app.navigate', handler);
+  }, []);
 
   const addLog = useCallback((msg: string) => {
     setLog(prev => [...prev, `[${new Date().toLocaleTimeString('en-US', { hour12: false })}] ${msg}`].slice(-20));

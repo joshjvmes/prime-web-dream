@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { eventBus } from '@/hooks/useEventBus';
 import { NetworkNode } from '@/types/os';
 
 const INITIAL_NODES: NetworkNode[] = [
@@ -28,6 +29,20 @@ export default function PrimeNetApp() {
   const [dragging, setDragging] = useState<string | null>(null);
   const [paused, setPaused] = useState(false);
   const [log, setLog] = useState<string[]>([]);
+
+  // ROKCAT navigation listener
+  useEffect(() => {
+    const handler = (payload: any) => {
+      if (payload?.app === 'net' && payload?.context) {
+        const ctx = payload.context.toLowerCase();
+        if (ctx === 'pause') setPaused(true);
+        if (ctx === 'resume') setPaused(false);
+        if (ctx === 'stats') setSelected(null); // deselect to show overview
+      }
+    };
+    eventBus.on('app.navigate', handler);
+    return () => eventBus.off('app.navigate', handler);
+  }, []);
   const idRef = useRef(0);
   const svgRef = useRef<SVGSVGElement>(null);
   const nextNodeId = useRef(7);

@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { eventBus } from '@/hooks/useEventBus';
 import { Video, VideoOff, Mic, MicOff, MonitorUp, Phone, PhoneOff, MessageSquare, Users, Copy, X } from 'lucide-react';
 
 interface Participant {
@@ -51,6 +52,20 @@ export default function PrimeLinkApp() {
   const [camOn, setCamOn] = useState(true);
   const [screenShare, setScreenShare] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
+
+  // ROKCAT navigation listener
+  useEffect(() => {
+    const handler = (payload: any) => {
+      if (payload?.app === 'link' && payload?.context) {
+        const ctx = payload.context.toLowerCase();
+        if (ctx === 'join') setInCall(true);
+        if (ctx === 'chat') { setInCall(true); setChatOpen(true); }
+        if (ctx === 'leave') setInCall(false);
+      }
+    };
+    eventBus.on('app.navigate', handler);
+    return () => eventBus.off('app.navigate', handler);
+  }, []);
   const [callTime, setCallTime] = useState(0);
   const [chatInput, setChatInput] = useState('');
   const [messages, setMessages] = useState(CHAT_MESSAGES);

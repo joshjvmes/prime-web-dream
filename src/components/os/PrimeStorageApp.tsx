@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import { StorageRegion } from '@/types/os';
 import { supabase } from '@/integrations/supabase/client';
 import { Loader2, Database } from 'lucide-react';
+import { eventBus } from '@/hooks/useEventBus';
 
 const REGIONS: StorageRegion[] = [
   { id: 'r1', name: 'System Manifold', coord: '⟨2,3,5,7,11,...⟩', compressed: true, sizeOriginal: '4.2 TB', sizeCompressed: '1.05 TB', adinkraEncoded: true },
@@ -24,6 +25,27 @@ const REGION_TABLES: Record<string, string[]> = {
 export default function PrimeStorageApp() {
   const [selected, setSelected] = useState<StorageRegion | null>(null);
   const [counter, setCounter] = useState({ ratio: 0, capacity: 0 });
+
+  // ROKCAT navigation listener
+  useEffect(() => {
+    const handler = (payload: any) => {
+      if (payload?.app === 'storage' && payload?.context) {
+        const ctx = payload.context.toLowerCase();
+        const regionMap: Record<string, string> = {
+          'system': 'r1', 'user': 'r2', 'cache': 'r3', 'ml': 'r4', 'models': 'r4', 'logs': 'r5', 'temporal': 'r5',
+        };
+        const regionId = regionMap[ctx];
+        if (regionId) {
+          const region = REGIONS.find(r => r.id === regionId);
+          if (region) setSelected(region);
+        } else if (ctx === 'overview') {
+          setSelected(null);
+        }
+      }
+    };
+    eventBus.on('app.navigate', handler);
+    return () => eventBus.off('app.navigate', handler);
+  }, []);
   const [regionRows, setRegionRows] = useState<Record<string, number>>({});
   const [totalRows, setTotalRows] = useState(0);
   const [storageFiles, setStorageFiles] = useState<number>(0);
