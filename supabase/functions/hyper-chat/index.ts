@@ -797,9 +797,13 @@ async function executeExtendedTool(fnName: string, args: Record<string, unknown>
   if (fnName === "get_market_data") {
     const symbols = String(args.symbols || "AAPL,MSFT,GOOGL,TSLA,AMZN");
     try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 8000);
       const resp = await fetch(`${Deno.env.get("SUPABASE_URL")!}/functions/v1/market-data?action=get-tickers&symbols=${symbols}`, {
         headers: { Authorization: authHeader, apikey: Deno.env.get("SUPABASE_ANON_KEY")! },
+        signal: controller.signal,
       });
+      clearTimeout(timeout);
       const data = await resp.json();
       const tickers = data.tickers || data.data;
       if (tickers && Array.isArray(tickers)) {
