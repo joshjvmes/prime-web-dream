@@ -661,7 +661,7 @@ function buildSystemPrompt(context?: Record<string, unknown>, memories?: string[
 }
 
 // ── Handle financial tool calls server-side ──
-async function executeFinancialTool(fnName: string, args: Record<string, unknown>, authHeader: string) {
+async function executeFinancialTool(fnName: string, args: Record<string, unknown>, authHeader: string, userId: string | null) {
   if (fnName === "check_balance") {
     const wallet = await callPrimeBank("balance", authHeader);
     if (wallet.error) return { data: { error: wallet.error }, reply: `⚠️ Could not check balance: ${wallet.error}` };
