@@ -737,7 +737,7 @@ ${APP_ACTION_PROMPT}`;
           value={input}
           onChange={e => setInput(e.target.value)}
           onKeyDown={e => e.key === 'Enter' && handleSend()}
-          placeholder="Command ROKCAT..."
+          placeholder={imagineMode === 'image' ? 'Describe the image to generate...' : imagineMode === 'video' ? 'Describe the video to generate...' : 'Command ROKCAT...'}
           className="flex-1 bg-transparent border-[#00e5ff]/20 text-[#e2e8f0] placeholder:text-[#00e5ff]/30 text-sm h-9 focus-visible:ring-[#00e5ff]/30"
           disabled={loading}
         />
