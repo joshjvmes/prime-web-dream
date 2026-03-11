@@ -25,6 +25,27 @@ const REGION_TABLES: Record<string, string[]> = {
 export default function PrimeStorageApp() {
   const [selected, setSelected] = useState<StorageRegion | null>(null);
   const [counter, setCounter] = useState({ ratio: 0, capacity: 0 });
+
+  // ROKCAT navigation listener
+  useEffect(() => {
+    const handler = (payload: any) => {
+      if (payload?.app === 'storage' && payload?.context) {
+        const ctx = payload.context.toLowerCase();
+        const regionMap: Record<string, string> = {
+          'system': 'r1', 'user': 'r2', 'cache': 'r3', 'ml': 'r4', 'models': 'r4', 'logs': 'r5', 'temporal': 'r5',
+        };
+        const regionId = regionMap[ctx];
+        if (regionId) {
+          const region = REGIONS.find(r => r.id === regionId);
+          if (region) setSelected(region);
+        } else if (ctx === 'overview') {
+          setSelected(null);
+        }
+      }
+    };
+    eventBus.on('app.navigate', handler);
+    return () => eventBus.off('app.navigate', handler);
+  }, []);
   const [regionRows, setRegionRows] = useState<Record<string, number>>({});
   const [totalRows, setTotalRows] = useState(0);
   const [storageFiles, setStorageFiles] = useState<number>(0);
