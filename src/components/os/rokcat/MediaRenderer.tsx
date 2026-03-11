@@ -1,26 +1,33 @@
 import { renderMarkdown } from '@/lib/renderMarkdown';
+import { Progress } from '@/components/ui/progress';
+import { Button } from '@/components/ui/button';
+import { Video } from 'lucide-react';
 
 const IMAGE_TAG_RE = /\[IMAGE:((?:https?:\/\/|data:)[^\]]+)\]/g;
 const VIDEO_TAG_RE = /\[VIDEO:((?:https?:\/\/|data:)[^\]]+)\]/g;
+const PROGRESS_TAG_RE = /\[PROGRESS:(\d+)\]/g;
+
+interface Props {
+  text: string;
+  onAnimateImage?: (imageUrl: string) => void;
+}
 
 /**
- * Renders ROKCAT message text with inline images and videos.
- * Detects [IMAGE:url] and [VIDEO:url] tags and replaces them with media elements.
+ * Renders ROKCAT message text with inline images, videos, and progress bars.
+ * Detects [IMAGE:url], [VIDEO:url], and [PROGRESS:XX] tags.
  */
-export default function RokCatMediaRenderer({ text }: { text: string }) {
-  // Check if text contains media tags
-  const hasMedia = IMAGE_TAG_RE.test(text) || VIDEO_TAG_RE.test(text);
-  // Reset regex lastIndex
+export default function RokCatMediaRenderer({ text, onAnimateImage }: Props) {
+  const hasMedia = IMAGE_TAG_RE.test(text) || VIDEO_TAG_RE.test(text) || PROGRESS_TAG_RE.test(text);
   IMAGE_TAG_RE.lastIndex = 0;
   VIDEO_TAG_RE.lastIndex = 0;
+  PROGRESS_TAG_RE.lastIndex = 0;
 
   if (!hasMedia) {
     return <>{renderMarkdown(text)}</>;
   }
 
-  // Split text into segments: regular text and media tags
-  const segments: Array<{ type: 'text' | 'image' | 'video'; content: string }> = [];
-  const combinedRe = /\[(IMAGE|VIDEO):((?:https?:\/\/|data:)[^\]]+)\]/g;
+  const segments: Array<{ type: 'text' | 'image' | 'video' | 'progress'; content: string }> = [];
+  const combinedRe = /\[(IMAGE|VIDEO|PROGRESS):((?:https?:\/\/|data:|\d)[^\]]+)\]/g;
   let lastIndex = 0;
   let match: RegExpExecArray | null;
 
@@ -29,7 +36,7 @@ export default function RokCatMediaRenderer({ text }: { text: string }) {
       segments.push({ type: 'text', content: text.slice(lastIndex, match.index) });
     }
     segments.push({
-      type: match[1].toLowerCase() as 'image' | 'video',
+      type: match[1].toLowerCase() as 'image' | 'video' | 'progress',
       content: match[2],
     });
     lastIndex = match.index + match[0].length;
@@ -41,6 +48,18 @@ export default function RokCatMediaRenderer({ text }: { text: string }) {
   return (
     <>
       {segments.map((seg, i) => {
+        if (seg.type === 'progress') {
+          const value = Math.min(100, Math.max(0, parseInt(seg.content, 10) || 0));
+          return (
+            <div key={i} className="my-2 space-y-1.5">
+              <div className="flex items-center justify-between text-xs text-muted-foreground">
+                <span>⏳ Generating video…</span>
+                <span className="font-mono text-[#00e5ff]">{value}%</span>
+              </div>
+              <Progress value={value} className="h-2 bg-[#0a1929] [&>div]:bg-gradient-to-r [&>div]:from-[#00e5ff] [&>div]:to-[#7c4dff]" />
+            </div>
+          );
+        }
         if (seg.type === 'image') {
           return (
             <div key={i} className="my-1.5">
@@ -52,6 +71,17 @@ export default function RokCatMediaRenderer({ text }: { text: string }) {
                   loading="lazy"
                 />
               </a>
+              {onAnimateImage && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="mt-1 h-7 text-xs text-[#00e5ff]/70 hover:text-[#00e5ff] hover:bg-[#00e5ff]/10"
+                  onClick={() => onAnimateImage(seg.content)}
+                >
+                  <Video className="h-3 w-3 mr-1" />
+                  Animate
+                </Button>
+              )}
             </div>
           );
         }

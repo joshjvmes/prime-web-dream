@@ -296,11 +296,11 @@ ${APP_ACTION_PROMPT}`;
   }, []);
 
   // Handle Grok Imagine (image/video generation)
-  const handleImagine = useCallback(async (prompt: string, type: 'image' | 'video') => {
+  const handleImagine = useCallback(async (prompt: string, type: 'image' | 'video', imageUrl?: string) => {
     if (!prompt || loading) return;
     setInput('');
     setImagineMode(null);
-    const userMsg: Message = { id: crypto.randomUUID(), role: 'user', text: `${type === 'image' ? '🎨' : '🎬'} ${prompt}` };
+    const userMsg: Message = { id: crypto.randomUUID(), role: 'user', text: `${type === 'image' ? '🎨' : '🎬'} ${prompt}${imageUrl ? ' (from image)' : ''}` };
     setMessages(prev => [...prev, userMsg]);
     scrollToBottom();
     setLoading(true);
@@ -329,7 +329,7 @@ ${APP_ACTION_PROMPT}`;
         return { resp, data: await resp.json() };
       };
 
-      const { resp, data } = await invokeGrok({ type, prompt, n: type === 'image' ? 2 : 1 });
+      const { resp, data } = await invokeGrok({ type, prompt, n: type === 'image' ? 2 : 1, ...(imageUrl ? { image_url: imageUrl } : {}) });
 
       if (!resp.ok) {
         const errMsg = data?.error || `${type} generation failed.`;
@@ -346,12 +346,11 @@ ${APP_ACTION_PROMPT}`;
         setMessages(prev => prev.map(m => m.id === rokcatId ? { ...m, text: `Here's your video:\n\n[VIDEO:${data.url}]` } : m));
       } else if (type === 'video' && data.status === 'pending' && data.requestId) {
         // Client-side polling for async video generation
-        let dots = 1;
         const maxAttempts = 40;
         for (let i = 0; i < maxAttempts; i++) {
           await new Promise(r => setTimeout(r, 5000));
-          dots = (dots % 4) + 1;
-          setMessages(prev => prev.map(m => m.id === rokcatId ? { ...m, text: `⏳ Generating video${'.'.repeat(dots)} (${i + 1}/${maxAttempts})` } : m));
+          const progress = Math.round(((i + 1) / maxAttempts) * 100);
+          setMessages(prev => prev.map(m => m.id === rokcatId ? { ...m, text: `[PROGRESS:${progress}]` } : m));
           scrollToBottom();
 
           try {
@@ -760,7 +759,7 @@ ${APP_ACTION_PROMPT}`;
                 <span className="opacity-50">{m.role === 'user' ? '> ' : 'ROKCAT: '}</span>
                 {m.role === 'user' ? m.text : (
                   <div className="inline rokcat-md [&_p]:mb-1 [&_p]:leading-relaxed [&_pre]:bg-[#0a1929] [&_pre]:border-[#00e5ff]/20 [&_code]:text-[#00e5ff]/80 [&_h1]:text-[#00e5ff] [&_h2]:text-[#00e5ff] [&_h3]:text-[#00e5ff] [&_strong]:text-[#e2e8f0] [&_table]:text-[10px]">
-                    <RokCatMediaRenderer text={m.text} />
+                    <RokCatMediaRenderer text={m.text} onAnimateImage={(imageUrl) => handleImagine('Animate this image into a short video', 'video', imageUrl)} />
                   </div>
                 )}
               </div>
