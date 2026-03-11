@@ -58,6 +58,9 @@ async function getUserId(authHeader: string): Promise<string | null> {
 
 // ── Image Generation via xAI Grok ──
 async function generateImage(apiKey: string, prompt: string, n: number = 1): Promise<Response> {
+  const model = "grok-imagine-image";
+  console.log(`[grok-imagine] IMAGE request — model: ${model}, n: ${n}, prompt length: ${prompt.length}`);
+
   const resp = await fetch("https://api.x.ai/v1/images/generations", {
     method: "POST",
     headers: {
@@ -65,7 +68,7 @@ async function generateImage(apiKey: string, prompt: string, n: number = 1): Pro
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      model: "grok-2-image-1212",
+      model,
       prompt,
       n: Math.min(n, 4),
       response_format: "url",
@@ -74,14 +77,15 @@ async function generateImage(apiKey: string, prompt: string, n: number = 1): Pro
 
   if (!resp.ok) {
     const errText = await resp.text();
-    console.error("xAI image error:", resp.status, errText);
-    return new Response(JSON.stringify({ error: `xAI image generation failed (${resp.status})` }), {
+    console.error(`[grok-imagine] IMAGE error — status: ${resp.status}, body: ${errText}`);
+    return new Response(JSON.stringify({ error: `xAI image generation failed (${resp.status})`, details: errText }), {
       status: resp.status,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
 
   const data = await resp.json();
+  console.log(`[grok-imagine] IMAGE success — ${(data.data || []).length} image(s) returned`);
   const urls = (data.data || []).map((d: any) => d.url);
 
   return new Response(JSON.stringify({ type: "image", urls }), {
