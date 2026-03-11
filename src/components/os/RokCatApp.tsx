@@ -38,6 +38,7 @@ export default function RokCatApp() {
   const [isMultiAgent, setIsMultiAgent] = useState(false);
   const [agentThoughts, setAgentThoughts] = useState<AgentThought[]>([]);
   const [autonomousMode, setAutonomousMode] = useState(false);
+  const [imagineMode, setImagineMode] = useState<'image' | 'video' | null>(null);
   const autonomousTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const autonomousBusyRef = useRef(false);
   const faceRef = useRef<RokCatFaceHandle>(null);
@@ -294,9 +295,73 @@ ${APP_ACTION_PROMPT}`;
     }
   }, []);
 
+  // Handle Grok Imagine (image/video generation)
+  const handleImagine = useCallback(async (prompt: string, type: 'image' | 'video') => {
+    if (!prompt || loading) return;
+    setInput('');
+    setImagineMode(null);
+    const userMsg: Message = { id: crypto.randomUUID(), role: 'user', text: `${type === 'image' ? '🎨' : '🎬'} ${prompt}` };
+    setMessages(prev => [...prev, userMsg]);
+    scrollToBottom();
+    setLoading(true);
+
+    const rokcatId = crypto.randomUUID();
+    setMessages(prev => [...prev, { id: rokcatId, role: 'rokcat', text: `⏳ Generating ${type}...` }]);
+    scrollToBottom();
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const authToken = session?.access_token || import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+
+      const resp = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/grok-imagine`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+            Authorization: `Bearer ${authToken}`,
+          },
+          body: JSON.stringify({ type, prompt, n: type === 'image' ? 2 : 1 }),
+        }
+      );
+
+      const data = await resp.json();
+
+      if (!resp.ok) {
+        const errMsg = data?.error || `${type} generation failed.`;
+        setMessages(prev => prev.map(m => m.id === rokcatId ? { ...m, text: `❌ ${errMsg}` } : m));
+        scrollToBottom();
+        return;
+      }
+
+      if (type === 'image' && data.urls?.length) {
+        const mediaTags = data.urls.map((url: string) => `[IMAGE:${url}]`).join('\n');
+        setMessages(prev => prev.map(m => m.id === rokcatId ? { ...m, text: `Here's what I imagined:\n\n${mediaTags}` } : m));
+      } else if (type === 'video' && data.url) {
+        setMessages(prev => prev.map(m => m.id === rokcatId ? { ...m, text: `Here's your video:\n\n[VIDEO:${data.url}]` } : m));
+      } else {
+        setMessages(prev => prev.map(m => m.id === rokcatId ? { ...m, text: data.error || 'Generation completed but no media was returned.' } : m));
+      }
+      scrollToBottom();
+    } catch (e) {
+      setMessages(prev => prev.map(m => m.id === rokcatId ? { ...m, text: '❌ Connection error during generation.' } : m));
+      scrollToBottom();
+    } finally {
+      setLoading(false);
+    }
+  }, [loading, speakText, scrollToBottom]);
+
   const handleSend = useCallback(async () => {
     const text = input.trim();
     if (!text || loading) return;
+
+    // If in imagine mode, route to grok-imagine
+    if (imagineMode) {
+      handleImagine(text, imagineMode);
+      return;
+    }
+
     setInput('');
     const userMsg: Message = { id: crypto.randomUUID(), role: 'user', text };
     setMessages(prev => [...prev, userMsg]);
@@ -503,7 +568,7 @@ ${APP_ACTION_PROMPT}`;
       // Clear agent thoughts after a short delay
       setTimeout(() => setAgentThoughts([]), 2000);
     }
-  }, [input, loading, speakText, processClientAction, isGrok420, webSearchEnabled, xSearchEnabled]);
+  }, [input, loading, speakText, processClientAction, isGrok420, webSearchEnabled, xSearchEnabled, imagineMode, handleImagine]);
 
   return (
     <div className={`flex flex-col h-full bg-[#02040a] overflow-hidden ${autonomousMode ? 'ring-1 ring-[#00e5ff]/40 ring-inset' : ''}`}>
@@ -545,26 +610,30 @@ ${APP_ACTION_PROMPT}`;
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="h-7 w-7 text-[#00e5ff]/60 hover:text-[#00e5ff] hover:bg-[#00e5ff]/10"
-                    title="Image generation available"
+                    className={`h-7 w-7 ${imagineMode === 'image' ? 'text-[#00e5ff] bg-[#00e5ff]/20' : 'text-[#00e5ff]/60 hover:text-[#00e5ff]'} hover:bg-[#00e5ff]/10`}
+                    onClick={() => setImagineMode(prev => prev === 'image' ? null : 'image')}
                   >
                     <Image size={13} />
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent side="bottom" className="text-xs">Grok Imagine (Image)</TooltipContent>
+                <TooltipContent side="bottom" className="text-xs">
+                  {imagineMode === 'image' ? 'Cancel Image Mode' : 'Grok Imagine (Image)'}
+                </TooltipContent>
               </Tooltip>
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="h-7 w-7 text-[#00e5ff]/60 hover:text-[#00e5ff] hover:bg-[#00e5ff]/10"
-                    title="Video generation available"
+                    className={`h-7 w-7 ${imagineMode === 'video' ? 'text-[#00e5ff] bg-[#00e5ff]/20' : 'text-[#00e5ff]/60 hover:text-[#00e5ff]'} hover:bg-[#00e5ff]/10`}
+                    onClick={() => setImagineMode(prev => prev === 'video' ? null : 'video')}
                   >
                     <Video size={13} />
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent side="bottom" className="text-xs">Grok Imagine (Video)</TooltipContent>
+                <TooltipContent side="bottom" className="text-xs">
+                  {imagineMode === 'video' ? 'Cancel Video Mode' : 'Grok Imagine (Video)'}
+                </TooltipContent>
               </Tooltip>
             </>
           )}
@@ -633,6 +702,17 @@ ${APP_ACTION_PROMPT}`;
         </div>
       )}
 
+      {/* Imagine mode indicator */}
+      {imagineMode && (
+        <div className="flex items-center justify-center gap-2 py-1.5 bg-purple-500/10 border-t border-purple-500/20">
+          {imagineMode === 'image' ? <Image size={12} className="text-purple-400" /> : <Video size={12} className="text-purple-400" />}
+          <span className="text-[10px] font-mono text-purple-400 tracking-wider uppercase">
+            {imagineMode === 'image' ? 'Image generation mode — describe what to create' : 'Video generation mode — describe what to create'}
+          </span>
+          <button onClick={() => setImagineMode(null)} className="text-purple-400/60 hover:text-purple-400 text-xs ml-1">✕</button>
+        </div>
+      )}
+
       {/* Chat transcript */}
       <div className="h-32 border-t border-[#00e5ff]/20 bg-[#02040a]/80">
         <ScrollArea className="h-full" ref={scrollRef as any}>
@@ -668,7 +748,7 @@ ${APP_ACTION_PROMPT}`;
           value={input}
           onChange={e => setInput(e.target.value)}
           onKeyDown={e => e.key === 'Enter' && handleSend()}
-          placeholder="Command ROKCAT..."
+          placeholder={imagineMode === 'image' ? 'Describe the image to generate...' : imagineMode === 'video' ? 'Describe the video to generate...' : 'Command ROKCAT...'}
           className="flex-1 bg-transparent border-[#00e5ff]/20 text-[#e2e8f0] placeholder:text-[#00e5ff]/30 text-sm h-9 focus-visible:ring-[#00e5ff]/30"
           disabled={loading}
         />
