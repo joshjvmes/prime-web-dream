@@ -807,9 +807,11 @@ async function executeExtendedTool(fnName: string, args: Record<string, unknown>
       const resp = await fetch(`${Deno.env.get("SUPABASE_URL")!}/functions/v1/market-data?action=get-chart&ticker=${ticker}&from=${from}&to=${to}`, {
         headers: { Authorization: authHeader, apikey: Deno.env.get("SUPABASE_ANON_KEY")! },
       });
-      const data = await resp.json();
-      if (data.results?.length > 0) {
-        const prices = data.results.map((r: any) => r.c);
+      const rawData = await resp.json();
+      const chartData = rawData.data || rawData;
+      const results = chartData.results || [];
+      if (results.length > 0) {
+        const prices = results.map((r: any) => r.c);
         const trend = prices[prices.length - 1] >= prices[0] ? '📈 Uptrend' : '📉 Downtrend';
         return { data: { chart: data.results }, reply: `📊 **${ticker}** (${days}d)\nHigh: $${Math.max(...prices).toFixed(2)} | Low: $${Math.min(...prices).toFixed(2)} | ${trend}` };
       }
