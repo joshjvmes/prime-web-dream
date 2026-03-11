@@ -53,7 +53,7 @@ export const AVAILABLE_APPS = [
   'security', 'monitor', 'social', 'board', 'canvas', 'vault',
   'arcade', 'admin', 'journal', 'wallet', 'miniapps', 'forge',
   'botlab', 'signals', 'stream', 'booking', 'iot', 'robotics',
-  'github', 'spreadsheet',
+  'github', 'spreadsheet', 'comm', 'link', 'net', 'pkg', 'storage',
 ] as const;
 
 export const APP_ACTION_PROMPT = `
