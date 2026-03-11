@@ -242,11 +242,19 @@ export default function Desktop() {
       setBotCreatorOpen(true);
     };
 
+    // EventBus listener for ROKCAT / programmatic app opening
+    const handleEventBusOpen = (payload: { app: string; title?: string }) => {
+      const match = APP_NAME_MAP[payload.app?.toLowerCase()];
+      if (match) openWindow(match.app, payload.title || match.title);
+    };
+    eventBus.on('app.request-open', handleEventBusOpen);
+
     window.addEventListener('cloudhook-notification', handleNotif);
     window.addEventListener('cloudhook-open-app', handleOpenApp);
     window.addEventListener('cloudhook-lock', handleLockEvt);
     window.addEventListener('prime-create-bot', handleCreateBot);
     return () => {
+      eventBus.off('app.request-open', handleEventBusOpen);
       window.removeEventListener('cloudhook-notification', handleNotif);
       window.removeEventListener('cloudhook-open-app', handleOpenApp);
       window.removeEventListener('cloudhook-lock', handleLockEvt);
