@@ -84,6 +84,11 @@ Navigation contexts (use with navigate):
 - booking: "new", "today"
 - arcade: "minesweeper", "snake", "pong", "cascade", "tetris"
 - signals: "signals", "analytics"
+- comm: "calls", "messages", "contacts"
+- link: "join", "chat", "leave"
+- net: "pause", "resume", "stats"
+- pkg: "all", "core", "network", "compute", "storage", "security", "forge"
+- storage: "system", "user", "cache", "ml", "logs", "overview"
 
 Examples:
 - "open my terminal" → include [ACTION:open-app:terminal]
