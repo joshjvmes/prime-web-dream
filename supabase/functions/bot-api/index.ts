@@ -83,7 +83,7 @@ async function executeServerTool(
   toolName: string,
   args: Record<string, unknown>,
   userId: string,
-  supabaseAdmin: ReturnType<typeof createClient>
+  supabaseAdmin: any
 ): Promise<{ status: string; result: unknown }> {
   try {
     switch (toolName) {

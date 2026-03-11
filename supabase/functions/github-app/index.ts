@@ -170,7 +170,9 @@ async function handleWebhook(req: Request): Promise<Response> {
     repository: payload.repository?.full_name || null,
     sender: payload.sender?.login || null,
     payload,
-  }).catch((e: Error) => console.error("Failed to store github event:", e));
+   });
+  const insertResult = await insertPromise;
+  if (insertResult.error) console.error("Failed to store github event:", insertResult.error);
 
   // Find the user who owns this installation (for scoped hook dispatch)
   let userId: string | undefined;

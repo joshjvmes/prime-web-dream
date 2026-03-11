@@ -143,7 +143,7 @@ Deno.serve(async (req) => {
       default:
         return new Response(JSON.stringify({ error: `Unknown action: ${actionParam}` }), { status: 400, headers: corsHeaders })
     }
-  } catch (err) {
-    return new Response(JSON.stringify({ error: err.message }), { status: 500, headers: corsHeaders })
+  } catch (err: unknown) {
+    return new Response(JSON.stringify({ error: (err as Error).message }), { status: 500, headers: corsHeaders })
   }
 })
