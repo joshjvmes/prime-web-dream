@@ -3,6 +3,7 @@ import { TrendingUp, TrendingDown, ArrowUpRight, ArrowDownRight, Radio } from 'l
 import { LineChart, Line, XAxis, YAxis, ResponsiveContainer, ReferenceLine, Tooltip } from 'recharts';
 import { Skeleton } from '@/components/ui/skeleton';
 import { supabase } from '@/integrations/supabase/client';
+import { eventBus } from '@/hooks/useEventBus';
 
 interface Signal {
   id: string;
@@ -50,6 +51,18 @@ export default function PrimeSignalsApp() {
   const [chartData, setChartData] = useState<{ t: string; price: number }[]>([]);
   const [chartLoading, setChartLoading] = useState(false);
   const [view, setView] = useState<'signals' | 'analytics'>('signals');
+
+  // ROKCAT navigation listener
+  useEffect(() => {
+    const handler = (payload: any) => {
+      if (payload?.app === 'signals' && payload?.context) {
+        const ctx = payload.context.toLowerCase();
+        if (ctx === 'signals' || ctx === 'analytics') setView(ctx as 'signals' | 'analytics');
+      }
+    };
+    eventBus.on('app.navigate', handler);
+    return () => eventBus.off('app.navigate', handler);
+  }, []);
 
   const fetchTickers = useCallback(async () => {
     try {

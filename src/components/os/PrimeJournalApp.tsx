@@ -5,6 +5,7 @@ import { useCloudStorage } from '@/hooks/useCloudStorage';
 import { useIntranetPages } from '@/hooks/useIntranetPages';
 import { renderMarkdown } from '@/lib/renderMarkdown';
 import { supabase } from '@/integrations/supabase/client';
+import { eventBus } from '@/hooks/useEventBus';
 
 interface JournalEntry {
   id: string;
@@ -28,6 +29,20 @@ export default function PrimeJournalApp() {
   const [loaded, setLoaded] = useState(false);
   const [tagInput, setTagInput] = useState('');
   const [showPublish, setShowPublish] = useState(false);
+
+  // ROKCAT navigation listener
+  useEffect(() => {
+    const handler = (payload: any) => {
+      if (payload?.app === 'journal' && payload?.context) {
+        const ctx = payload.context.toLowerCase();
+        if (ctx === 'new') createEntry();
+        else if (ctx === 'edit') setEditMode(true);
+        else if (ctx === 'preview') setEditMode(false);
+      }
+    };
+    eventBus.on('app.navigate', handler);
+    return () => eventBus.off('app.navigate', handler);
+  }, []);
   const [publishSlug, setPublishSlug] = useState('');
   const saveTimer = useRef<ReturnType<typeof setTimeout>>();
   const editorRef = useRef<HTMLTextAreaElement>(null);
