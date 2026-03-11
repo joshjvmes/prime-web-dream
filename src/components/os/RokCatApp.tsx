@@ -29,6 +29,7 @@ export default function RokCatApp() {
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [ttsEnabled, setTtsEnabled] = useState(true);
+  const ttsEnabledRef = useRef(true);
   const [searchStatus, setSearchStatus] = useState<'web' | 'x' | null>(null);
   const [webSearchEnabled, setWebSearchEnabled] = useState(true);
   const [xSearchEnabled, setXSearchEnabled] = useState(true);
