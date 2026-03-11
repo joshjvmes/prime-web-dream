@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Phone, PhoneOff, MessageSquare, Users, Signal, Battery, Delete, Send } from 'lucide-react';
+import { eventBus } from '@/hooks/useEventBus';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { supabase } from '@/integrations/supabase/client';
 
