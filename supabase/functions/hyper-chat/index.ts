@@ -1109,6 +1109,59 @@ serve(async (req) => {
         );
       }
 
+      // Imagine tools — proxy to grok-imagine edge function
+      if (IMAGINE_TOOLS.has(fnName)) {
+        const imagineBody: any = { prompt: args.prompt };
+        if (fnName === "generate_video") {
+          imagineBody.type = "video";
+          if (args.duration) imagineBody.duration = args.duration;
+          if (args.image_url) imagineBody.image_url = args.image_url;
+        } else {
+          imagineBody.type = "image";
+          if (args.n) imagineBody.n = args.n;
+        }
+        try {
+          const imagineResp = await fetch(`${Deno.env.get("SUPABASE_URL")!}/functions/v1/grok-imagine`, {
+            method: "POST",
+            headers: {
+              Authorization: authHeader,
+              "Content-Type": "application/json",
+              apikey: Deno.env.get("SUPABASE_ANON_KEY")!,
+            },
+            body: JSON.stringify(imagineBody),
+          });
+          const imagineData = await imagineResp.json();
+          if (!imagineResp.ok) {
+            const reply = `⚠️ ${imagineData.error || "Image generation failed"}`;
+            return new Response(
+              JSON.stringify({ type: "tool_call", tool: fnName, data: {}, reply }),
+              { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+            );
+          }
+          let reply: string;
+          if (imagineData.type === "video") {
+            reply = `🎬 Video generated! Here's your clip:\n\n[VIDEO:${imagineData.url}]`;
+          } else {
+            const urls = imagineData.urls || [];
+            reply = `🖼️ Generated ${urls.length} image(s):\n\n${urls.map((u: string, i: number) => `[IMAGE:${u}]`).join('\n')}`;
+          }
+          if (userId) {
+            const lastUserMsg = messages.filter((m: any) => m.role === "user").pop();
+            if (lastUserMsg) saveConversationMessage(userId, "user", lastUserMsg.content).catch(() => {});
+            saveConversationMessage(userId, "assistant", reply).catch(() => {});
+          }
+          return new Response(
+            JSON.stringify({ type: "tool_call", tool: fnName, data: imagineData, reply }),
+            { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        } catch (e) {
+          return new Response(
+            JSON.stringify({ type: "tool_call", tool: fnName, data: {}, reply: `⚠️ Imagine error: ${e}` }),
+            { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+      }
+
       // Social/Mail tools — return data for frontend
       let reply = "";
       let data: Record<string, unknown> = {};
