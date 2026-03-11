@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { GitBranch, GitCommit, GitPullRequest, AlertCircle, ExternalLink, Loader2, Link2, Unlink, RefreshCw, Plus, MessageSquare, FolderGit2, Eye, ChevronRight, ChevronDown } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
+import { eventBus } from '@/hooks/useEventBus';
 
 interface Installation {
   id: string;
