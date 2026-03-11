@@ -740,15 +740,14 @@ async function executeFinancialTool(fnName: string, args: Record<string, unknown
   }
 
   if (fnName === "place_bet") {
+    if (!userId) return { data: {}, reply: "⚠️ Authentication required." };
     const market = await findMarket(String(args.market_question || ""));
     if (!market) return { data: {}, reply: `⚠️ Could not find an open market matching "${args.market_question}".` };
     const chargeResult = await callPrimeBank("ai-charge", authHeader, { amount: args.amount, description: `Bet on: ${market.question}` });
     if (!chargeResult.charged) return { data: {}, reply: `⚠️ Insufficient OS to place bet. Need ${args.amount} OS.` };
     const db = getServiceDb();
-    const { data: { user } } = await db.auth.getUser(authHeader.replace("Bearer ", ""));
-    if (!user) return { data: {}, reply: "⚠️ Auth error." };
     const side = String(args.side).toUpperCase();
-    await db.from("bets").insert({ user_id: user.id, market_id: market.id, side, amount: Number(args.amount) });
+    await db.from("bets").insert({ user_id: userId, market_id: market.id, side, amount: Number(args.amount) });
     const poolCol = side === "YES" ? "yes_pool" : "no_pool";
     await db.from("bet_markets").update({ [poolCol]: Number(market[poolCol]) + Number(args.amount) }).eq("id", market.id);
     return {
