@@ -1112,9 +1112,10 @@ serve(async (req) => {
     let memories: string[] = [];
     let priorHistory: Array<{ role: string; content: string }> = [];
     let userActivity: Array<{ action: string; target: string; created_at: string }> = [];
+    let learnings: string[] = [];
     if (userId) {
       const db = getServiceDb();
-      [memories, priorHistory, userActivity] = await Promise.all([
+      [memories, priorHistory, userActivity, learnings] = await Promise.all([
         loadMemories(userId),
         loadConversationHistory(userId),
         db.from("user_activity")
@@ -1123,10 +1124,11 @@ serve(async (req) => {
           .order("created_at", { ascending: false })
           .limit(20)
           .then(({ data }) => (data || []) as Array<{ action: string; target: string; created_at: string }>),
+        loadLearnings(userId),
       ]);
     }
 
-    const systemPrompt = buildSystemPrompt(context, memories, priorHistory, userActivity);
+    const systemPrompt = buildSystemPrompt(context, memories, priorHistory, userActivity, learnings);
 
     const fullMessages = [
       { role: "system", content: systemPrompt },
