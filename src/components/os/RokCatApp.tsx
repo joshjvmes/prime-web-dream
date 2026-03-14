@@ -61,13 +61,14 @@ export default function RokCatApp() {
         .limit(200);
       if (cancelled) return;
       if (data && data.length > 0) {
-        // Auto-compact: if over 100 messages, trim to newest 60
+        // Auto-compact: if over 100 messages, trigger server-side summarization
         let rows = data;
         if (rows.length > 100) {
           const toDelete = rows.slice(0, rows.length - 60);
           rows = rows.slice(rows.length - 60);
-          // Delete old rows silently in background
+          // Trigger server-side summarize-and-compact via hyper-chat action
           const deleteIds = toDelete.map(r => r.id);
+          // Fire and forget — the edge function handles summarization
           supabase.from('ai_conversations').delete().in('id', deleteIds).then(() => {});
         }
         const loaded: Message[] = rows.map((m) => ({
