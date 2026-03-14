@@ -1306,7 +1306,7 @@ serve(async (req) => {
     }
 
     // ── Final response ──
-    if (userId) {
+    if (userId && !noSave) {
       const lastUserMsg = messages.filter((m: any) => m.role === "user").pop();
       if (lastUserMsg) saveConversationMessage(userId, "user", lastUserMsg.content).catch(() => {});
     }
