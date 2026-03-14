@@ -47,7 +47,7 @@ export default function RokCatApp() {
   const faceRef = useRef<RokCatFaceHandle>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  // Load persisted chat history on mount
+  // Load persisted chat history on mount (with auto-compact)
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -55,13 +55,22 @@ export default function RokCatApp() {
       if (!session || cancelled) { setHistoryLoaded(true); return; }
       const { data } = await supabase
         .from('ai_conversations')
-        .select('role, content, created_at')
+        .select('id, role, content, created_at')
         .eq('user_id', session.user.id)
         .order('created_at', { ascending: true })
-        .limit(50);
+        .limit(200);
       if (cancelled) return;
       if (data && data.length > 0) {
-        const loaded: Message[] = data.map((m) => ({
+        // Auto-compact: if over 100 messages, trim to newest 60
+        let rows = data;
+        if (rows.length > 100) {
+          const toDelete = rows.slice(0, rows.length - 60);
+          rows = rows.slice(rows.length - 60);
+          // Delete old rows silently in background
+          const deleteIds = toDelete.map(r => r.id);
+          supabase.from('ai_conversations').delete().in('id', deleteIds).then(() => {});
+        }
+        const loaded: Message[] = rows.map((m) => ({
           id: crypto.randomUUID(),
           role: m.role === 'assistant' ? 'rokcat' as const : 'user' as const,
           text: m.content,
@@ -72,6 +81,13 @@ export default function RokCatApp() {
       setHistoryLoaded(true);
     })();
     return () => { cancelled = true; };
+  }, []);
+
+  // Listen for clear-chat event from Settings
+  useEffect(() => {
+    const handler = () => setMessages([]);
+    eventBus.on('rokcat:clear', handler);
+    return () => eventBus.off('rokcat:clear', handler);
   }, []);
 
   // Check user's AI provider config
