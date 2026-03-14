@@ -764,6 +764,10 @@ function buildSystemPrompt(context?: Record<string, unknown>, memories?: string[
     prompt += `\n\n[OPERATOR'S RECENT ACTIVITY — what they've been doing]\n${userActivity.map(a => `[${a.created_at}] ${a.action} → ${a.target}`).join('\n')}`;
   }
 
+  if (learnings && learnings.length > 0) {
+    prompt += `\n\n[LEARNED PATTERNS — things you've learned from past interactions]\n${learnings.map(l => `- ${l}`).join('\n')}`;
+  }
+
   return prompt;
 }
 
