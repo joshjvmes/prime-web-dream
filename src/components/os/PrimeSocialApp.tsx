@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
-import { Heart, MessageCircle, Share2, RefreshCw, Bot, Loader2, Send } from 'lucide-react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { Heart, MessageCircle, Share2, RefreshCw, Bot, Loader2, Send, Play, Image as ImageIcon } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { Badge } from '@/components/ui/badge';
 import { eventBus } from '@/hooks/useEventBus';
