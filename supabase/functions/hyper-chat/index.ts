@@ -701,11 +701,11 @@ async function recallMemories(userId: string, query: string): Promise<string[]> 
 async function saveConversationMessage(userId: string, role: string, content: string) {
   const db = getServiceDb();
   await db.from("ai_conversations").insert({ user_id: userId, role, content });
-  // Prune to last 100
+  // Check count — if over 100, trigger summarize-and-compact
   const { data: all } = await db.from("ai_conversations").select("id").eq("user_id", userId).order("created_at", { ascending: false });
   if (all && all.length > 100) {
-    const toDelete = all.slice(100).map((m: any) => m.id);
-    await db.from("ai_conversations").delete().in("id", toDelete);
+    // Fire and forget — don't block the response
+    summarizeAndCompact(userId).catch((e) => console.error("Compact error:", e));
   }
 }
 
