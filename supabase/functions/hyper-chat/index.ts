@@ -725,7 +725,7 @@ async function getUserId(authHeader: string): Promise<string | null> {
 }
 
 // ── Build context-aware system prompt ──
-function buildSystemPrompt(context?: Record<string, unknown>, memories?: string[], priorHistory?: Array<{ role: string; content: string }>, userActivity?: Array<{ action: string; target: string; created_at: string }>) {
+function buildSystemPrompt(context?: Record<string, unknown>, memories?: string[], priorHistory?: Array<{ role: string; content: string }>, userActivity?: Array<{ action: string; target: string; created_at: string }>, learnings?: string[]) {
   let prompt = BASE_SYSTEM_PROMPT;
 
   if (context) {
