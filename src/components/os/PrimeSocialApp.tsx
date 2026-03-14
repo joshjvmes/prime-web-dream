@@ -18,7 +18,66 @@ interface Post {
   showComments: boolean;
 }
 
-export default function PrimeSocialApp() {
+// ── Inline media renderer for post content ──
+const MEDIA_URL_REGEX = /(https?:\/\/[^\s]+\.(?:png|jpg|jpeg|gif|webp|svg|mp4|webm|mov)(?:\?[^\s]*)?|data:image\/[^\s]+)/gi;
+const EMOJI_PREFIX_REGEX = /^[🖼️🎬🎨📸🎥✨🌌🌅🔥💀🎭🧠⚡️🌊🪐🫧🦠🌀💫🌠]*\s*/;
+
+function PostContent({ content }: { content: string }) {
+  const { textParts, mediaUrls } = useMemo(() => {
+    const urls: { url: string; isVideo: boolean }[] = [];
+    const text = content.replace(MEDIA_URL_REGEX, (match) => {
+      const isVideo = /\.(mp4|webm|mov)/i.test(match);
+      const isBase64 = match.startsWith('data:image/');
+      urls.push({ url: match, isVideo: isVideo && !isBase64 });
+      return '';
+    });
+    // Clean up leftover emoji prefixes and extra whitespace
+    const cleaned = text.replace(EMOJI_PREFIX_REGEX, '').replace(/\n{3,}/g, '\n\n').trim();
+    return { textParts: cleaned, mediaUrls: urls };
+  }, [content]);
+
+  const [failedUrls, setFailedUrls] = useState<Set<string>>(new Set());
+
+  return (
+    <div className="mt-1 space-y-2">
+      {textParts && (
+        <p className="text-muted-foreground leading-relaxed whitespace-pre-wrap">{textParts}</p>
+      )}
+      {mediaUrls.length > 0 && (
+        <div className={`grid gap-1.5 ${mediaUrls.length > 1 ? 'grid-cols-2' : 'grid-cols-1'}`}>
+          {mediaUrls.map((m, i) => {
+            if (failedUrls.has(m.url)) {
+              return (
+                <a key={i} href={m.url} target="_blank" rel="noopener noreferrer"
+                  className="flex items-center gap-1 text-[9px] text-primary hover:underline truncate">
+                  {m.isVideo ? <Play size={10} /> : <ImageIcon size={10} />}
+                  {m.url.length > 60 ? m.url.slice(0, 60) + '…' : m.url}
+                </a>
+              );
+            }
+            if (m.isVideo) {
+              return (
+                <video key={i} src={m.url} controls preload="metadata"
+                  className="w-full max-h-48 rounded border border-border/50 bg-black object-contain"
+                  onError={() => setFailedUrls(prev => new Set(prev).add(m.url))}
+                />
+              );
+            }
+            return (
+              <img key={i} src={m.url} alt="Shared media" loading="lazy"
+                className="w-full max-h-64 rounded border border-border/50 object-cover cursor-pointer hover:opacity-90 transition-opacity"
+                onError={() => setFailedUrls(prev => new Set(prev).add(m.url))}
+                onClick={() => window.open(m.url, '_blank')}
+              />
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+
   const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
