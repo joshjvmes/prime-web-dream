@@ -383,28 +383,29 @@ export default function TerminalApp({ onOpenApp, onCloseApp, isFirstOpen }: Term
       className="h-full bg-background p-3 font-mono text-xs overflow-y-auto cursor-text"
       onClick={() => inputRef.current?.focus()}
     >
-      {lines.map((line, i) => (
-        <div
-          key={i}
-          className={
-            line.startsWith('psh ▸') || line.startsWith('q3-train ▸') || line.startsWith('debug ▸') || line.startsWith('geomc ▸') || line.startsWith('trace ▸') || line.startsWith('scan ▸') || line.startsWith('disk ▸')
-              ? 'text-primary'
-              : line.startsWith('▸') || line.startsWith('═')
-              ? 'text-prime-cyan'
-              : line.startsWith('┌') || line.startsWith('│') || line.startsWith('└') || line.startsWith('─')
-              ? 'text-prime-amber'
-              : line.includes('✓')
-              ? 'text-green-400'
-              : line.includes('✗')
-              ? 'text-red-400'
-              : line.startsWith('  [!]')
-              ? 'text-prime-amber'
-              : 'text-card-foreground'
-          }
-        >
-          {line || '\u00A0'}
-        </div>
-      ))}
+      {lines.map((line, i) => {
+        const hasChip = line.includes('{{chip:');
+        const colorClass =
+          line.startsWith('psh ▸') || line.startsWith('q3-train ▸') || line.startsWith('debug ▸') || line.startsWith('geomc ▸') || line.startsWith('trace ▸') || line.startsWith('scan ▸') || line.startsWith('disk ▸')
+            ? 'text-primary'
+            : line.startsWith('▸') || line.startsWith('═')
+            ? 'text-prime-cyan'
+            : line.startsWith('┌') || line.startsWith('│') || line.startsWith('└') || line.startsWith('─')
+            ? 'text-prime-amber'
+            : line.includes('✓')
+            ? 'text-green-400'
+            : line.includes('✗')
+            ? 'text-red-400'
+            : line.startsWith('  [!]')
+            ? 'text-prime-amber'
+            : 'text-card-foreground';
+
+        return (
+          <div key={i} className={colorClass}>
+            {hasChip ? renderTerminalChips(line) : (line || '\u00A0')}
+          </div>
+        );
+      })}
       {tabSuggestions && (
         <div className="text-muted-foreground">
           {tabSuggestions.join('  ')}
