@@ -694,7 +694,7 @@ async function saveMemory(userId: string, category: string, content: string) {
 
 async function recallMemories(userId: string, query: string): Promise<string[]> {
   const db = getServiceDb();
-  const { data } = await db.from("ai_memories").select("category, content").eq("user_id", userId).ilike("content", `%${query}%`).order("updated_at", { ascending: false }).limit(10);
+  const { data } = await db.from("ai_memories").select("category, content").eq("user_id", userId).not("category", "eq", "learning").ilike("content", `%${query}%`).order("updated_at", { ascending: false }).limit(10);
   return (data || []).map((m: any) => `[${m.category}] ${m.content}`);
 }
 
@@ -1102,7 +1102,7 @@ serve(async (req) => {
 
   try {
     const authHeader = req.headers.get("Authorization") || `Bearer ${Deno.env.get("SUPABASE_ANON_KEY")}`;
-    const { messages, context, searchToggles } = await req.json();
+    const { messages, context, searchToggles, noSave } = await req.json();
     // LOVABLE_API_KEY is still needed as fallback (handled by ai-router)
 
     // Extract user ID for memory/context features
@@ -1306,7 +1306,7 @@ serve(async (req) => {
     }
 
     // ── Final response ──
-    if (userId) {
+    if (userId && !noSave) {
       const lastUserMsg = messages.filter((m: any) => m.role === "user").pop();
       if (lastUserMsg) saveConversationMessage(userId, "user", lastUserMsg.content).catch(() => {});
     }
@@ -1316,7 +1316,7 @@ serve(async (req) => {
     // Case 1: Tools were used AND we got a final text response from the loop
     // Return as JSON with tool results + AI commentary
     if (usedTools && finalTextContent) {
-      if (userId) saveConversationMessage(userId, "assistant", finalTextContent).catch(() => {});
+      if (userId && !noSave) saveConversationMessage(userId, "assistant", finalTextContent).catch(() => {});
       return new Response(
         JSON.stringify({
           reply: finalTextContent,
@@ -1343,7 +1343,7 @@ serve(async (req) => {
       if (!phase2Resp.ok) {
         // Fallback to raw tool results
         const fallbackReply = toolResultSummaries.join('\n\n');
-        if (userId) saveConversationMessage(userId, "assistant", fallbackReply).catch(() => {});
+        if (userId && !noSave) saveConversationMessage(userId, "assistant", fallbackReply).catch(() => {});
         return new Response(
           JSON.stringify({ reply: fallbackReply, clientActions: hasClientActions ? clientSideActions : undefined }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" } }
