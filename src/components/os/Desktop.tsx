@@ -17,7 +17,7 @@ import BootSequence from '@/components/os/BootSequence';
 import Taskbar from '@/components/os/Taskbar';
 import OSWindow from '@/components/os/OSWindow';
 import GlobalSearch from '@/components/os/GlobalSearch';
-import QuickTour from '@/components/os/QuickTour';
+import SetupWizard from '@/components/os/SetupWizard';
 import AboutModal from '@/components/os/AboutModal';
 import DesktopWidgets from '@/components/os/DesktopWidgets';
 import ClipboardManager from '@/components/os/ClipboardManager';
@@ -449,8 +449,8 @@ export default function Desktop() {
 
   const handleBootComplete = useCallback(() => {
     setBooted(true);
-    const tourDone = localStorage.getItem('prime-os-tour-completed');
-    if (!tourDone) {
+    const setupDone = localStorage.getItem('prime-os-setup-completed') || localStorage.getItem('prime-os-tour-completed');
+    if (!setupDone) {
       setShowTour(true);
     } else {
       setTimeout(() => openWindow('rokcat', 'ROKCAT'), 300);
@@ -459,8 +459,8 @@ export default function Desktop() {
   }, [openWindow]);
 
   const handleTourComplete = useCallback(() => setShowTour(false), []);
-  const handleTourOpenTerminal = useCallback(() => {
-    setTimeout(() => openWindow('terminal', 'Prime Shell (psh)'), 200);
+  const handleTourOpenRokcat = useCallback(() => {
+    setTimeout(() => openWindow('rokcat', 'ROKCAT'), 200);
   }, [openWindow]);
 
   const closeWindowByApp = useCallback((app: string) => {
@@ -664,7 +664,7 @@ export default function Desktop() {
           />
 
           {showTour && (
-            <QuickTour onComplete={handleTourComplete} onOpenTerminal={handleTourOpenTerminal} />
+            <SetupWizard user={user} onComplete={handleTourComplete} onOpenRokcat={handleTourOpenRokcat} />
           )}
 
           <AboutModal open={aboutOpen} onOpenChange={setAboutOpen} />

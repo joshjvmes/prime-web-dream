@@ -1,52 +1,91 @@
 
 
-## Enhanced Onboarding: Setup Wizard with BYOK Flow
+# Internal Documentation for PRIME OS
 
-### Current State
-- New users see a 5-step **QuickTour** (welcome, desktop tips, apps, search, launch terminal) — purely informational
-- Auth is Google OAuth on the lock screen — no signup form
-- AI key setup is buried in Settings > AI Provider panel
-- No guided profile or API key setup during first login
+Create a set of `.md` documentation files in a `docs/` directory covering the full system architecture, app catalog, backend integrations, hooks, edge functions, and developer guide.
 
-### Proposed: Post-Auth Setup Wizard
+## Files to Create
 
-Replace the QuickTour with a richer **SetupWizard** that runs after a user's first sign-in. It combines the tour content with actionable setup steps.
+### 1. `docs/README.md` — Documentation Index
+- Table of contents linking to all other docs
+- Quick-start for developers (clone, install, run)
+- Project overview: browser-based OS with 50+ apps, Lovable Cloud backend
 
-**New file: `src/components/os/SetupWizard.tsx`**
+### 2. `docs/ARCHITECTURE.md` — System Architecture
+- Route structure: `/` (LandingPage) -> `/os` (Desktop)
+- Core flow: `App.tsx` -> `LandingPage` / `Index` -> `Desktop.tsx`
+- Desktop composition: LockScreen -> BootSequence -> Desktop (Taskbar + OSWindow + DesktopWidgets)
+- Window manager (`useWindowManager`): how windows open, focus, minimize, maximize, workspace switching
+- EventBus singleton: pub/sub for cross-app communication, list all event types
+- Authentication flow: Lovable Cloud auth, `LockScreen` sign-in/sign-up, session persistence
+- Mobile vs desktop rendering (`useDeviceClass`, `MobileLauncher`, `MobileAppView`)
 
-6 steps:
+### 3. `docs/APPS.md` — Application Catalog
+For each of the 50+ apps, document:
+- **Name**, **AppType key**, **Category** (Productivity, Finance, Infrastructure, Lore, etc.)
+- **Backend integration**: which tables/edge functions it uses, or "Client-only"
+- **Status**: Fully Live, Partially Live, Simulated, or Cloud-Persisted (via `useCloudStorage`)
 
-1. **Welcome** — "Welcome to PRIME OS, [name]" with avatar pulled from Google auth. Brief intro.
+Organized into sections:
+- **Fully Live** (14 apps): HypersphereApp, PrimeChatApp, PrimeCalendarApp, PrimeVaultApp, PrimeWalletApp, PrimeBetsApp, PrimeSignalsApp, FilesApp, PrimeBookingApp, BotLabApp, AdminConsoleApp, AppForgeApp/MiniAppsApp, SettingsApp, PrimeSocialApp, PrimeMailApp, PrimeBoardApp
+- **Cloud-Persisted** (via useCloudStorage): PrimeCanvasApp, TextEditorApp, PrimeGridApp, PrimeJournalApp
+- **Simulated/Lore** (18 apps): PrimeNetApp, EnergyMonitorApp, DataCenterApp, Q3InferenceApp, FoldMemApp, etc.
 
-2. **Power Your AI** — The BYOK recommendation step. Explains that PRIME OS is powered by AI and recommends getting a Grok API key from xAI.com. Shows:
-   - A prominent card: "Get your API key at console.x.ai" with an external link button
-   - A text input to paste the key right there
-   - A "Test Key" button that calls the existing `ai-key-manager` edge function
-   - A "Skip for now" option (system works with Lovable AI fallback, but limited)
-   - Brief note: "You can also add OpenAI, Anthropic, or Gemini keys later in Settings > AI"
+### 4. `docs/BACKEND.md` — Backend & Database Reference
+- **Database tables**: All 30+ tables with columns, RLS policy summary, and which app uses them
+- **Edge functions**: All 16 functions with purpose, auth requirements, request/response format
+  - `hyper-chat`: AI chat with streaming, memory persistence
+  - `ai-social`: AI post generation for PrimeSocial
+  - `prime-bank`: Token economy (mint, transfer, debit)
+  - `market-data`: Stock/crypto price lookup via Polygon API
+  - `sports-odds`: Sports betting odds via The Odds API
+  - `bot-api` / `bot-runner` / `agent-runtime`: Bot lifecycle and autonomous agent execution
+  - `admin-actions`: Role management and admin operations
+  - `mini-app-gen`: AI-powered mini-app code generation
+  - `ai-key-manager`: User API key CRUD
+  - `elevenlabs-tts`: Text-to-speech via ElevenLabs
+  - `system-analytics`: Real-time table counts and activity aggregation
+  - `web-proxy`: CORS proxy for PrimeBrowser
+  - `cron-dispatcher`: Scheduled task execution
+- **Secrets**: Which secrets are configured and what they power
+- **Storage buckets**: `user-files` bucket for FilesApp
 
-3. **Set Your Profile** — Display name + optional title/bio (pre-filled from Google data). Saves to `profiles` table.
+### 5. `docs/HOOKS.md` — Custom Hooks Reference
+Document each hook in `src/hooks/`:
+- `useWindowManager` — Window CRUD, focus, workspace management
+- `useEventBus` — Cross-app event pub/sub (list all event types)
+- `useCloudStorage` — localStorage + database sync for app state persistence
+- `useActivityTracker` — Logs user actions to `user_activity` table
+- `useNotifications` — Toast notification system
+- `useCalendarReminders` — Polls upcoming events, fires alerts
+- `useGlobalShortcuts` — Keyboard shortcuts (Ctrl+K search, etc.)
+- `useIdleTimeout` — Auto-lock after inactivity
+- `useVoiceControl` — Voice command recognition
+- `useSystemPulse` — Simulated system metrics
+- `useDeviceClass` — Mobile/tablet/desktop detection
+- `useIntranetPages` — PrimeBrowser intranet content
 
-4. **Desktop & Navigation** — Condensed version of current tour steps 2+4 (window management + Ctrl+K search)
+### 6. `docs/TERMINAL.md` — Terminal & Command Reference
+- Available commands from `terminal/commands.ts`
+- Pipe system from `terminal/pipes.ts`
+- Terminal modes from `terminal/modes.ts`
+- Widget commands from `terminal/widgetCommands.ts`
 
-5. **Meet ROKCAT** — Introduces the AI assistant. "ROKCAT is your geometric AI companion — ask questions, run commands, or just chat."
+### 7. `docs/SECURITY.md` — Security & RLS Overview
+- All tables have RLS enabled with `auth.uid() = user_id`
+- Public-read tables: `profiles`, `bet_markets`, `forge_listings`
+- Edge function auth pattern: Authorization header -> `getUser()` -> scoped queries
+- API key storage note (plaintext in `encrypted_key` column)
+- Service role key usage: only in edge functions, never client-side
 
-6. **Launch** — "You're ready. Launch ROKCAT to begin." with the "Don't show again" checkbox. Opens ROKCAT instead of terminal.
+## Update Existing File
 
-**`src/components/os/Desktop.tsx` changes:**
-- Replace QuickTour import/usage with SetupWizard
-- Pass `user` object to SetupWizard so it can display name/avatar and save profile
-- On completion, open ROKCAT (not terminal)
-- Track completion via `localStorage` key `prime-os-setup-completed` (distinct from old tour key)
+### `README.md` (root)
+- Add a "Documentation" section linking to `docs/README.md`
+- Keep existing content but add links to the new docs
 
-**`supabase/functions/hyper-chat/index.ts`** — No changes needed. The `ai-key-manager` edge function already handles key saving/testing.
-
-### Files to create/modify
-1. **Create** `src/components/os/SetupWizard.tsx` — Full setup wizard component
-2. **Modify** `src/components/os/Desktop.tsx` — Swap QuickTour for SetupWizard, pass user prop
-
-### No database changes needed
-- `profiles` table already exists with display_name, title, bio
-- `user_ai_keys` table already handles key storage
-- `ai-key-manager` edge function already supports save-key and test-key actions
+## Technical Notes
+- All docs are pure Markdown, no code changes needed
+- Total: 7 new files + 1 updated file
+- Estimated ~3,000 lines of documentation covering the full system
 
