@@ -1316,7 +1316,7 @@ serve(async (req) => {
     // Case 1: Tools were used AND we got a final text response from the loop
     // Return as JSON with tool results + AI commentary
     if (usedTools && finalTextContent) {
-      if (userId) saveConversationMessage(userId, "assistant", finalTextContent).catch(() => {});
+      if (userId && !noSave) saveConversationMessage(userId, "assistant", finalTextContent).catch(() => {});
       return new Response(
         JSON.stringify({
           reply: finalTextContent,
