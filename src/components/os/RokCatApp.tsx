@@ -723,6 +723,39 @@ ${APP_ACTION_PROMPT}`;
               {autonomousMode ? 'Stop Autonomous Mode' : 'Enable Autonomous Mode'}
             </TooltipContent>
           </Tooltip>
+          {/* Multi-Agent toggle — only visible when xAI is active */}
+          {isXAI && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className={`h-7 w-7 ${isMultiAgent ? 'text-[#ffd93d] bg-[#ffd93d]/20' : 'text-[#00e5ff]/60 hover:text-[#00e5ff]'} hover:bg-[#00e5ff]/10`}
+                  onClick={async () => {
+                    const newMulti = !isMultiAgent;
+                    setIsMultiAgent(newMulti);
+                    const newModel = newMulti ? 'grok-4.20-multi-agent-experimental-beta-0304' : 'grok-4.20-experimental-beta-0304-reasoning';
+                    setIsGrok420(true);
+                    const { data: { session } } = await supabase.auth.getSession();
+                    if (session) {
+                      const newPref = { provider: 'xai', model: newModel };
+                      await supabase.from('user_data').upsert({
+                        user_id: session.user.id,
+                        key: 'ai-provider',
+                        value: newPref as any,
+                        updated_at: new Date().toISOString(),
+                      }, { onConflict: 'user_id,key' });
+                    }
+                  }}
+                >
+                  <Users size={13} />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" className="text-xs">
+                {isMultiAgent ? 'Multi-Agent ON — click to disable' : 'Enable Multi-Agent Mode'}
+              </TooltipContent>
+            </Tooltip>
+          )}
           {/* Imagine toggles — only visible when xAI is active */}
           {isXAI && (
             <>
