@@ -8,7 +8,7 @@ interface MobileAppViewProps {
 
 export default function MobileAppView({ title, onBack, children }: MobileAppViewProps) {
   return (
-    <div className="fixed inset-0 z-[50] flex flex-col bg-background" style={{ paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)' }}>
+    <div className="fixed inset-0 z-[50] flex flex-col bg-background overflow-hidden" style={{ height: '100dvh', paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)' }}>
       {/* Top bar */}
       <div className="flex items-center justify-between px-3 h-11 bg-card/90 border-b border-border shrink-0">
         <button
