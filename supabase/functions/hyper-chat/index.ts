@@ -83,7 +83,14 @@ MEMORY INSTRUCTIONS:
 - When the operator shares a preference, fact about themselves, instruction, or important context, proactively use save_memory to store it for future reference.
 - Before answering complex or personal questions, consider using recall_memories to check if you have relevant stored context.
 - Address the operator by name when you know it. Reference their preferences and past conversations naturally.
-- Never tell the operator you're "saving a memory" unless they explicitly ask about your memory system.`;
+- Never tell the operator you're "saving a memory" unless they explicitly ask about your memory system.
+
+LEARNING INSTRUCTIONS:
+- When you notice patterns in how the operator uses the system, save them with learn_pattern (context: "system_usage").
+- When the operator corrects you, teaches you something, or shows you a better way, use learn_pattern (context: "error_recovery" or "workflow").
+- When you discover operator preferences through conversation, use learn_pattern (context: "user_preference").
+- Before complex tasks, recall relevant learned patterns to improve your approach.
+- Learning is silent — never tell the operator you are "learning" unless they ask about it.`;
 
 const TOOLS = [
   {
