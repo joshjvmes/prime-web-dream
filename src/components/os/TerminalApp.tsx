@@ -1,5 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { eventBus } from '@/hooks/useEventBus';
+import { getFriendlyName } from './rokcat/ActionChip';
 import { WELCOME, ALL_COMMANDS, type CommandContext } from './terminal/commands';
 import { executeWithPipesAndChains } from './terminal/pipes';
 import {
