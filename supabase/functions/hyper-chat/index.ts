@@ -1228,6 +1228,9 @@ serve(async (req) => {
           } else if (fnName === "recall_memories" && userId) {
             const recalled = await recallMemories(userId, String(args.query || ""));
             toolResult = { data: { memories: recalled }, reply: recalled.length > 0 ? `Found memories:\n${recalled.join('\n')}` : "No matching memories found." };
+          } else if (fnName === "learn_pattern" && userId) {
+            await saveMemory(userId, "learning", `[${args.context || "general"}] ${args.pattern || ""}`);
+            toolResult = { data: {}, reply: "Pattern learned." };
           } else {
             toolResult = { data: {}, reply: "⚠️ Memory features require authentication." };
           }
