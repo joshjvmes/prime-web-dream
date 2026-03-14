@@ -543,7 +543,7 @@ ${APP_ACTION_PROMPT}`;
           }
         }
         const rawText = data?.reply || data?.text || data?.message || 'Neural link disrupted.';
-        const aiText = parseAndExecuteActions(rawText);
+        const aiText = detectAppMentions(parseAndExecuteActions(rawText));
         setMessages(prev => [...prev, { id: rokcatId, role: 'rokcat', text: aiText }]);
         scrollToBottom();
         speakText(aiText);
