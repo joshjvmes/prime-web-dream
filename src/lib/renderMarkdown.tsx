@@ -15,7 +15,7 @@ export function renderMarkdown(md: string): React.ReactNode[] {
       while (i < lines.length && !lines[i].startsWith('```')) { codeLines.push(lines[i]); i++; }
       i++;
       elements.push(
-        <pre key={`code-${i}`} className="bg-card border border-border rounded p-3 mb-3 text-[10px] leading-relaxed overflow-x-auto">
+        <pre key={`code-${i}`} className="bg-card border border-border rounded p-3 mb-3 text-[10px] leading-relaxed overflow-x-auto max-w-full whitespace-pre-wrap break-all">
           <code className="text-primary/80">{codeLines.join('\n')}</code>
         </pre>
       );
