@@ -72,16 +72,16 @@ export default function TerminalApp({ onOpenApp, onCloseApp, isFirstOpen }: Term
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 10000);
 
-      const userMessage = systemNote
-        ? `${systemNote}\n\nUser: ${prompt}`
-        : prompt;
-
       const res = await fetch(
         `https://${projectId}.supabase.co/functions/v1/hyper-chat`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'apikey': apiKey, 'Authorization': `Bearer ${authToken}` },
-          body: JSON.stringify({ messages: [{ role: 'user', content: userMessage }] }),
+          body: JSON.stringify({
+            messages: [{ role: 'user', content: prompt }],
+            ...(systemNote ? { context: systemNote } : {}),
+            noSave: true,
+          }),
           signal: controller.signal,
         }
       );

@@ -694,7 +694,7 @@ async function saveMemory(userId: string, category: string, content: string) {
 
 async function recallMemories(userId: string, query: string): Promise<string[]> {
   const db = getServiceDb();
-  const { data } = await db.from("ai_memories").select("category, content").eq("user_id", userId).ilike("content", `%${query}%`).order("updated_at", { ascending: false }).limit(10);
+  const { data } = await db.from("ai_memories").select("category, content").eq("user_id", userId).not("category", "eq", "learning").ilike("content", `%${query}%`).order("updated_at", { ascending: false }).limit(10);
   return (data || []).map((m: any) => `[${m.category}] ${m.content}`);
 }
 
