@@ -620,8 +620,53 @@ async function findMarket(question: string) {
 // ── Memory helpers ──
 async function loadMemories(userId: string): Promise<string[]> {
   const db = getServiceDb();
-  const { data } = await db.from("ai_memories").select("category, content").eq("user_id", userId).order("created_at", { ascending: false }).limit(20);
+  const { data } = await db.from("ai_memories").select("category, content").eq("user_id", userId).not("category", "eq", "learning").order("created_at", { ascending: false }).limit(20);
   return (data || []).map((m: any) => `[${m.category}] ${m.content}`);
+}
+
+async function loadLearnings(userId: string): Promise<string[]> {
+  const db = getServiceDb();
+  const { data } = await db.from("ai_memories").select("content").eq("user_id", userId).eq("category", "learning").order("updated_at", { ascending: false }).limit(15);
+  return (data || []).map((m: any) => m.content);
+}
+
+async function summarizeAndCompact(userId: string) {
+  const db = getServiceDb();
+  const { data: all } = await db.from("ai_conversations").select("id, role, content, created_at").eq("user_id", userId).order("created_at", { ascending: true });
+  if (!all || all.length <= 100) return;
+  const toKeep = all.slice(all.length - 60);
+  const toSummarize = all.slice(0, all.length - 60);
+  // Build conversation text for summarization
+  const convoText = toSummarize.map((m: any) => `${m.role === 'user' ? 'Operator' : 'Hyper'}: ${m.content.substring(0, 300)}`).join('\n');
+  try {
+    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+    if (LOVABLE_API_KEY) {
+      const resp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "google/gemini-2.5-flash-lite",
+          messages: [
+            { role: "system", content: "Summarize this conversation into key facts, user preferences, topics discussed, and any important decisions or instructions. Be concise — bullet points. Max 500 words." },
+            { role: "user", content: convoText },
+          ],
+        }),
+      });
+      if (resp.ok) {
+        const data = await resp.json();
+        const summary = data.choices?.[0]?.message?.content;
+        if (summary) {
+          await db.from("ai_memories").insert({ user_id: userId, category: "summary", content: `[Auto-summary ${new Date().toISOString().slice(0, 10)}] ${summary}` });
+        }
+      }
+    }
+  } catch (e) { console.error("Summarization error:", e); }
+  // Delete old rows
+  const deleteIds = toSummarize.map((r: any) => r.id);
+  // Delete in batches of 50
+  for (let i = 0; i < deleteIds.length; i += 50) {
+    await db.from("ai_conversations").delete().in("id", deleteIds.slice(i, i + 50));
+  }
 }
 
 async function loadConversationHistory(userId: string): Promise<Array<{ role: string; content: string }>> {
