@@ -76,8 +76,7 @@ function PostContent({ content }: { content: string }) {
     </div>
   );
 }
-
-
+export default function PrimeSocialApp() {
   const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
