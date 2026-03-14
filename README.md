@@ -123,26 +123,6 @@ For manual Supabase setup, see [Getting Started](./docs/GETTING_STARTED.md) for 
 
 ---
 
-## Quick Start
-
-```sh
-# Clone the repository
-git clone <YOUR_GIT_URL>
-cd <YOUR_PROJECT_NAME>
-
-# Install dependencies
-npm install
-
-# Start the dev server
-npm run dev
-```
-
-Open `http://localhost:5173`. Navigate to `/os` to enter the desktop.
-
-See [Getting Started](./docs/GETTING_STARTED.md) for full setup instructions including environment configuration.
-
----
-
 ## Features
 
 ### Desktop Environment
