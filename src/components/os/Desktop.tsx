@@ -449,8 +449,8 @@ export default function Desktop() {
 
   const handleBootComplete = useCallback(() => {
     setBooted(true);
-    const tourDone = localStorage.getItem('prime-os-tour-completed');
-    if (!tourDone) {
+    const setupDone = localStorage.getItem('prime-os-setup-completed') || localStorage.getItem('prime-os-tour-completed');
+    if (!setupDone) {
       setShowTour(true);
     } else {
       setTimeout(() => openWindow('rokcat', 'ROKCAT'), 300);
