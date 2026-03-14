@@ -663,9 +663,9 @@ ${APP_ACTION_PROMPT}`;
         }
       }
 
-      // Parse and execute any action tags
+      // Parse and execute any action tags + detect app mentions
       if (fullText) {
-        const cleanText = parseAndExecuteActions(fullText);
+        const cleanText = detectAppMentions(parseAndExecuteActions(fullText));
         fullText = cleanText;
         setMessages(prev =>
           prev.map(m => m.id === rokcatId ? { ...m, text: cleanText } : m)
