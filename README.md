@@ -87,6 +87,42 @@ PRIME OS is a browser-based operating system exploring geometric computation, te
 
 ---
 
+## 🚀 Deploy Your Own
+
+The fastest way to get your own PRIME OS instance running:
+
+### Option 1: Clone via Lovable (Recommended)
+
+1. **Click the badge** below to clone the project directly into your Lovable workspace:
+
+   [![Clone in Lovable](https://img.shields.io/badge/Clone_in-Lovable-FF69B4?logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJ3aGl0ZSI+PHBhdGggZD0iTTEyIDIxLjM1bC0xLjQ1LTEuMzJDNS40IDE1LjM2IDIgMTIuMjggMiA4LjUgMiA1LjQyIDQuNDIgMyA3LjUgM2MxLjc0IDAgMy40MS44MSA0LjUgMi4wOUMxMy4wOSAzLjgxIDE0Ljc2IDMgMTYuNSAzIDE5LjU4IDMgMjIgNS40MiAyMiA4LjVjMCAzLjc4LTMuNCA2Ljg2LTguNTUgMTEuNTRMMTIgMjEuMzV6Ii8+PC9zdmc+&style=for-the-badge)](https://lovable.dev/products/prime-web-dream)
+
+2. Lovable will create a full copy with backend, database, and edge functions pre-configured
+3. Navigate to `/os` in your preview to enter the desktop
+4. **Configure AI** (optional): Open Settings → AI Keys to add your own API keys for xAI, OpenAI, Anthropic, or Google
+5. **Configure Auth** (optional): Set up Google OAuth in your project's backend settings for user sign-in
+6. **Publish**: Click the Publish button to deploy your instance to a live URL
+
+### Option 2: Manual Setup
+
+```sh
+# Clone the repository
+git clone <YOUR_GIT_URL>
+cd <YOUR_PROJECT_NAME>
+
+# Install dependencies
+npm install
+
+# Start the dev server
+npm run dev
+```
+
+Open `http://localhost:5173` and navigate to `/os`.
+
+For manual Supabase setup, see [Getting Started](./docs/GETTING_STARTED.md) for environment variables, database migrations, and edge function deployment.
+
+---
+
 ## Quick Start
 
 ```sh
