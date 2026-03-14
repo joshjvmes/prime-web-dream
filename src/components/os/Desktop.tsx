@@ -287,8 +287,14 @@ export default function Desktop() {
         if (win) closeWindow(win.id);
       }
     };
+    const handleRerunSetup = () => {
+      localStorage.removeItem('prime-os-setup-completed');
+      localStorage.removeItem('prime-os-tour-completed');
+      setShowTour(true);
+    };
     eventBus.on('app.request-open', handleEventBusOpen);
     eventBus.on('app.request-close', handleEventBusClose);
+    eventBus.on('system.rerun-setup', handleRerunSetup);
 
     window.addEventListener('cloudhook-notification', handleNotif);
     window.addEventListener('cloudhook-open-app', handleOpenApp);
@@ -297,6 +303,7 @@ export default function Desktop() {
     return () => {
       eventBus.off('app.request-open', handleEventBusOpen);
       eventBus.off('app.request-close', handleEventBusClose);
+      eventBus.off('system.rerun-setup', handleRerunSetup);
       window.removeEventListener('cloudhook-notification', handleNotif);
       window.removeEventListener('cloudhook-open-app', handleOpenApp);
       window.removeEventListener('cloudhook-lock', handleLockEvt);

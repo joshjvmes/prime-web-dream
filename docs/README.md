@@ -2,7 +2,7 @@
 
 **Geometric Computing Interface** — Built by [Rocket Logic Global](https://rocketlogicglobal.com)
 
-PRIME OS is a browser-based operating system with 50+ applications, powered by a Lovable Cloud backend (Supabase). It explores geometric computation, ternary logic, and 11-dimensional folding architectures through an interactive desktop environment.
+PRIME OS is a browser-based operating system with 50+ applications, powered by a cloud backend (Supabase). It explores geometric computation, ternary logic, and 11-dimensional folding architectures through an interactive desktop environment.
 
 ---
 
@@ -10,12 +10,16 @@ PRIME OS is a browser-based operating system with 50+ applications, powered by a
 
 | Document | Description |
 |---|---|
+| [GETTING_STARTED.md](./GETTING_STARTED.md) | Quick start, project structure, how to add apps |
 | [ARCHITECTURE.md](./ARCHITECTURE.md) | System architecture, routing, window management, EventBus, auth flow |
+| [FEATURES.md](./FEATURES.md) | Deep-dives: AI integration, Action Chips, onboarding, mobile support |
 | [APPS.md](./APPS.md) | Full catalog of 50+ apps with backend integrations and status |
 | [BACKEND.md](./BACKEND.md) | Database tables, edge functions, secrets, storage buckets |
+| [API_REFERENCE.md](./API_REFERENCE.md) | Edge function endpoints, auth, request/response schemas |
 | [HOOKS.md](./HOOKS.md) | Custom React hooks reference |
 | [TERMINAL.md](./TERMINAL.md) | Terminal commands, pipes, modes, and widget commands |
 | [SECURITY.md](./SECURITY.md) | RLS policies, auth patterns, and security overview |
+| [CONTRIBUTING.md](./CONTRIBUTING.md) | Code style, PR workflow, and contribution guidelines |
 
 ---
 
@@ -48,9 +52,8 @@ The app opens at `http://localhost:5173`. Navigate to `/os` to enter the desktop
 | Animation | Framer Motion |
 | Icons | Lucide React |
 | 3D | Three.js |
-| Backend | Lovable Cloud (Supabase) |
-| Auth | Lovable Cloud Auth (`@lovable.dev/cloud-auth-js`) |
-| Edge Functions | Deno (Supabase Edge Functions) |
+| Backend | Supabase (Postgres + Edge Functions) |
+| Auth | Google OAuth via Supabase Auth |
 
 ---
 
@@ -62,6 +65,7 @@ src/
 │   ├── os/              # All OS app components (50+ files)
 │   │   ├── terminal/    # Terminal commands, modes, pipes
 │   │   ├── browser/     # PrimeBrowser intranet pages
+│   │   ├── rokcat/      # ROKCAT AI (ActionChip, parser, thinking)
 │   │   └── calendar/    # Calendar utilities
 │   └── ui/              # shadcn/ui components
 ├── hooks/               # Custom React hooks (12+ hooks)
