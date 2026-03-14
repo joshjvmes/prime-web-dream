@@ -11,6 +11,22 @@ PRIME OS is a browser-based operating system exploring geometric computation, te
 
 ---
 
+## 🖥️ Screenshots
+
+### Lock Screen
+![Lock Screen](./public/screenshots/lockscreen.png)
+
+### Desktop Environment
+![Desktop](./public/screenshots/desktop.png)
+
+### Terminal (Prime Shell)
+![Terminal](./public/screenshots/terminal.png)
+
+### ROKCAT — AI Companion with Action Chips
+![ROKCAT](./public/screenshots/rokcat.png)
+
+---
+
 ## ✨ Highlights
 
 - **Full desktop environment** — Windows, taskbar, workspaces, drag/resize, snap, global search
