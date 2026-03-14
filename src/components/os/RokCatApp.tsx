@@ -689,14 +689,6 @@ ${APP_ACTION_PROMPT}`;
       setTimeout(() => setAgentThoughts([]), 2000);
     }
   }, [input, loading, messages, speakText, processClientAction, isGrok420, webSearchEnabled, xSearchEnabled, imagineMode, handleImagine]);
-  // Clear chat history
-  const clearChat = useCallback(async () => {
-    setMessages([]);
-    const { data: { session } } = await supabase.auth.getSession();
-    if (session?.user?.id) {
-      await supabase.from('ai_conversations').delete().eq('user_id', session.user.id);
-    }
-  }, []);
 
   return (
     <div className={`flex flex-col h-full bg-[#02040a] overflow-hidden ${autonomousMode ? 'ring-1 ring-[#00e5ff]/40 ring-inset' : ''}`}>
