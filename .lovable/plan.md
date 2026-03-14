@@ -1,91 +1,61 @@
 
 
-# Internal Documentation for PRIME OS
+## Deep Memory System + Multi-Agent Model Selection
 
-Create a set of `.md` documentation files in a `docs/` directory covering the full system architecture, app catalog, backend integrations, hooks, edge functions, and developer guide.
+Three interconnected features to implement:
 
-## Files to Create
+### 1. Conversation Summarization on Compact
 
-### 1. `docs/README.md` — Documentation Index
-- Table of contents linking to all other docs
-- Quick-start for developers (clone, install, run)
-- Project overview: browser-based OS with 50+ apps, Lovable Cloud backend
+When the auto-compact triggers (>100 messages → trim to 60), instead of just deleting old messages, first summarize them using the AI and save the summary as a memory.
 
-### 2. `docs/ARCHITECTURE.md` — System Architecture
-- Route structure: `/` (LandingPage) -> `/os` (Desktop)
-- Core flow: `App.tsx` -> `LandingPage` / `Index` -> `Desktop.tsx`
-- Desktop composition: LockScreen -> BootSequence -> Desktop (Taskbar + OSWindow + DesktopWidgets)
-- Window manager (`useWindowManager`): how windows open, focus, minimize, maximize, workspace switching
-- EventBus singleton: pub/sub for cross-app communication, list all event types
-- Authentication flow: Lovable Cloud auth, `LockScreen` sign-in/sign-up, session persistence
-- Mobile vs desktop rendering (`useDeviceClass`, `MobileLauncher`, `MobileAppView`)
+**`supabase/functions/hyper-chat/index.ts`** changes:
+- Add a new function `summarizeAndCompact(userId)` that:
+  1. Loads the oldest messages that are about to be deleted (the ones beyond the 60 newest)
+  2. Calls the Lovable AI gateway (non-streaming, low-cost model `google/gemini-2.5-flash-lite`) with a prompt: "Summarize this conversation into key facts, preferences, and topics discussed"
+  3. Saves the summary as an `ai_memories` entry with category `"summary"`
+  4. Then deletes the old conversation rows
+- Call this function inside `saveConversationMessage` when pruning (currently line 636-641), replacing the simple delete
 
-### 3. `docs/APPS.md` — Application Catalog
-For each of the 50+ apps, document:
-- **Name**, **AppType key**, **Category** (Productivity, Finance, Infrastructure, Lore, etc.)
-- **Backend integration**: which tables/edge functions it uses, or "Client-only"
-- **Status**: Fully Live, Partially Live, Simulated, or Cloud-Persisted (via `useCloudStorage`)
+**`src/components/os/RokCatApp.tsx`** changes:
+- Update the client-side auto-compact (lines 64-72) to call a new backend endpoint instead of deleting directly, so the summarization happens server-side
+- Or simpler: keep client-side delete but also call the edge function to trigger summarization before deletion
 
-Organized into sections:
-- **Fully Live** (14 apps): HypersphereApp, PrimeChatApp, PrimeCalendarApp, PrimeVaultApp, PrimeWalletApp, PrimeBetsApp, PrimeSignalsApp, FilesApp, PrimeBookingApp, BotLabApp, AdminConsoleApp, AppForgeApp/MiniAppsApp, SettingsApp, PrimeSocialApp, PrimeMailApp, PrimeBoardApp
-- **Cloud-Persisted** (via useCloudStorage): PrimeCanvasApp, TextEditorApp, PrimeGridApp, PrimeJournalApp
-- **Simulated/Lore** (18 apps): PrimeNetApp, EnergyMonitorApp, DataCenterApp, Q3InferenceApp, FoldMemApp, etc.
+### 2. Adaptive System Learning Memory
 
-### 4. `docs/BACKEND.md` — Backend & Database Reference
-- **Database tables**: All 30+ tables with columns, RLS policy summary, and which app uses them
-- **Edge functions**: All 16 functions with purpose, auth requirements, request/response format
-  - `hyper-chat`: AI chat with streaming, memory persistence
-  - `ai-social`: AI post generation for PrimeSocial
-  - `prime-bank`: Token economy (mint, transfer, debit)
-  - `market-data`: Stock/crypto price lookup via Polygon API
-  - `sports-odds`: Sports betting odds via The Odds API
-  - `bot-api` / `bot-runner` / `agent-runtime`: Bot lifecycle and autonomous agent execution
-  - `admin-actions`: Role management and admin operations
-  - `mini-app-gen`: AI-powered mini-app code generation
-  - `ai-key-manager`: User API key CRUD
-  - `elevenlabs-tts`: Text-to-speech via ElevenLabs
-  - `system-analytics`: Real-time table counts and activity aggregation
-  - `web-proxy`: CORS proxy for PrimeBrowser
-  - `cron-dispatcher`: Scheduled task execution
-- **Secrets**: Which secrets are configured and what they power
-- **Storage buckets**: `user-files` bucket for FilesApp
+Enable ROKCAT to learn from interactions and improve over time by adding a self-reflection tool and periodic learning cycles.
 
-### 5. `docs/HOOKS.md` — Custom Hooks Reference
-Document each hook in `src/hooks/`:
-- `useWindowManager` — Window CRUD, focus, workspace management
-- `useEventBus` — Cross-app event pub/sub (list all event types)
-- `useCloudStorage` — localStorage + database sync for app state persistence
-- `useActivityTracker` — Logs user actions to `user_activity` table
-- `useNotifications` — Toast notification system
-- `useCalendarReminders` — Polls upcoming events, fires alerts
-- `useGlobalShortcuts` — Keyboard shortcuts (Ctrl+K search, etc.)
-- `useIdleTimeout` — Auto-lock after inactivity
-- `useVoiceControl` — Voice command recognition
-- `useSystemPulse` — Simulated system metrics
-- `useDeviceClass` — Mobile/tablet/desktop detection
-- `useIntranetPages` — PrimeBrowser intranet content
+**`supabase/functions/hyper-chat/index.ts`** changes:
+- Add a new tool `learn_pattern` to the TOOLS array:
+  - Parameters: `pattern` (string), `context` (string: "system_usage", "user_preference", "error_recovery", "workflow")
+  - Stores learned patterns in `ai_memories` with category `"learning"`
+- Update `BASE_SYSTEM_PROMPT` with learning instructions:
+  - "When you notice patterns in how the operator uses the system, save them with learn_pattern"
+  - "When you make mistakes or the operator corrects you, learn from it"
+  - "Before complex tasks, recall relevant learned patterns"
+- Add `loadLearnings(userId)` function that loads `ai_memories` where category = 'learning', injected into system prompt as `[LEARNED PATTERNS]`
+- Update `buildSystemPrompt` to include learned patterns as a separate section
 
-### 6. `docs/TERMINAL.md` — Terminal & Command Reference
-- Available commands from `terminal/commands.ts`
-- Pipe system from `terminal/pipes.ts`
-- Terminal modes from `terminal/modes.ts`
-- Widget commands from `terminal/widgetCommands.ts`
+### 3. Multi-Agent Model Toggle in ROKCAT UI
 
-### 7. `docs/SECURITY.md` — Security & RLS Overview
-- All tables have RLS enabled with `auth.uid() = user_id`
-- Public-read tables: `profiles`, `bet_markets`, `forge_listings`
-- Edge function auth pattern: Authorization header -> `getUser()` -> scoped queries
-- API key storage note (plaintext in `encrypted_key` column)
-- Service role key usage: only in edge functions, never client-side
+Currently the multi-agent model (`grok-4.20-multi-agent-experimental-beta-0304`) is only selectable from Settings. Add a quick-toggle in ROKCAT's toolbar so users with an xAI key can switch to multi-agent mode directly.
 
-## Update Existing File
+**`src/components/os/RokCatApp.tsx`** changes:
+- Add a "Multi-Agent" toggle button (using the `Brain` icon, already imported) in the toolbar area, visible only when `isXAI` is true
+- When toggled on: update `user_data` key `ai-provider` to set model to `grok-4.20-multi-agent-experimental-beta-0304`; set `isMultiAgent(true)` and `isGrok420(true)`
+- When toggled off: revert to `grok-4.20-experimental-beta-0304-reasoning`; set `isMultiAgent(false)`
+- The ThinkingPanel already handles multi-agent reasoning events from the SSE stream — no changes needed there
 
-### `README.md` (root)
-- Add a "Documentation" section linking to `docs/README.md`
-- Keep existing content but add links to the new docs
+**`supabase/functions/_shared/ai-router.ts`** changes:
+- The multi-agent model is already supported in `GROK_RESPONSES_MODELS` (line 459) and `callXAIResponses` already sets `reasoning.effort` for multi-agent (line 539-541)
+- The stream converter already forwards `reasoning.delta`, `agent.start`, `agent.completed` events (lines 604-629)
+- No changes needed — the infrastructure is already in place
 
-## Technical Notes
-- All docs are pure Markdown, no code changes needed
-- Total: 7 new files + 1 updated file
-- Estimated ~3,000 lines of documentation covering the full system
+### Files to modify:
+1. **`supabase/functions/hyper-chat/index.ts`** — Add `summarizeAndCompact`, `learn_pattern` tool, `loadLearnings`, update prompt and compaction logic
+2. **`src/components/os/RokCatApp.tsx`** — Add multi-agent toggle button, update compact to trigger server-side summarization
+
+### No database changes needed
+- `ai_memories` table already supports the `summary` and new `learning` categories via its text `category` column
+- `ai_conversations` table is unchanged
+- `user_data` table is unchanged
 
