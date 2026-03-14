@@ -17,7 +17,7 @@ import BootSequence from '@/components/os/BootSequence';
 import Taskbar from '@/components/os/Taskbar';
 import OSWindow from '@/components/os/OSWindow';
 import GlobalSearch from '@/components/os/GlobalSearch';
-import QuickTour from '@/components/os/QuickTour';
+import SetupWizard from '@/components/os/SetupWizard';
 import AboutModal from '@/components/os/AboutModal';
 import DesktopWidgets from '@/components/os/DesktopWidgets';
 import ClipboardManager from '@/components/os/ClipboardManager';
