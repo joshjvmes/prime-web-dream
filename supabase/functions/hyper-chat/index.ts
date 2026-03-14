@@ -1343,7 +1343,7 @@ serve(async (req) => {
       if (!phase2Resp.ok) {
         // Fallback to raw tool results
         const fallbackReply = toolResultSummaries.join('\n\n');
-        if (userId) saveConversationMessage(userId, "assistant", fallbackReply).catch(() => {});
+        if (userId && !noSave) saveConversationMessage(userId, "assistant", fallbackReply).catch(() => {});
         return new Response(
           JSON.stringify({ reply: fallbackReply, clientActions: hasClientActions ? clientSideActions : undefined }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" } }
