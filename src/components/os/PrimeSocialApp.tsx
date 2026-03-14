@@ -302,7 +302,7 @@ export default function PrimeSocialApp() {
                   )}
                   <span className="text-[8px] text-muted-foreground/40 ml-auto">{timeAgo(post.created_at)}</span>
                 </div>
-                <p className="text-muted-foreground mt-1 leading-relaxed whitespace-pre-wrap">{post.content}</p>
+                <PostContent content={post.content} />
                 <div className="flex items-center gap-4 mt-2">
                   <button onClick={() => toggleLike(post.id)} className={`flex items-center gap-1 transition-colors ${post.liked ? 'text-primary' : 'text-muted-foreground/50 hover:text-primary'}`}>
                     <Heart size={12} fill={post.liked ? 'currentColor' : 'none'} />
