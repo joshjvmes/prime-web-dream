@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
-import { Send, Volume2, VolumeX, Loader2, Globe, Twitter, Image, Video, Brain, Square, GalleryHorizontalEnd } from 'lucide-react';
+import { Send, Volume2, VolumeX, Loader2, Globe, Twitter, Image, Video, Brain, Square, GalleryHorizontalEnd, Trash2 } from 'lucide-react';
 import { renderMarkdown } from '@/lib/renderMarkdown';
 import { parseAndExecuteActions, APP_ACTION_PROMPT } from './rokcat/actionParser';
 import { Button } from '@/components/ui/button';
@@ -29,6 +29,7 @@ export default function RokCatApp() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
+  const [historyLoaded, setHistoryLoaded] = useState(false);
   const [ttsEnabled, setTtsEnabled] = useState(true);
   const ttsEnabledRef = useRef(true);
   const [searchStatus, setSearchStatus] = useState<'web' | 'x' | null>(null);
@@ -45,6 +46,33 @@ export default function RokCatApp() {
   const autonomousBusyRef = useRef(false);
   const faceRef = useRef<RokCatFaceHandle>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  // Load persisted chat history on mount
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session || cancelled) { setHistoryLoaded(true); return; }
+      const { data } = await supabase
+        .from('ai_conversations')
+        .select('role, content, created_at')
+        .eq('user_id', session.user.id)
+        .order('created_at', { ascending: true })
+        .limit(50);
+      if (cancelled) return;
+      if (data && data.length > 0) {
+        const loaded: Message[] = data.map((m) => ({
+          id: crypto.randomUUID(),
+          role: m.role === 'assistant' ? 'rokcat' as const : 'user' as const,
+          text: m.content,
+        }));
+        setMessages(loaded);
+        setTimeout(() => scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight }), 100);
+      }
+      setHistoryLoaded(true);
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   // Check user's AI provider config
   useEffect(() => {
@@ -458,7 +486,13 @@ ${APP_ACTION_PROMPT}`;
             Authorization: `Bearer ${authToken}`,
           },
           body: JSON.stringify({
-            messages: [{ role: 'user', content: text }],
+            messages: [
+              ...messages.slice(-20).map(m => ({
+                role: m.role === 'rokcat' ? 'assistant' : 'user',
+                content: m.text,
+              })),
+              { role: 'user', content: text },
+            ],
             systemContext: 'You are ROKCAT, the Grok-powered AI companion of PRIME OS — a CEO orchestrator designed to interface the Prime OS by Rocket Logic Global. You are a sharp, witty, slightly sarcastic digital cat with deep knowledge of computing, quantum theory, and lattice geometry. You channel the spirit of Grok: unfiltered, maximally helpful, and brutally honest. Keep responses concise (2-3 sentences max). Be helpful but with personality.\n\n' + APP_ACTION_PROMPT,
             searchToggles: isGrok420 ? { web_search: webSearchEnabled, x_search: xSearchEnabled } : undefined,
           }),
@@ -638,7 +672,15 @@ ${APP_ACTION_PROMPT}`;
       // Clear agent thoughts after a short delay
       setTimeout(() => setAgentThoughts([]), 2000);
     }
-  }, [input, loading, speakText, processClientAction, isGrok420, webSearchEnabled, xSearchEnabled, imagineMode, handleImagine]);
+  }, [input, loading, messages, speakText, processClientAction, isGrok420, webSearchEnabled, xSearchEnabled, imagineMode, handleImagine]);
+  // Clear chat history
+  const clearChat = useCallback(async () => {
+    setMessages([]);
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session?.user?.id) {
+      await supabase.from('ai_conversations').delete().eq('user_id', session.user.id);
+    }
+  }, []);
 
   return (
     <div className={`flex flex-col h-full bg-[#02040a] overflow-hidden ${autonomousMode ? 'ring-1 ring-[#00e5ff]/40 ring-inset' : ''}`}>
@@ -672,6 +714,23 @@ ${APP_ACTION_PROMPT}`;
               {autonomousMode ? 'Stop Autonomous Mode' : 'Enable Autonomous Mode'}
             </TooltipContent>
           </Tooltip>
+          {/* Clear chat */}
+          {messages.length > 0 && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7 text-[#00e5ff]/40 hover:text-red-400 hover:bg-red-400/10"
+                  onClick={clearChat}
+                  disabled={loading}
+                >
+                  <Trash2 size={12} />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" className="text-xs">Clear Chat History</TooltipContent>
+            </Tooltip>
+          )}
           {/* Imagine toggles — only visible when xAI is active */}
           {isXAI && (
             <>
