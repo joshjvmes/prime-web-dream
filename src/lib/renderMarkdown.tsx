@@ -52,14 +52,14 @@ function renderHtmlWithChips(html: string, key: string): React.ReactNode {
     if (match.index > lastIndex) {
       parts.push(<span key={`${key}-h-${lastIndex}`} dangerouslySetInnerHTML={{ __html: html.slice(lastIndex, match.index) }} />);
     }
-    const action = match[1] as 'open' | 'close' | 'navigate';
+    const actionRaw = match[1];
     const appId = match[2];
     const context = match[3];
     parts.push(
       <ActionChip
         key={`${key}-chip-${match.index}`}
         appId={appId}
-        action={action === 'nav' ? 'navigate' : action}
+        action={actionRaw === 'nav' ? 'navigate' : actionRaw as 'open' | 'close'}
         context={context}
       />
     );
