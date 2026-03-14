@@ -14,6 +14,10 @@ const ALL_ACTIONS_REGEX = /\[ACTION:(?:open-app|close-app|navigate):[^\]]+\]/gi;
  *   [ACTION:close-app:APPID]
  *   [ACTION:navigate:APPID:context]
  */
+/**
+ * Scans text for action tags, emits EventBus events,
+ * and returns text with tags replaced by chip placeholders (not stripped).
+ */
 export function parseAndExecuteActions(text: string): string {
   let match: RegExpExecArray | null;
 
@@ -38,12 +42,62 @@ export function parseAndExecuteActions(text: string): string {
     const context = match[2].trim();
     setTimeout(() => {
       eventBus.emit('app.request-open', { app: appId });
-      // Give the app a moment to mount, then send navigation context
       setTimeout(() => eventBus.emit('app.navigate', { app: appId, context }), 400);
     }, 300);
   }
 
-  return text.replace(ALL_ACTIONS_REGEX, '').replace(/\n{3,}/g, '\n\n').trim();
+  // Replace action tags with chip placeholders instead of stripping
+  let result = text
+    .replace(/\[ACTION:open-app:([a-z]+)\]/gi, (_m, id) => `{{chip:open:${id.toLowerCase()}}}`)
+    .replace(/\[ACTION:close-app:([a-z]+)\]/gi, (_m, id) => `{{chip:close:${id.toLowerCase()}}}`)
+    .replace(/\[ACTION:navigate:([a-z]+):([^\]]+)\]/gi, (_m, id, ctx) => `{{chip:nav:${id.toLowerCase()}:${ctx.trim()}}}`)
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+
+  return result;
+}
+
+/** Map of friendly display names → app IDs for smart detection */
+const FRIENDLY_TO_ID: Record<string, string> = {
+  'cloudhooks': 'cloudhooks', 'cloud hooks': 'cloudhooks',
+  'terminal': 'terminal', 'files': 'files', 'settings': 'settings',
+  'browser': 'browser', 'calendar': 'calendar', 'mail': 'mail',
+  'docs': 'docs', 'editor': 'editor', 'audio': 'audio',
+  'gallery': 'gallery', 'maps': 'maps', 'hypersphere': 'hyper',
+  'security': 'security', 'monitor': 'monitor', 'system monitor': 'monitor',
+  'social': 'social', 'board': 'board', 'canvas': 'canvas',
+  'vault': 'vault', 'arcade': 'arcade', 'admin': 'admin',
+  'admin console': 'admin', 'journal': 'journal', 'wallet': 'wallet',
+  'mini apps': 'miniapps', 'miniapps': 'miniapps', 'appforge': 'forge',
+  'app forge': 'forge', 'botlab': 'botlab', 'bot lab': 'botlab',
+  'signals': 'signals', 'stream': 'stream', 'booking': 'booking',
+  'iot': 'iot', 'robotics': 'robotics', 'github': 'github',
+  'spreadsheet': 'spreadsheet', 'grid': 'spreadsheet',
+  'comm': 'comm', 'primelink': 'link', 'prime link': 'link',
+  'primenet': 'net', 'prime net': 'net', 'packages': 'pkg',
+  'storage': 'storage', 'chat': 'chat', 'rokcat': 'chat',
+};
+
+// Build regex from friendly names, sorted longest-first to avoid partial matches
+const FRIENDLY_PATTERN = new RegExp(
+  '\\b(' + Object.keys(FRIENDLY_TO_ID)
+    .sort((a, b) => b.length - a.length)
+    .map(n => n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+    .join('|') + ')\\b',
+  'gi'
+);
+
+/**
+ * Detects app name mentions in plain text and wraps them with chip placeholders.
+ * Call AFTER parseAndExecuteActions to avoid double-processing action tags.
+ */
+export function detectAppMentions(text: string): string {
+  // Don't replace inside existing chip placeholders or code blocks
+  return text.replace(FRIENDLY_PATTERN, (match) => {
+    const id = FRIENDLY_TO_ID[match.toLowerCase()];
+    if (!id) return match;
+    return `{{chip:open:${id}}}`;
+  });
 }
 
 /** Available app IDs for the system prompt */
