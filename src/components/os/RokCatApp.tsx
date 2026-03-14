@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { Send, Volume2, VolumeX, Loader2, Globe, Twitter, Image, Video, Brain, Square, GalleryHorizontalEnd, Users } from 'lucide-react';
 import { renderMarkdown } from '@/lib/renderMarkdown';
-import { parseAndExecuteActions, APP_ACTION_PROMPT } from './rokcat/actionParser';
+import { parseAndExecuteActions, detectAppMentions, APP_ACTION_PROMPT } from './rokcat/actionParser';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -237,7 +237,7 @@ ${APP_ACTION_PROMPT}`;
       if (contentType.includes('application/json')) {
         const data = await resp.json();
         const rawText = data?.reply || data?.text || '⚡ Cycle complete.';
-        const aiText = parseAndExecuteActions(rawText);
+        const aiText = detectAppMentions(parseAndExecuteActions(rawText));
         setMessages(prev => prev.map(m => m.id === autoId ? { ...m, text: aiText } : m));
         scrollToBottom();
         speakText(aiText);
@@ -274,7 +274,7 @@ ${APP_ACTION_PROMPT}`;
         }
 
         if (fullText) {
-          const cleanText = parseAndExecuteActions(fullText);
+          const cleanText = detectAppMentions(parseAndExecuteActions(fullText));
           fullText = cleanText;
           setMessages(prev => prev.map(m => m.id === autoId ? { ...m, text: cleanText } : m));
           speakText(cleanText);
@@ -543,7 +543,7 @@ ${APP_ACTION_PROMPT}`;
           }
         }
         const rawText = data?.reply || data?.text || data?.message || 'Neural link disrupted.';
-        const aiText = parseAndExecuteActions(rawText);
+        const aiText = detectAppMentions(parseAndExecuteActions(rawText));
         setMessages(prev => [...prev, { id: rokcatId, role: 'rokcat', text: aiText }]);
         scrollToBottom();
         speakText(aiText);
@@ -663,9 +663,9 @@ ${APP_ACTION_PROMPT}`;
         }
       }
 
-      // Parse and execute any action tags
+      // Parse and execute any action tags + detect app mentions
       if (fullText) {
-        const cleanText = parseAndExecuteActions(fullText);
+        const cleanText = detectAppMentions(parseAndExecuteActions(fullText));
         fullText = cleanText;
         setMessages(prev =>
           prev.map(m => m.id === rokcatId ? { ...m, text: cleanText } : m)

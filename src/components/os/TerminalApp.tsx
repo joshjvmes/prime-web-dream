@@ -1,5 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { eventBus } from '@/hooks/useEventBus';
+import { getFriendlyName } from './rokcat/ActionChip';
 import { WELCOME, ALL_COMMANDS, type CommandContext } from './terminal/commands';
 import { executeWithPipesAndChains } from './terminal/pipes';
 import {
@@ -60,7 +62,41 @@ export default function TerminalApp({ onOpenApp, onCloseApp, isFirstOpen }: Term
     };
   }, []);
 
-  // AI streaming helper
+  // Render terminal lines with chip placeholders as clickable spans
+  const CHIP_RE = /\{\{chip:(open|close|nav):([a-z]+)(?::([^\}]+))?\}\}/g;
+  const renderTerminalChips = useCallback((line: string) => {
+    const parts: React.ReactNode[] = [];
+    let lastIdx = 0;
+    let match: RegExpExecArray | null;
+    CHIP_RE.lastIndex = 0;
+    while ((match = CHIP_RE.exec(line)) !== null) {
+      if (match.index > lastIdx) parts.push(line.slice(lastIdx, match.index));
+      const appId = match[2];
+      const context = match[3];
+      const label = getFriendlyName(appId);
+      parts.push(
+        <span
+          key={`tc-${match.index}`}
+          className="text-primary underline decoration-primary/40 cursor-pointer hover:decoration-primary transition-colors"
+          onClick={() => {
+            if (match![1] === 'close') {
+              eventBus.emit('app.request-close', { app: appId });
+            } else {
+              eventBus.emit('app.request-open', { app: appId });
+              if (context) setTimeout(() => eventBus.emit('app.navigate', { app: appId, context }), 400);
+            }
+          }}
+        >
+          {label}
+        </span>
+      );
+      lastIdx = match.index + match[0].length;
+    }
+    if (lastIdx < line.length) parts.push(line.slice(lastIdx));
+    return <>{parts.length > 0 ? parts : (line || '\u00A0')}</>;
+  }, []);
+
+
   const streamAiResponse = useCallback(async (prompt: string, systemNote?: string) => {
     setAiStreaming(true);
     setLines(prev => [...prev, '▸ Hyper is thinking...']);
@@ -381,28 +417,29 @@ export default function TerminalApp({ onOpenApp, onCloseApp, isFirstOpen }: Term
       className="h-full bg-background p-3 font-mono text-xs overflow-y-auto cursor-text"
       onClick={() => inputRef.current?.focus()}
     >
-      {lines.map((line, i) => (
-        <div
-          key={i}
-          className={
-            line.startsWith('psh ▸') || line.startsWith('q3-train ▸') || line.startsWith('debug ▸') || line.startsWith('geomc ▸') || line.startsWith('trace ▸') || line.startsWith('scan ▸') || line.startsWith('disk ▸')
-              ? 'text-primary'
-              : line.startsWith('▸') || line.startsWith('═')
-              ? 'text-prime-cyan'
-              : line.startsWith('┌') || line.startsWith('│') || line.startsWith('└') || line.startsWith('─')
-              ? 'text-prime-amber'
-              : line.includes('✓')
-              ? 'text-green-400'
-              : line.includes('✗')
-              ? 'text-red-400'
-              : line.startsWith('  [!]')
-              ? 'text-prime-amber'
-              : 'text-card-foreground'
-          }
-        >
-          {line || '\u00A0'}
-        </div>
-      ))}
+      {lines.map((line, i) => {
+        const hasChip = line.includes('{{chip:');
+        const colorClass =
+          line.startsWith('psh ▸') || line.startsWith('q3-train ▸') || line.startsWith('debug ▸') || line.startsWith('geomc ▸') || line.startsWith('trace ▸') || line.startsWith('scan ▸') || line.startsWith('disk ▸')
+            ? 'text-primary'
+            : line.startsWith('▸') || line.startsWith('═')
+            ? 'text-prime-cyan'
+            : line.startsWith('┌') || line.startsWith('│') || line.startsWith('└') || line.startsWith('─')
+            ? 'text-prime-amber'
+            : line.includes('✓')
+            ? 'text-green-400'
+            : line.includes('✗')
+            ? 'text-red-400'
+            : line.startsWith('  [!]')
+            ? 'text-prime-amber'
+            : 'text-card-foreground';
+
+        return (
+          <div key={i} className={colorClass}>
+            {hasChip ? renderTerminalChips(line) : (line || '\u00A0')}
+          </div>
+        );
+      })}
       {tabSuggestions && (
         <div className="text-muted-foreground">
           {tabSuggestions.join('  ')}
