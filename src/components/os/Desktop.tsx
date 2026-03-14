@@ -303,6 +303,7 @@ export default function Desktop() {
     return () => {
       eventBus.off('app.request-open', handleEventBusOpen);
       eventBus.off('app.request-close', handleEventBusClose);
+      eventBus.off('system.rerun-setup', handleRerunSetup);
       window.removeEventListener('cloudhook-notification', handleNotif);
       window.removeEventListener('cloudhook-open-app', handleOpenApp);
       window.removeEventListener('cloudhook-lock', handleLockEvt);

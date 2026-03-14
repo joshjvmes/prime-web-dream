@@ -669,6 +669,15 @@ export default function SettingsApp({ notifEvents = [], onToggleEvent, onUpdateM
                 </div>
               )}
             </div>
+            <SectionTitle>Setup</SectionTitle>
+            <button
+              onClick={() => eventBus.emit('system.rerun-setup')}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded border border-border text-muted-foreground text-[10px] font-display tracking-wider hover:text-foreground hover:bg-muted/30 transition-colors"
+            >
+              <RotateCcw size={10} />
+              Re-run Setup Wizard
+            </button>
+            <p className="text-[9px] text-muted-foreground/50 mt-1">Re-open the onboarding wizard to configure your AI key and profile.</p>
           </div>
         );
       }
