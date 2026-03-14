@@ -664,7 +664,7 @@ export default function Desktop() {
           />
 
           {showTour && (
-            <QuickTour onComplete={handleTourComplete} onOpenTerminal={handleTourOpenTerminal} />
+            <SetupWizard user={user} onComplete={handleTourComplete} onOpenRokcat={handleTourOpenRokcat} />
           )}
 
           <AboutModal open={aboutOpen} onOpenChange={setAboutOpen} />
