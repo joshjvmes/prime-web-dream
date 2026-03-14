@@ -62,7 +62,41 @@ export default function TerminalApp({ onOpenApp, onCloseApp, isFirstOpen }: Term
     };
   }, []);
 
-  // AI streaming helper
+  // Render terminal lines with chip placeholders as clickable spans
+  const CHIP_RE = /\{\{chip:(open|close|nav):([a-z]+)(?::([^\}]+))?\}\}/g;
+  const renderTerminalChips = useCallback((line: string) => {
+    const parts: React.ReactNode[] = [];
+    let lastIdx = 0;
+    let match: RegExpExecArray | null;
+    CHIP_RE.lastIndex = 0;
+    while ((match = CHIP_RE.exec(line)) !== null) {
+      if (match.index > lastIdx) parts.push(line.slice(lastIdx, match.index));
+      const appId = match[2];
+      const context = match[3];
+      const label = getFriendlyName(appId);
+      parts.push(
+        <span
+          key={`tc-${match.index}`}
+          className="text-primary underline decoration-primary/40 cursor-pointer hover:decoration-primary transition-colors"
+          onClick={() => {
+            if (match![1] === 'close') {
+              eventBus.emit('app.request-close', { app: appId });
+            } else {
+              eventBus.emit('app.request-open', { app: appId });
+              if (context) setTimeout(() => eventBus.emit('app.navigate', { app: appId, context }), 400);
+            }
+          }}
+        >
+          {label}
+        </span>
+      );
+      lastIdx = match.index + match[0].length;
+    }
+    if (lastIdx < line.length) parts.push(line.slice(lastIdx));
+    return <>{parts.length > 0 ? parts : (line || '\u00A0')}</>;
+  }, []);
+
+
   const streamAiResponse = useCallback(async (prompt: string, systemNote?: string) => {
     setAiStreaming(true);
     setLines(prev => [...prev, '▸ Hyper is thinking...']);
