@@ -17,14 +17,14 @@ function renderChips(text: string, keyPrefix: string): React.ReactNode {
     if (match.index > lastIndex) {
       parts.push(text.slice(lastIndex, match.index));
     }
-    const action = match[1] as 'open' | 'close' | 'navigate';
+    const actionRaw = match[1];
     const appId = match[2];
     const context = match[3];
     parts.push(
       <ActionChip
         key={`${keyPrefix}-chip-${match.index}`}
         appId={appId}
-        action={action === 'nav' ? 'navigate' : action}
+        action={actionRaw === 'nav' ? 'navigate' : actionRaw as 'open' | 'close'}
         context={context}
       />
     );
