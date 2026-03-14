@@ -6,6 +6,8 @@
 [![Vite](https://img.shields.io/badge/Vite-5.x-646CFF?logo=vite&logoColor=white)](https://vitejs.dev/)
 [![Clone in Lovable](https://img.shields.io/badge/Clone_in-Lovable-FF69B4?logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJ3aGl0ZSI+PHBhdGggZD0iTTEyIDIxLjM1bC0xLjQ1LTEuMzJDNS40IDE1LjM2IDIgMTIuMjggMiA4LjUgMiA1LjQyIDQuNDIgMyA3LjUgM2MxLjc0IDAgMy40MS44MSA0LjUgMi4wOUMxMy4wOSAzLjgxIDE0Ljc2IDMgMTYuNSAzIDE5LjU4IDMgMjIgNS40MiAyMiA4LjVjMCAzLjc4LTMuNCA2Ljg2LTguNTUgMTEuNTRMMTIgMjEuMzV6Ii8+PC9zdmc+)](https://lovable.dev/products/prime-web-dream)
 
+> **[🔴 Live Demo → prime-web-dream.lovable.app](https://prime-web-dream.lovable.app/os)**
+
 **Geometric Computing Interface** — Built by [Rocket Logic Global](https://rocketlogicglobal.com)
 
 PRIME OS is a browser-based operating system exploring geometric computation, ternary logic, and 11-dimensional folding architectures. It provides a fully interactive desktop environment with 50+ specialized applications, AI integration, and a cloud-powered backend.
