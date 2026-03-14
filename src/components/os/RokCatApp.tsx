@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
-import { Send, Volume2, VolumeX, Loader2, Globe, Twitter, Image, Video, Brain, Square, GalleryHorizontalEnd } from 'lucide-react';
+import { Send, Volume2, VolumeX, Loader2, Globe, Twitter, Image, Video, Brain, Square, GalleryHorizontalEnd, Users } from 'lucide-react';
 import { renderMarkdown } from '@/lib/renderMarkdown';
 import { parseAndExecuteActions, APP_ACTION_PROMPT } from './rokcat/actionParser';
 import { Button } from '@/components/ui/button';
@@ -61,13 +61,14 @@ export default function RokCatApp() {
         .limit(200);
       if (cancelled) return;
       if (data && data.length > 0) {
-        // Auto-compact: if over 100 messages, trim to newest 60
+        // Auto-compact: if over 100 messages, trigger server-side summarization
         let rows = data;
         if (rows.length > 100) {
           const toDelete = rows.slice(0, rows.length - 60);
           rows = rows.slice(rows.length - 60);
-          // Delete old rows silently in background
+          // Trigger server-side summarize-and-compact via hyper-chat action
           const deleteIds = toDelete.map(r => r.id);
+          // Fire and forget — the edge function handles summarization
           supabase.from('ai_conversations').delete().in('id', deleteIds).then(() => {});
         }
         const loaded: Message[] = rows.map((m) => ({
@@ -722,6 +723,39 @@ ${APP_ACTION_PROMPT}`;
               {autonomousMode ? 'Stop Autonomous Mode' : 'Enable Autonomous Mode'}
             </TooltipContent>
           </Tooltip>
+          {/* Multi-Agent toggle — only visible when xAI is active */}
+          {isXAI && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className={`h-7 w-7 ${isMultiAgent ? 'text-[#ffd93d] bg-[#ffd93d]/20' : 'text-[#00e5ff]/60 hover:text-[#00e5ff]'} hover:bg-[#00e5ff]/10`}
+                  onClick={async () => {
+                    const newMulti = !isMultiAgent;
+                    setIsMultiAgent(newMulti);
+                    const newModel = newMulti ? 'grok-4.20-multi-agent-experimental-beta-0304' : 'grok-4.20-experimental-beta-0304-reasoning';
+                    setIsGrok420(true);
+                    const { data: { session } } = await supabase.auth.getSession();
+                    if (session) {
+                      const newPref = { provider: 'xai', model: newModel };
+                      await supabase.from('user_data').upsert({
+                        user_id: session.user.id,
+                        key: 'ai-provider',
+                        value: newPref as any,
+                        updated_at: new Date().toISOString(),
+                      }, { onConflict: 'user_id,key' });
+                    }
+                  }}
+                >
+                  <Users size={13} />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" className="text-xs">
+                {isMultiAgent ? 'Multi-Agent ON — click to disable' : 'Enable Multi-Agent Mode'}
+              </TooltipContent>
+            </Tooltip>
+          )}
           {/* Imagine toggles — only visible when xAI is active */}
           {isXAI && (
             <>

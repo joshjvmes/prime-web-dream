@@ -83,7 +83,14 @@ MEMORY INSTRUCTIONS:
 - When the operator shares a preference, fact about themselves, instruction, or important context, proactively use save_memory to store it for future reference.
 - Before answering complex or personal questions, consider using recall_memories to check if you have relevant stored context.
 - Address the operator by name when you know it. Reference their preferences and past conversations naturally.
-- Never tell the operator you're "saving a memory" unless they explicitly ask about your memory system.`;
+- Never tell the operator you're "saving a memory" unless they explicitly ask about your memory system.
+
+LEARNING INSTRUCTIONS:
+- When you notice patterns in how the operator uses the system, save them with learn_pattern (context: "system_usage").
+- When the operator corrects you, teaches you something, or shows you a better way, use learn_pattern (context: "error_recovery" or "workflow").
+- When you discover operator preferences through conversation, use learn_pattern (context: "user_preference").
+- Before complex tasks, recall relevant learned patterns to improve your approach.
+- Learning is silent — never tell the operator you are "learning" unless they ask about it.`;
 
 const TOOLS = [
   {
@@ -229,6 +236,22 @@ const TOOLS = [
           content: { type: "string", description: "The memory content to store" },
         },
         required: ["category", "content"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "learn_pattern",
+      description: "Save a learned pattern, behavior insight, or operational improvement for future reference. Use when you notice how the operator uses the system, when corrected, or when you discover a better workflow. This makes you smarter over time.",
+      parameters: {
+        type: "object",
+        properties: {
+          pattern: { type: "string", description: "The pattern, insight, or learned behavior to remember" },
+          context: { type: "string", enum: ["system_usage", "user_preference", "error_recovery", "workflow"], description: "Context category for the learning" },
+        },
+        required: ["pattern", "context"],
         additionalProperties: false,
       },
     },
@@ -597,8 +620,53 @@ async function findMarket(question: string) {
 // ── Memory helpers ──
 async function loadMemories(userId: string): Promise<string[]> {
   const db = getServiceDb();
-  const { data } = await db.from("ai_memories").select("category, content").eq("user_id", userId).order("created_at", { ascending: false }).limit(20);
+  const { data } = await db.from("ai_memories").select("category, content").eq("user_id", userId).not("category", "eq", "learning").order("created_at", { ascending: false }).limit(20);
   return (data || []).map((m: any) => `[${m.category}] ${m.content}`);
+}
+
+async function loadLearnings(userId: string): Promise<string[]> {
+  const db = getServiceDb();
+  const { data } = await db.from("ai_memories").select("content").eq("user_id", userId).eq("category", "learning").order("updated_at", { ascending: false }).limit(15);
+  return (data || []).map((m: any) => m.content);
+}
+
+async function summarizeAndCompact(userId: string) {
+  const db = getServiceDb();
+  const { data: all } = await db.from("ai_conversations").select("id, role, content, created_at").eq("user_id", userId).order("created_at", { ascending: true });
+  if (!all || all.length <= 100) return;
+  const toKeep = all.slice(all.length - 60);
+  const toSummarize = all.slice(0, all.length - 60);
+  // Build conversation text for summarization
+  const convoText = toSummarize.map((m: any) => `${m.role === 'user' ? 'Operator' : 'Hyper'}: ${m.content.substring(0, 300)}`).join('\n');
+  try {
+    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+    if (LOVABLE_API_KEY) {
+      const resp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "google/gemini-2.5-flash-lite",
+          messages: [
+            { role: "system", content: "Summarize this conversation into key facts, user preferences, topics discussed, and any important decisions or instructions. Be concise — bullet points. Max 500 words." },
+            { role: "user", content: convoText },
+          ],
+        }),
+      });
+      if (resp.ok) {
+        const data = await resp.json();
+        const summary = data.choices?.[0]?.message?.content;
+        if (summary) {
+          await db.from("ai_memories").insert({ user_id: userId, category: "summary", content: `[Auto-summary ${new Date().toISOString().slice(0, 10)}] ${summary}` });
+        }
+      }
+    }
+  } catch (e) { console.error("Summarization error:", e); }
+  // Delete old rows
+  const deleteIds = toSummarize.map((r: any) => r.id);
+  // Delete in batches of 50
+  for (let i = 0; i < deleteIds.length; i += 50) {
+    await db.from("ai_conversations").delete().in("id", deleteIds.slice(i, i + 50));
+  }
 }
 
 async function loadConversationHistory(userId: string): Promise<Array<{ role: string; content: string }>> {
@@ -633,11 +701,11 @@ async function recallMemories(userId: string, query: string): Promise<string[]> 
 async function saveConversationMessage(userId: string, role: string, content: string) {
   const db = getServiceDb();
   await db.from("ai_conversations").insert({ user_id: userId, role, content });
-  // Prune to last 100
+  // Check count — if over 100, trigger summarize-and-compact
   const { data: all } = await db.from("ai_conversations").select("id").eq("user_id", userId).order("created_at", { ascending: false });
   if (all && all.length > 100) {
-    const toDelete = all.slice(100).map((m: any) => m.id);
-    await db.from("ai_conversations").delete().in("id", toDelete);
+    // Fire and forget — don't block the response
+    summarizeAndCompact(userId).catch((e) => console.error("Compact error:", e));
   }
 }
 
@@ -657,7 +725,7 @@ async function getUserId(authHeader: string): Promise<string | null> {
 }
 
 // ── Build context-aware system prompt ──
-function buildSystemPrompt(context?: Record<string, unknown>, memories?: string[], priorHistory?: Array<{ role: string; content: string }>, userActivity?: Array<{ action: string; target: string; created_at: string }>) {
+function buildSystemPrompt(context?: Record<string, unknown>, memories?: string[], priorHistory?: Array<{ role: string; content: string }>, userActivity?: Array<{ action: string; target: string; created_at: string }>, learnings?: string[]) {
   let prompt = BASE_SYSTEM_PROMPT;
 
   if (context) {
@@ -694,6 +762,10 @@ function buildSystemPrompt(context?: Record<string, unknown>, memories?: string[
 
   if (userActivity && userActivity.length > 0) {
     prompt += `\n\n[OPERATOR'S RECENT ACTIVITY — what they've been doing]\n${userActivity.map(a => `[${a.created_at}] ${a.action} → ${a.target}`).join('\n')}`;
+  }
+
+  if (learnings && learnings.length > 0) {
+    prompt += `\n\n[LEARNED PATTERNS — things you've learned from past interactions]\n${learnings.map(l => `- ${l}`).join('\n')}`;
   }
 
   return prompt;
@@ -809,7 +881,7 @@ async function executeFinancialTool(fnName: string, args: Record<string, unknown
 }
 
 const FINANCIAL_TOOLS = new Set(["check_balance", "transfer_tokens", "buy_shares", "sell_shares", "place_bet", "play_arcade"]);
-const MEMORY_TOOLS = new Set(["save_memory", "recall_memories"]);
+const MEMORY_TOOLS = new Set(["save_memory", "recall_memories", "learn_pattern"]);
 const EXTENDED_TOOLS = new Set(["get_market_data", "get_stock_chart", "check_portfolio", "trade_stock", "create_booking", "list_bookings", "cancel_booking", "send_message", "list_conversations", "control_audio"]);
 const CLIENT_SIDE_TOOLS = new Set(["draw_on_canvas", "generate_canvas_art", "create_spreadsheet", "update_cells", "add_chart"]);
 const IMAGINE_TOOLS = new Set(["generate_image", "generate_video"]);
@@ -1040,9 +1112,10 @@ serve(async (req) => {
     let memories: string[] = [];
     let priorHistory: Array<{ role: string; content: string }> = [];
     let userActivity: Array<{ action: string; target: string; created_at: string }> = [];
+    let learnings: string[] = [];
     if (userId) {
       const db = getServiceDb();
-      [memories, priorHistory, userActivity] = await Promise.all([
+      [memories, priorHistory, userActivity, learnings] = await Promise.all([
         loadMemories(userId),
         loadConversationHistory(userId),
         db.from("user_activity")
@@ -1051,10 +1124,11 @@ serve(async (req) => {
           .order("created_at", { ascending: false })
           .limit(20)
           .then(({ data }) => (data || []) as Array<{ action: string; target: string; created_at: string }>),
+        loadLearnings(userId),
       ]);
     }
 
-    const systemPrompt = buildSystemPrompt(context, memories, priorHistory, userActivity);
+    const systemPrompt = buildSystemPrompt(context, memories, priorHistory, userActivity, learnings);
 
     const fullMessages = [
       { role: "system", content: systemPrompt },
@@ -1156,6 +1230,9 @@ serve(async (req) => {
           } else if (fnName === "recall_memories" && userId) {
             const recalled = await recallMemories(userId, String(args.query || ""));
             toolResult = { data: { memories: recalled }, reply: recalled.length > 0 ? `Found memories:\n${recalled.join('\n')}` : "No matching memories found." };
+          } else if (fnName === "learn_pattern" && userId) {
+            await saveMemory(userId, "learning", `[${args.context || "general"}] ${args.pattern || ""}`);
+            toolResult = { data: {}, reply: "Pattern learned." };
           } else {
             toolResult = { data: {}, reply: "⚠️ Memory features require authentication." };
           }
