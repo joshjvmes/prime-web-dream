@@ -356,7 +356,67 @@ function AIProviderPanel({ user, cloudSave, cloudLoad, isSignedIn, SectionTitle 
         <p>• If your key fails, the system falls back to the built-in AI</p>
         <p>• Select "Default" to use the built-in AI at any time</p>
       </div>
+
+      <RokCatDataPanel user={user} SectionTitle={SectionTitle} />
     </div>
+  );
+}
+
+function RokCatDataPanel({ user, SectionTitle }: { user?: SupabaseUser | null; SectionTitle: React.FC<{ children: string }> }) {
+  const [msgCount, setMsgCount] = useState<number | null>(null);
+  const [confirmClear, setConfirmClear] = useState(false);
+  const [clearing, setClearing] = useState(false);
+
+  useEffect(() => {
+    if (!user) return;
+    let cancelled = false;
+    supabase.from('ai_conversations').select('id', { count: 'exact', head: true }).eq('user_id', user.id).then(({ count }) => {
+      if (!cancelled) setMsgCount(count ?? 0);
+    });
+    return () => { cancelled = true; };
+  }, [user]);
+
+  const handleClear = async () => {
+    if (!confirmClear) { setConfirmClear(true); return; }
+    if (!user) return;
+    setClearing(true);
+    await supabase.from('ai_conversations').delete().eq('user_id', user.id);
+    eventBus.emit('rokcat:clear');
+    setMsgCount(0);
+    setConfirmClear(false);
+    setClearing(false);
+  };
+
+  if (!user) return null;
+
+  return (
+    <>
+      <SectionTitle>ROKCAT Chat Data</SectionTitle>
+      <div className="flex items-center justify-between p-2 rounded border border-border bg-card/50">
+        <div className="text-[10px] text-muted-foreground">
+          {msgCount !== null ? `${msgCount} messages stored` : 'Loading…'}
+          <p className="text-[9px] mt-0.5">Chat auto-compacts beyond 100 messages</p>
+        </div>
+        <button
+          onClick={handleClear}
+          disabled={clearing || msgCount === 0}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded border text-[10px] font-display tracking-wider transition-colors disabled:opacity-40 ${
+            confirmClear
+              ? 'border-destructive/50 bg-destructive/10 text-destructive hover:bg-destructive/20'
+              : 'border-border text-muted-foreground hover:text-foreground hover:bg-muted/30'
+          }`}
+        >
+          {clearing ? <Loader2 size={10} className="animate-spin" /> : <Trash2 size={10} />}
+          {confirmClear ? 'Confirm Clear' : 'Clear History'}
+        </button>
+      </div>
+      {confirmClear && (
+        <div className="flex items-center gap-2 mt-1">
+          <span className="text-[9px] text-destructive">This will permanently delete all ROKCAT messages.</span>
+          <button onClick={() => setConfirmClear(false)} className="text-[9px] text-muted-foreground hover:text-foreground underline">Cancel</button>
+        </div>
+      )}
+    </>
   );
 }
 

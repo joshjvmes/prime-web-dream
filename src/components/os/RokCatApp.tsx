@@ -722,23 +722,6 @@ ${APP_ACTION_PROMPT}`;
               {autonomousMode ? 'Stop Autonomous Mode' : 'Enable Autonomous Mode'}
             </TooltipContent>
           </Tooltip>
-          {/* Clear chat */}
-          {messages.length > 0 && (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-7 w-7 text-[#00e5ff]/40 hover:text-red-400 hover:bg-red-400/10"
-                  onClick={clearChat}
-                  disabled={loading}
-                >
-                  <Trash2 size={12} />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent side="bottom" className="text-xs">Clear Chat History</TooltipContent>
-            </Tooltip>
-          )}
           {/* Imagine toggles — only visible when xAI is active */}
           {isXAI && (
             <>
