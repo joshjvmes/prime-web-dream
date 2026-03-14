@@ -274,7 +274,7 @@ ${APP_ACTION_PROMPT}`;
         }
 
         if (fullText) {
-          const cleanText = parseAndExecuteActions(fullText);
+          const cleanText = detectAppMentions(parseAndExecuteActions(fullText));
           fullText = cleanText;
           setMessages(prev => prev.map(m => m.id === autoId ? { ...m, text: cleanText } : m));
           speakText(cleanText);
