@@ -237,7 +237,7 @@ ${APP_ACTION_PROMPT}`;
       if (contentType.includes('application/json')) {
         const data = await resp.json();
         const rawText = data?.reply || data?.text || '⚡ Cycle complete.';
-        const aiText = parseAndExecuteActions(rawText);
+        const aiText = detectAppMentions(parseAndExecuteActions(rawText));
         setMessages(prev => prev.map(m => m.id === autoId ? { ...m, text: aiText } : m));
         scrollToBottom();
         speakText(aiText);
