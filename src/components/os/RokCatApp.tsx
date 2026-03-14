@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
-import { Send, Volume2, VolumeX, Loader2, Globe, Twitter, Image, Video, Brain, Square, GalleryHorizontalEnd, Trash2 } from 'lucide-react';
+import { Send, Volume2, VolumeX, Loader2, Globe, Twitter, Image, Video, Brain, Square, GalleryHorizontalEnd } from 'lucide-react';
 import { renderMarkdown } from '@/lib/renderMarkdown';
 import { parseAndExecuteActions, APP_ACTION_PROMPT } from './rokcat/actionParser';
 import { Button } from '@/components/ui/button';
@@ -47,7 +47,7 @@ export default function RokCatApp() {
   const faceRef = useRef<RokCatFaceHandle>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  // Load persisted chat history on mount
+  // Load persisted chat history on mount (with auto-compact)
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -55,13 +55,22 @@ export default function RokCatApp() {
       if (!session || cancelled) { setHistoryLoaded(true); return; }
       const { data } = await supabase
         .from('ai_conversations')
-        .select('role, content, created_at')
+        .select('id, role, content, created_at')
         .eq('user_id', session.user.id)
         .order('created_at', { ascending: true })
-        .limit(50);
+        .limit(200);
       if (cancelled) return;
       if (data && data.length > 0) {
-        const loaded: Message[] = data.map((m) => ({
+        // Auto-compact: if over 100 messages, trim to newest 60
+        let rows = data;
+        if (rows.length > 100) {
+          const toDelete = rows.slice(0, rows.length - 60);
+          rows = rows.slice(rows.length - 60);
+          // Delete old rows silently in background
+          const deleteIds = toDelete.map(r => r.id);
+          supabase.from('ai_conversations').delete().in('id', deleteIds).then(() => {});
+        }
+        const loaded: Message[] = rows.map((m) => ({
           id: crypto.randomUUID(),
           role: m.role === 'assistant' ? 'rokcat' as const : 'user' as const,
           text: m.content,
@@ -72,6 +81,13 @@ export default function RokCatApp() {
       setHistoryLoaded(true);
     })();
     return () => { cancelled = true; };
+  }, []);
+
+  // Listen for clear-chat event from Settings
+  useEffect(() => {
+    const handler = () => setMessages([]);
+    eventBus.on('rokcat:clear', handler);
+    return () => eventBus.off('rokcat:clear', handler);
   }, []);
 
   // Check user's AI provider config
@@ -673,14 +689,6 @@ ${APP_ACTION_PROMPT}`;
       setTimeout(() => setAgentThoughts([]), 2000);
     }
   }, [input, loading, messages, speakText, processClientAction, isGrok420, webSearchEnabled, xSearchEnabled, imagineMode, handleImagine]);
-  // Clear chat history
-  const clearChat = useCallback(async () => {
-    setMessages([]);
-    const { data: { session } } = await supabase.auth.getSession();
-    if (session?.user?.id) {
-      await supabase.from('ai_conversations').delete().eq('user_id', session.user.id);
-    }
-  }, []);
 
   return (
     <div className={`flex flex-col h-full bg-[#02040a] overflow-hidden ${autonomousMode ? 'ring-1 ring-[#00e5ff]/40 ring-inset' : ''}`}>
@@ -714,23 +722,6 @@ ${APP_ACTION_PROMPT}`;
               {autonomousMode ? 'Stop Autonomous Mode' : 'Enable Autonomous Mode'}
             </TooltipContent>
           </Tooltip>
-          {/* Clear chat */}
-          {messages.length > 0 && (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-7 w-7 text-[#00e5ff]/40 hover:text-red-400 hover:bg-red-400/10"
-                  onClick={clearChat}
-                  disabled={loading}
-                >
-                  <Trash2 size={12} />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent side="bottom" className="text-xs">Clear Chat History</TooltipContent>
-            </Tooltip>
-          )}
           {/* Imagine toggles — only visible when xAI is active */}
           {isXAI && (
             <>
