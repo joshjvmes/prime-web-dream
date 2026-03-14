@@ -243,6 +243,22 @@ const TOOLS = [
   {
     type: "function",
     function: {
+      name: "learn_pattern",
+      description: "Save a learned pattern, behavior insight, or operational improvement for future reference. Use when you notice how the operator uses the system, when corrected, or when you discover a better workflow. This makes you smarter over time.",
+      parameters: {
+        type: "object",
+        properties: {
+          pattern: { type: "string", description: "The pattern, insight, or learned behavior to remember" },
+          context: { type: "string", enum: ["system_usage", "user_preference", "error_recovery", "workflow"], description: "Context category for the learning" },
+        },
+        required: ["pattern", "context"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
       name: "recall_memories",
       description: "Search stored memories about the operator by keyword. Use when you need context about the operator's preferences, past instructions, or facts.",
       parameters: {
