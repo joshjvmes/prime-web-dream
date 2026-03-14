@@ -29,6 +29,7 @@ export default function RokCatApp() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
+  const [historyLoaded, setHistoryLoaded] = useState(false);
   const [ttsEnabled, setTtsEnabled] = useState(true);
   const ttsEnabledRef = useRef(true);
   const [searchStatus, setSearchStatus] = useState<'web' | 'x' | null>(null);
@@ -45,6 +46,33 @@ export default function RokCatApp() {
   const autonomousBusyRef = useRef(false);
   const faceRef = useRef<RokCatFaceHandle>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  // Load persisted chat history on mount
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session || cancelled) { setHistoryLoaded(true); return; }
+      const { data } = await supabase
+        .from('ai_conversations')
+        .select('role, content, created_at')
+        .eq('user_id', session.user.id)
+        .order('created_at', { ascending: true })
+        .limit(50);
+      if (cancelled) return;
+      if (data && data.length > 0) {
+        const loaded: Message[] = data.map((m) => ({
+          id: crypto.randomUUID(),
+          role: m.role === 'assistant' ? 'rokcat' as const : 'user' as const,
+          text: m.content,
+        }));
+        setMessages(loaded);
+        setTimeout(() => scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight }), 100);
+      }
+      setHistoryLoaded(true);
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   // Check user's AI provider config
   useEffect(() => {
