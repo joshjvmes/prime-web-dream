@@ -672,7 +672,7 @@ ${APP_ACTION_PROMPT}`;
       // Clear agent thoughts after a short delay
       setTimeout(() => setAgentThoughts([]), 2000);
     }
-  }, [input, loading, speakText, processClientAction, isGrok420, webSearchEnabled, xSearchEnabled, imagineMode, handleImagine]);
+  }, [input, loading, messages, speakText, processClientAction, isGrok420, webSearchEnabled, xSearchEnabled, imagineMode, handleImagine]);
   // Clear chat history
   const clearChat = useCallback(async () => {
     setMessages([]);
