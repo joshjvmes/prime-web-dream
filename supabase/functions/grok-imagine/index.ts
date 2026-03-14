@@ -56,10 +56,10 @@ async function getUserId(authHeader: string): Promise<string | null> {
   }
 }
 
-// ── Image Generation ──
-async function generateImage(apiKey: string, prompt: string, n: number = 1): Promise<Response> {
+// ── xAI Image Generation ──
+async function generateImageXAI(apiKey: string, prompt: string, n: number = 1): Promise<Response> {
   const model = "grok-imagine-image";
-  console.log(`[grok-imagine] IMAGE request — model: ${model}, n: ${n}, prompt length: ${prompt.length}`);
+  console.log(`[grok-imagine] xAI IMAGE request — model: ${model}, n: ${n}, prompt length: ${prompt.length}`);
 
   const resp = await fetch("https://api.x.ai/v1/images/generations", {
     method: "POST",
@@ -72,7 +72,7 @@ async function generateImage(apiKey: string, prompt: string, n: number = 1): Pro
 
   if (!resp.ok) {
     const errText = await resp.text();
-    console.error(`[grok-imagine] IMAGE error — status: ${resp.status}, body: ${errText}`);
+    console.error(`[grok-imagine] xAI IMAGE error — status: ${resp.status}, body: ${errText}`);
     return new Response(JSON.stringify({ error: `xAI image generation failed (${resp.status})`, details: errText }), {
       status: resp.status,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -80,10 +80,99 @@ async function generateImage(apiKey: string, prompt: string, n: number = 1): Pro
   }
 
   const data = await resp.json();
-  console.log(`[grok-imagine] IMAGE success — ${(data.data || []).length} image(s) returned`);
+  console.log(`[grok-imagine] xAI IMAGE success — ${(data.data || []).length} image(s) returned`);
   const urls = (data.data || []).map((d: any) => d.url);
 
-  return new Response(JSON.stringify({ type: "image", urls }), {
+  return new Response(JSON.stringify({ type: "image", urls, provider: "xai" }), {
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+}
+
+// ── Lovable AI Fallback Image Generation ──
+async function generateImageFallback(prompt: string, n: number = 1): Promise<Response> {
+  const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+  if (!LOVABLE_API_KEY) {
+    console.error("[grok-imagine] FALLBACK — no LOVABLE_API_KEY configured");
+    return new Response(JSON.stringify({ error: "Image generation unavailable. No AI keys configured." }), {
+      status: 503,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+
+  const model = "google/gemini-3.1-flash-image-preview";
+  console.log(`[grok-imagine] FALLBACK IMAGE request — model: ${model}, n: ${n}, prompt length: ${prompt.length}`);
+
+  const urls: string[] = [];
+  const count = Math.min(n, 4);
+
+  // Generate images sequentially (Lovable AI returns one image per call)
+  for (let i = 0; i < count; i++) {
+    try {
+      const resp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${LOVABLE_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model,
+          messages: [{ role: "user", content: prompt }],
+          modalities: ["image", "text"],
+        }),
+      });
+
+      if (!resp.ok) {
+        const errText = await resp.text();
+        console.error(`[grok-imagine] FALLBACK error — status: ${resp.status}, body: ${errText}`);
+
+        if (resp.status === 429) {
+          return new Response(JSON.stringify({ error: "Rate limit exceeded. Please try again in a moment." }), {
+            status: 429,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+        if (resp.status === 402) {
+          return new Response(JSON.stringify({ error: "AI credits depleted. Please add funds to continue generating images." }), {
+            status: 402,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+
+        // If first image fails, return error; otherwise return what we have
+        if (urls.length === 0) {
+          return new Response(JSON.stringify({ error: `Fallback image generation failed (${resp.status})`, details: errText }), {
+            status: resp.status,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+        break;
+      }
+
+      const data = await resp.json();
+      const images = data.choices?.[0]?.message?.images;
+      if (images && images.length > 0) {
+        const imageUrl = images[0].image_url?.url;
+        if (imageUrl) {
+          urls.push(imageUrl);
+          console.log(`[grok-imagine] FALLBACK IMAGE ${i + 1}/${count} — generated (base64, ${imageUrl.length} chars)`);
+        }
+      }
+    } catch (e) {
+      console.error(`[grok-imagine] FALLBACK IMAGE ${i + 1} error:`, e);
+      if (urls.length === 0) throw e;
+      break;
+    }
+  }
+
+  if (urls.length === 0) {
+    return new Response(JSON.stringify({ error: "Fallback image generation produced no images" }), {
+      status: 500,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+
+  console.log(`[grok-imagine] FALLBACK IMAGE success — ${urls.length} image(s) returned`);
+  return new Response(JSON.stringify({ type: "image", urls, provider: "lovable-ai" }), {
     headers: { ...corsHeaders, "Content-Type": "application/json" },
   });
 }
@@ -126,7 +215,6 @@ async function submitVideo(apiKey: string, prompt: string, duration?: number, im
     });
   }
 
-  // If xAI returned the video URL immediately
   if (submitData.data?.[0]?.url) {
     console.log(`[grok-imagine] VIDEO ready immediately`);
     return new Response(JSON.stringify({ type: "video", url: submitData.data[0].url, status: "done" }), {
@@ -193,7 +281,6 @@ async function pollVideo(apiKey: string, requestId: string): Promise<Response> {
     });
   }
 
-  // Still processing
   console.log(`[grok-imagine] VIDEO POLL — still pending (status: ${pollData.status})`);
   return new Response(JSON.stringify({ status: "pending" }), {
     headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -215,17 +302,16 @@ serve(async (req) => {
     }
 
     const apiKey = await getXAIKey(userId);
-    if (!apiKey) {
-      return new Response(JSON.stringify({ error: "xAI API key not configured. Set up your key in Settings → AI." }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
     const { type, prompt, n, duration, image_url, requestId } = await req.json();
 
-    // Video poll route
+    // Video poll route — requires xAI key
     if (type === "video-poll") {
+      if (!apiKey) {
+        return new Response(JSON.stringify({ error: "xAI API key required for video polling. Set up your key in Settings → AI." }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
       if (!requestId) {
         return new Response(JSON.stringify({ error: "requestId is required for video-poll" }), {
           status: 400,
@@ -242,11 +328,24 @@ serve(async (req) => {
       });
     }
 
+    // Video generation — requires xAI key (no fallback available)
     if (type === "video") {
+      if (!apiKey) {
+        return new Response(JSON.stringify({ error: "Video generation requires an xAI API key. Set up your key in Settings → AI." }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
       return submitVideo(apiKey, prompt, duration, image_url);
     }
 
-    return generateImage(apiKey, prompt, n || 1);
+    // Image generation — use xAI if key exists, otherwise fall back to Lovable AI
+    if (apiKey) {
+      return generateImageXAI(apiKey, prompt, n || 1);
+    }
+
+    console.log(`[grok-imagine] No xAI key for user ${userId}, using Lovable AI fallback`);
+    return generateImageFallback(prompt, n || 1);
   } catch (e) {
     console.error("grok-imagine error:", e);
     return new Response(JSON.stringify({ error: e instanceof Error ? e.message : "Unknown error" }), {
