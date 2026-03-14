@@ -459,8 +459,8 @@ export default function Desktop() {
   }, [openWindow]);
 
   const handleTourComplete = useCallback(() => setShowTour(false), []);
-  const handleTourOpenTerminal = useCallback(() => {
-    setTimeout(() => openWindow('terminal', 'Prime Shell (psh)'), 200);
+  const handleTourOpenRokcat = useCallback(() => {
+    setTimeout(() => openWindow('rokcat', 'ROKCAT'), 200);
   }, [openWindow]);
 
   const closeWindowByApp = useCallback((app: string) => {
