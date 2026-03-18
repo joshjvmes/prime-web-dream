@@ -8,6 +8,8 @@
 
 > **[🔴 Live Demo → prime-web-dream.lovable.app](https://prime-web-dream.lovable.app/os)**
 
+![PRIME OS — Geometric Computing Interface](./public/screenshots/hero-banner.png)
+
 **Geometric Computing Interface** — Built by [Rocket Logic Global](https://rocketlogicglobal.com)
 
 PRIME OS is a browser-based operating system exploring geometric computation, ternary logic, and 11-dimensional folding architectures. It provides a fully interactive desktop environment with 50+ specialized applications, AI integration, and a cloud-powered backend.
