@@ -4,7 +4,7 @@
 
 ## Row-Level Security (RLS)
 
-All 30+ tables have RLS **enabled**. The standard pattern is:
+All 38 tables in the `public` schema have RLS **enabled**. The standard pattern is:
 
 ```sql
 -- Owner-scoped access
@@ -77,11 +77,11 @@ The `user_ai_keys` table stores user-provided API keys for BYOAK (Bring Your Own
 
 | Column | Type | Note |
 |---|---|---|
-| `encrypted_key` | text | **⚠️ Currently stored as plaintext** despite the column name |
-| `provider` | text | `openai`, `google`, `anthropic` |
+| `encrypted_key` | text | AES-256-GCM ciphertext, base64 (`iv` + ciphertext) |
+| `provider` | text | `openai`, `google`, `anthropic`, `xai` |
 | `model` | text | Optional model preference |
 
-**Security consideration:** The `encrypted_key` column does not use actual encryption. Keys are stored as-is. This is acceptable for a demo/development context but should be addressed before production use. RLS ensures only the owning user can read their own keys.
+**Encryption:** Keys are encrypted with AES-256-GCM using a key derived by PBKDF2 (100,000 iterations, SHA-256, fixed application salt) from `AI_KEY_ENCRYPTION_SECRET`, with a fresh random 12-byte IV per record. See `encryptApiKey` / `decryptApiKey` in `supabase/functions/_shared/ai-router.ts`. Encryption and decryption happen only inside edge functions — no code path returns a decrypted key to the client, and `ai-key-manager`'s `get-config` action returns provider and model names only. Rows written before this change may still hold plaintext; `decryptApiKey` falls back to reading them as-is. RLS additionally scopes the table to the owning user.
 
 ---
 

@@ -66,8 +66,8 @@ PRIME OS is a browser-based operating system exploring geometric computation, te
 │  useCloudStorage (localStorage + DB sync)   │
 ├─────────────────────────────────────────────┤
 │  Supabase Backend                           │
-│  ├── 30+ database tables (RLS)             │
-│  ├── 16 edge functions (Deno)              │
+│  ├── 38 database tables (RLS)              │
+│  ├── 19 edge functions (Deno)              │
 │  ├── File storage (user-files bucket)      │
 │  └── Auth (Google OAuth)                    │
 └─────────────────────────────────────────────┘
