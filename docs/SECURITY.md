@@ -4,7 +4,7 @@
 
 ## Row-Level Security (RLS)
 
-All 30+ tables have RLS **enabled**. The standard pattern is:
+All 38 tables in the `public` schema have RLS **enabled**. The standard pattern is:
 
 ```sql
 -- Owner-scoped access
