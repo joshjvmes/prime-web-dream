@@ -178,6 +178,32 @@ All edge functions are configured with `verify_jwt = false` in `supabase/config.
 - **Auth:** Service role (internal)
 - **Tables:** `bot_registry`
 
+### `hook-dispatcher`
+- **Purpose:** Execute Cloud Hooks when their trigger event fires
+- **Auth:** Required
+- **Request:** `POST { event: string, payload: object }`
+- **Tables:** `cloud_hooks`
+
+### `resolve-markets`
+- **Purpose:** Resolve prediction market outcomes and settle positions
+- **Auth:** Required (admin role)
+- **Request:** `POST { marketId: string, outcome: string }`
+- **Tables:** `bet_markets`, `bets`, `wallets`, `transactions`
+
+### `grok-imagine`
+- **Purpose:** Image generation via xAI's Grok image model
+- **Auth:** Required
+- **Request:** `POST { prompt: string, n? }`
+- **Response:** `{ images: [{ url }] }`
+- **Tables:** `user_ai_keys` (BYOK, AES-GCM decryption), `generated_media`
+
+### `github-app`
+- **Purpose:** GitHub App OAuth installation linking and webhook ingestion for PrimeGit
+- **Auth:** Varies — user auth for installation linking, HMAC signature verification for webhooks
+- **Request:** `GET ?action=link-installation&installation_id=...` / `POST` webhook payload
+- **Tables:** `github_installations`, `github_events`
+- **Dependencies:** `GITHUB_APP_ID`, `GITHUB_APP_PRIVATE_KEY`, `GITHUB_WEBHOOK_SECRET`
+
 ---
 
 ## Secrets
