@@ -1,57 +1,60 @@
+# PRIME OS System Audit — Findings and Improvement Plan
 
+An audit of the running system (code, database, auth, performance, resilience) with a prioritised improvement roadmap. Findings below come from scanning the codebase and querying the live backend.
 
-## Plan: PRIME OS Demo Video (Remotion)
+## What the audit found
 
-A 20-second cinematic demo video showcasing PRIME OS — rendered as MP4 via Remotion CLI.
+**Scale:** ~42k lines across app code and edge functions, 78 OS components, 20 edge functions, 38 tables.
 
-### Creative Direction
+**Backend health (checked live):** database and connection pooler up, no restarts, memory 40%, disk 10%, connections 12/60. Healthy — but ~9,800 rolled-back transactions since boot, which usually means a repeated failing query or permission error somewhere in the app rather than real load.
 
-**Vibe**: Dark cyberpunk terminal aesthetic — like a sci-fi OS booting up and revealing its power.
-**Emotional arc**: Mystery → Power → Awe → Invitation
-**Camera style**: Zooms, parallax layers, dramatic reveals
+**Security warnings (from the database linter):**
+- 10 warnings about `SECURITY DEFINER` functions being executable by anonymous and signed-in users. Some are intentional (`has_role`, `get_waitlist_count`), others should have `EXECUTE` revoked.
+- Leaked-password protection is disabled on auth.
 
-**Color palette** (from the app's actual design tokens):
-- Background: `#0a0d12` (dark navy-black)
-- Primary/Cyan: `#00ffff` (cyan glow)
-- Violet: `#7c3aed`
-- Amber: `#e6a817`
-- Green: `#00e68a`
-- Text: `#ccfff5` (light cyan)
+**Resilience gaps:**
+- Only one error boundary in the whole app (`MiniAppRenderer`). A single app crash can take down the whole desktop.
+- No code splitting anywhere — every one of the 78 apps loads on first paint, so boot time carries the whole bundle.
+- One real test file (`src/test/example.test.ts`) — no coverage on window management, ternary logic, the AI router, or the token economy.
 
-**Typography**: Orbitron (display/headers) + JetBrains Mono (terminal text)
+**Maintainability:**
+- Oversized files: `hyper-chat` (1,399 lines), `SettingsApp` (1,043), `PrimeArcadeApp` (1,029), `BotLabApp` (976), `RokCatApp` (942), `prime-bank` (893).
+- ~110 occurrences of `as any` / `@ts-ignore` / TODO across app components, concentrated in PrimeSocial, PrimeVault, CloudHooks, PrimeMail.
+- Many queries use `select('*')` on tables with wide rows, pulling more data than the UI renders.
 
-**Motion system**:
-- Enter: clip-path reveal + spring scale
-- Exit: fade + slide out
-- Transitions: wipe and fade between scenes
-- Accent: glow pulse, typing effects
+## Proposed work, in priority order
 
-**Visual motifs**: Grid lines, glowing borders, terminal-style text, geometric shapes
+### Phase 1 — Stability and security (do first)
+1. Trace the rolled-back transactions: instrument the failing query path, identify the offending call, and fix it.
+2. Lock down `SECURITY DEFINER` functions: audit each one, revoke `EXECUTE` from `anon`/`authenticated` where it isn't needed, keep it for `has_role` and the public waitlist counter.
+3. Enable leaked-password protection in auth settings.
+4. Add a top-level error boundary around the desktop plus a per-window boundary in `OSWindow`, so one broken app shows a recoverable error card instead of a blank screen.
 
-### Scenes (5 scenes, ~20 seconds at 30fps = 600 frames)
+### Phase 2 — Performance
+5. Lazy-load app components through the window manager's app registry, so only opened apps download.
+6. Replace `select('*')` with explicit column lists on the highest-traffic apps (Vault, Social, Calendar, Bets, Mail, Wallet).
+7. Add pagination or row limits to feed-style lists that currently fetch unbounded result sets.
 
-1. **Boot Sequence** (frames 0–150, 5s) — Dark screen, terminal lines appear one by one mimicking the real `BootSequence.tsx` text. "PRIME OS v1.0.0", "Initializing Qutrit Kernel...", etc. Progress bar fills. PRIME OS logo fades in large.
+### Phase 3 — Confidence
+8. Add tests for the pieces where breakage is expensive and invisible: window manager operations, ternary/GeomQ compiler, AI router provider selection, and the bank's mint/transfer/debit math.
+9. Wire those tests into the repo's existing vitest setup.
 
-2. **Desktop Reveal** (frames 130–270, ~4.5s) — Simulated desktop with taskbar, window frames, and floating app icons appearing with staggered springs. Grid background with subtle parallax.
+### Phase 4 — Maintainability
+10. Split the largest files into focused modules (`hyper-chat` tool handlers, `SettingsApp` tab panels, `prime-bank` operations).
+11. Burn down the `as any` usages in the four worst components using the generated database types.
 
-3. **App Showcase** (frames 250–400, ~5s) — Quick cuts of simulated app windows: Terminal, Browser, ROKCAT AI Chat, Data Center — each sliding in with a wipe transition. App names typed out.
+## Technical notes
 
-4. **Feature Highlights** (frames 380–510, ~4.5s) — Three key stats/features animate in: "50+ Apps", "AI Integration", "Cloud Backend" with counter animations and icon accents.
+- Function lockdown ships as one migration containing `REVOKE EXECUTE` statements; no schema change, no data risk.
+- Lazy loading uses `React.lazy` plus `Suspense` inside `OSWindow`, keyed off the existing `AppType` map — the window manager API stays unchanged.
+- Error boundaries are class components with a reset action that closes or reloads the offending window.
+- Auth's leaked-password setting is a backend config toggle, not code.
+- Rolled-back transactions are diagnosed from function logs and query stats before any fix is written; the cause is currently unconfirmed.
 
-5. **Closing** (frames 490–600, ~3.5s) — PRIME OS logo large center, tagline "Geometric Computing Interface", URL "os.rlgix.com" fades in below. Subtle breathing glow.
+## Out of scope unless you want it
 
-### Technical Steps
+New features, visual redesign, and mobile layout changes. This is a hardening pass.
 
-1. Scaffold Remotion project in `/tmp/prime-video/`
-2. Install deps: remotion, @remotion/cli, @remotion/transitions, @remotion/google-fonts (Orbitron, JetBrains Mono)
-3. Fix compositor binary (musl → gnu)
-4. Copy `social-share.jpg` as a potential asset
-5. Build 5 scene components + persistent background layer
-6. Wire with `TransitionSeries` + fade/wipe transitions
-7. Render via programmatic script to `/mnt/documents/prime-os-demo.mp4`
-8. Spot-check key frames during development
+## Suggested first slice
 
-### Output
-- 1920×1080, 30fps, ~20 seconds
-- H.264 MP4 at `/mnt/documents/prime-os-demo.mp4`
-
+Phase 1 alone — it removes the crash risk, closes the security warnings, and finds the source of the failing transactions. Phases 2-4 can follow one at a time.
