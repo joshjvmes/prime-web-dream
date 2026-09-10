@@ -1,60 +1,48 @@
-# PRIME OS System Audit — Findings and Improvement Plan
+# Hardening Pass — Transaction Audit and Function Lockdown
 
-An audit of the running system (code, database, auth, performance, resilience) with a prioritised improvement roadmap. Findings below come from scanning the codebase and querying the live backend.
+Two items only, as requested. One of them turned out to need no work; the details are below.
 
-## What the audit found
+## Item 1 — The rolled-back transactions: checked, nothing to fix
 
-**Scale:** ~42k lines across app code and edge functions, 78 OS components, 20 edge functions, 38 tables.
+I traced this before planning any work, and the alarm was mine, not the system's.
 
-**Backend health (checked live):** database and connection pooler up, no restarts, memory 40%, disk 10%, connections 12/60. Healthy — but ~9,800 rolled-back transactions since boot, which usually means a repeated failing query or permission error somewhere in the app rather than real load.
+The counter reads 9,877 rolled-back transactions against 11,875,072 successful ones — a rate of 0.08% — accumulated over 276 days of uptime. That is normal background noise for Postgres, not a failing query path.
 
-**Security warnings (from the database linter):**
-- 10 warnings about `SECURITY DEFINER` functions being executable by anonymous and signed-in users. Some are intentional (`has_role`, `get_waitlist_count`), others should have `EXECUTE` revoked.
-- Leaked-password protection is disabled on auth.
+Corroborating checks:
+- No error or fatal database log entries in the last 72 hours (only routine informational lines).
+- No failing function calls in the last 72 hours — the only traffic was the scheduled dispatcher, all successful.
 
-**Resilience gaps:**
-- Only one error boundary in the whole app (`MiniAppRenderer`). A single app crash can take down the whole desktop.
-- No code splitting anywhere — every one of the 78 apps loads on first paint, so boot time carries the whole bundle.
-- One real test file (`src/test/example.test.ts`) — no coverage on window management, ternary logic, the AI router, or the token economy.
+Conclusion: no instrumentation and no fix needed. I'd rather tell you this than invent work. If the rate climbs later, the right move is to re-check the same two log sources and compare against a fresh reading of the counter.
 
-**Maintainability:**
-- Oversized files: `hyper-chat` (1,399 lines), `SettingsApp` (1,043), `PrimeArcadeApp` (1,029), `BotLabApp` (976), `RokCatApp` (942), `prime-bank` (893).
-- ~110 occurrences of `as any` / `@ts-ignore` / TODO across app components, concentrated in PrimeSocial, PrimeVault, CloudHooks, PrimeMail.
-- Many queries use `select('*')` on tables with wide rows, pulling more data than the UI renders.
+## Item 2 — Lock down SECURITY DEFINER functions
 
-## Proposed work, in priority order
+There are six functions in question. I checked exactly who calls each one:
 
-### Phase 1 — Stability and security (do first)
-1. Trace the rolled-back transactions: instrument the failing query path, identify the offending call, and fix it.
-2. Lock down `SECURITY DEFINER` functions: audit each one, revoke `EXECUTE` from `anon`/`authenticated` where it isn't needed, keep it for `has_role` and the public waitlist counter.
-3. Enable leaked-password protection in auth settings.
-4. Add a top-level error boundary around the desktop plus a per-window boundary in `OSWindow`, so one broken app shows a recoverable error card instead of a blank screen.
+| Function | Who actually calls it | Access it should have |
+|---|---|---|
+| `has_role` | Access rules across 7 tables, plus the banking function | Keep for signed-in and public — access rules depend on it |
+| `get_waitlist_count` | The public landing page | Keep for public and signed-in |
+| `check_booking_conflict` | The AI assistant, acting as the signed-in user | Keep for signed-in only; remove public |
+| `cleanup_old_activity` | The scheduled dispatcher, with admin credentials | Remove public and signed-in |
+| `handle_new_user` | Runs automatically on signup only | Remove public and signed-in |
+| `update_updated_at_column` | Runs automatically on record updates only | Remove public and signed-in |
 
-### Phase 2 — Performance
-5. Lazy-load app components through the window manager's app registry, so only opened apps download.
-6. Replace `select('*')` with explicit column lists on the highest-traffic apps (Vault, Social, Calendar, Bets, Mail, Wallet).
-7. Add pagination or row limits to feed-style lists that currently fetch unbounded result sets.
+The last three are never called by anyone using the app — they run internally — so exposing them through the public interface is pure surface area with no benefit.
 
-### Phase 3 — Confidence
-8. Add tests for the pieces where breakage is expensive and invisible: window manager operations, ternary/GeomQ compiler, AI router provider selection, and the bank's mint/transfer/debit math.
-9. Wire those tests into the repo's existing vitest setup.
+### The change
 
-### Phase 4 — Maintainability
-10. Split the largest files into focused modules (`hyper-chat` tool handlers, `SettingsApp` tab panels, `prime-bank` operations).
-11. Burn down the `as any` usages in the four worst components using the generated database types.
+One database migration containing `REVOKE EXECUTE` statements only. No schema change, no table change, no data touched, nothing dropped. Explicit `GRANT EXECUTE` to the internal admin role is included where the scheduled dispatcher needs it, so the cleanup task keeps working.
 
-## Technical notes
+### Verification after applying
 
-- Function lockdown ships as one migration containing `REVOKE EXECUTE` statements; no schema change, no data risk.
-- Lazy loading uses `React.lazy` plus `Suspense` inside `OSWindow`, keyed off the existing `AppType` map — the window manager API stays unchanged.
-- Error boundaries are class components with a reset action that closes or reloads the offending window.
-- Auth's leaked-password setting is a backend config toggle, not code.
-- Rolled-back transactions are diagnosed from function logs and query stats before any fix is written; the cause is currently unconfirmed.
+1. Re-run the database checker and confirm the function warnings drop from 10 to the small number that remain intentional (`has_role`, `get_waitlist_count`, and the booking check for signed-in users).
+2. Confirm the landing page still shows its waitlist count.
+3. Confirm signing up still creates a profile, and editing a record still stamps its update time — these prove the internal triggers still fire after the revoke.
 
-## Out of scope unless you want it
+## Also worth flagging (not in scope, your call)
 
-New features, visual redesign, and mobile layout changes. This is a hardening pass.
+Leaked-password protection is switched off on sign-in. It's a single backend setting that blocks passwords known to be in public breach lists. Say the word and I'll turn it on; otherwise I'll leave it.
 
-## Suggested first slice
+## Explicitly skipped
 
-Phase 1 alone — it removes the crash risk, closes the security warnings, and finds the source of the failing transactions. Phases 2-4 can follow one at a time.
+Error boundaries, code splitting, query tightening, tests, and file splitting — all dropped per your instruction.
