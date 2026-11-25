@@ -107,7 +107,7 @@ export default function DesktopIcons({ onOpenApp, deviceClass = 'desktop' }: Des
   const toggle = (name: string) => setExpanded(prev => ({ ...prev, [name]: !prev[name] }));
 
   return (
-    <div className={`absolute top-14 left-4 flex flex-col gap-0.5 select-none z-[2] max-h-[calc(100vh-100px)] overflow-y-auto scrollbar-none ${isTablet ? 'w-[100px]' : 'w-[84px]'}`}>
+    <div className={`absolute top-14 left-4 flex flex-col gap-0.5 select-none z-[5] max-h-[calc(100vh-100px)] overflow-y-auto scrollbar-none ${isTablet ? 'w-[100px]' : 'w-[84px]'}`}>
       {categories.map(cat => (
         <div key={cat.name}>
           <button
@@ -122,8 +122,7 @@ export default function DesktopIcons({ onOpenApp, deviceClass = 'desktop' }: Des
               {cat.apps.map(({ app, title, icon, label }) => (
                 <button
                   key={app}
-                  onClick={isTablet ? () => onOpenApp(app, title) : undefined}
-                  onDoubleClick={isTablet ? undefined : () => onOpenApp(app, title)}
+                  onClick={(e) => { if (e.detail > 1) return; onOpenApp(app, title); }}
                   className={`flex flex-col items-center justify-center w-full ${isTablet ? 'py-2' : 'py-1.5'} rounded hover:bg-primary/10 transition-colors group`}
                 >
                   <div className="text-muted-foreground group-hover:text-primary transition-colors">{icon}</div>
